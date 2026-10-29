@@ -84,6 +84,7 @@ defineExpose({ openSend, openCreate, openNative, openOffer });
 <template>
   <OrderDrawerSection
     id="order-workspace-documents"
+    flat
     v-model:expanded="expanded"
     title="Документы"
     :summary="summary"

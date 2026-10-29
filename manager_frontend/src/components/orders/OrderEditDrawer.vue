@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronDown, FileText, UsersRound } from 'lucide-vue-next';
 import { hasLineEdits } from './order-line-drafts';
 import { useOrderKeyboardViewport } from '../../composables/useOrderKeyboardViewport';
 import { readOrderProposalContext } from '../../services/order-navigation';
@@ -54,6 +55,7 @@ import { useOrderWorkspaceUsageControls } from '../../composables/useOrderWorksp
 import { useOrderCatalogNavigation } from '../../composables/useOrderCatalogNavigation';
 import { useOrderInstallationAttachment } from '../../composables/useOrderInstallationAttachment';
 import { useOrderSourceCommand } from '../../composables/useOrderSourceCommand';
+import { useOrderPendingLines } from '../../composables/useOrderPendingLines';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -86,6 +88,7 @@ const ensureSection = async (section: OrderWorkspaceSection) => {
 };
 const showProposalCosts = ref(false);
 const mobileContextOpen = ref(false);
+const contextControlsFocused = ref(false);
 const requestOpen = ref(false);
 const requestTrigger = ref<HTMLButtonElement | null>(null);
 const requestPanel = ref<InstanceType<typeof OrderRequestPanel> | null>(null);
@@ -96,7 +99,7 @@ const toggleRequest = async () => {
   requestOpen.value = true;
   await nextTick();
   requestPanel.value?.focus?.();
-  if (window.matchMedia('(max-width: 1023px)').matches) document.getElementById('order-request-details')?.scrollIntoView({ block: 'start' });
+  if (window.matchMedia('(max-width: 1279px)').matches) document.getElementById('order-request-details')?.scrollIntoView({ block: 'start' });
 };
 const demoReadOnly = useDemoReadOnly();
 const isPage = computed(() => props.presentation === 'page');
@@ -210,8 +213,9 @@ const proposalLifecycle = useOrderProposalLifecycle({
   setToast,
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
   onReload: (orderId) => emit('reload', orderId),
+  beforeAction: () => pendingLines.finish(),
   saveOrder: async () => {
-    if (unfinishedLineEdits.value) throw new Error('Завершите редактирование строки кнопкой «Готово» или «Отмена».');
+    if (unfinishedLineEdits.value) throw new Error('Примените изменения в строке предложения.');
     if (!await orderSaving.flush()) throw new Error(localFormError.value || 'Заказ не сохранён');
     return props.order;
   },
@@ -317,7 +321,7 @@ const catalogNavigation = useOrderCatalogNavigation({
   orderId: computed(() => props.order?.id), proposalId: activeProposalId, status,
   locked: activeProposalLocked,
   busy: computed(() => initializing.value || proposalActionLoading.value),
-  flush: orderSaving.flush,
+  flush: async () => await pendingLines.finish() && await orderSaving.flush(),
   close: () => emit('update:modelValue', false),
 });
 
@@ -344,10 +348,36 @@ const workspaceNavigation = useOrderWorkspaceNavigation({
 const {
   activeWorkspaceSection,
   executionWorkspaceOpen,
-  openWorkspaceTarget,
+  openWorkspaceTarget: openWorkspaceTargetDirect,
   resetWorkspaceNavigation,
-  selectWorkspaceSection,
+  selectWorkspaceSection: selectWorkspaceSectionDirect,
 } = workspaceNavigation;
+const pendingLines = useOrderPendingLines({
+  pending: unfinishedLineEdits,
+  active: computed(() => props.modelValue && Boolean(props.order)),
+  scope: computed(() => `${draftIdentityKey.value}:${props.order?.id}:${activeProposalId.value}`),
+  blocked: computed(() => draftBlocked.value || activeProposalLocked.value || demoReadOnly.value || discardingDraft.value || initializing.value),
+  apply: async current => {
+    await ensureSection('proposal');
+    return current() && (proposalWorkspaceRef.value?.applyLineEdits() ?? false);
+  },
+  focus: async current => {
+    selectWorkspaceSectionDirect('proposal');
+    proposalClientPreview.value = false;
+    await ensureSection('proposal');
+    if (current()) proposalWorkspaceRef.value?.focusLineEdits();
+  },
+  save: orderSaving.flush,
+});
+const selectWorkspaceSection = async (section: OrderWorkspaceSection) => {
+  if (section !== activeWorkspaceSection.value && !await pendingLines.finish()) return;
+  selectWorkspaceSectionDirect(section);
+};
+const openWorkspaceTarget = async (...args: Parameters<typeof openWorkspaceTargetDirect>) => {
+  if (args[0] !== 'proposal' && !await pendingLines.finish()) return false;
+  await openWorkspaceTargetDirect(...args);
+  return true;
+};
 const proposalMounted = ref(false);
 const documentsMounted = ref(false);
 const workMounted = ref(false);
@@ -419,9 +449,9 @@ const {
   clearDraft,
   preserveDraftOnLeave: computed(() => draftBlocked.value || discardFailed.value),
   setToast,
-  beforeHold: async () => !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.flush(),
+  beforeHold: async () => !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value && await (customerContextRef.value?.beforeClose?.() ?? true) && await pendingLines.finish() && await orderSaving.flush(),
   beforeClose: async () => !waiting.busy.value && !discardingDraft.value && !proposalActionLoading.value && !sourceApplying.value && !responsibilityBusy.value && !workerAssignmentBusy.value && !workerPayBusy.value
-    && await (customerContextRef.value?.beforeClose?.() ?? true) && await orderSaving.beforeClose(),
+    && await (customerContextRef.value?.beforeClose?.() ?? true) && await pendingLines.finish() && await orderSaving.beforeClose(),
   onBeforeClose: orderSaving.cancelScheduled,
   onModelValue: (open) => emit('update:modelValue', open),
   onUpdated: (updatedOrder) => emit('updated', updatedOrder),
@@ -456,10 +486,7 @@ const orderWorkspace = computed(() => buildOrderWorkspaceViewModel({
   balance: balanceDuePreview.value,
 }));
 const beforeDocumentGenerate = async () => {
-  if (unfinishedLineEdits.value) {
-    localFormError.value = 'Завершите редактирование строки кнопкой «Готово» или «Отмена» перед созданием документа.';
-    return false;
-  }
+  if (!await pendingLines.finish()) return false;
   return orderSaving.beforeDocumentGenerate();
 };
 
@@ -570,14 +597,8 @@ watch(
   },
 );
 
-const openProposalForProduct = async () => {
-  selectWorkspaceSection('proposal');
-  await ensureSection('proposal');
-  proposalWorkspaceRef.value?.addProduct();
-  document.getElementById('order-workspace-proposal')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
 const handleWorkspaceNextAction = async () => {
+  if (!await pendingLines.finish()) return;
   const action = orderWorkspace.value.nextAction;
   if (action.command === 'create_proposal') return createProposal();
   if (action.command === 'finish_proposal') {
@@ -585,7 +606,6 @@ const handleWorkspaceNextAction = async () => {
     proposalActionLoading.value = true;
     const proposalId = activeProposalId.value;
     try {
-      if (unfinishedLineEdits.value) throw new Error('Завершите редактирование строки кнопкой «Готово» или «Отмена».');
       if (!await orderSaving.flush() || activeProposalId.value !== proposalId) return;
       await openWorkspaceTarget('documents');
       await documentsWorkspaceRef.value?.openOffer();
@@ -607,6 +627,7 @@ watch(draftBlocked, blocked => {
   if (!blocked && discardFailed.value) { discardFailed.value = false; localFormError.value = ''; }
 });
 const handleSave = async () => {
+  if (!await pendingLines.finish(false)) return;
   if (await orderSaving.flush()) discardFailed.value = false;
 };
 const getFieldError = (field: string): string => localServerErrors.value[field] || props.serverErrors?.[field] || '';
@@ -697,6 +718,7 @@ defineExpose({ prepareToLeave });
         :can-print-envelope="Boolean(customer?.id)"
         @envelope="showEnvelope = true"
         :dirty="hasUnsavedChanges"
+        :pending-line-edits="unfinishedLineEdits"
         :saving="saving"
         :autosave-enabled="autosaveEnabled"
         :save-failed="saveFailed"
@@ -717,28 +739,27 @@ defineExpose({ prepareToLeave });
         @usage-report="usageReportOpen = true"
         @close="isPage ? emit('back') : closeDrawer()"
       />
-      <div v-show="!proposalClientPreview" class="shrink-0 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" data-testid="order-section-navigation">
+      <div v-show="!proposalClientPreview" class="shrink-0 border-b border-slate-200 bg-white px-3 pb-2 dark:border-slate-700 dark:bg-slate-950" data-testid="order-section-navigation">
           <OrderWorkspaceNav
             v-show="!proposalClientPreview"
             :active="activeWorkspaceSection"
             :workflow="workflowType"
             @select="selectWorkspaceSection"
-            @add-product="openProposalForProduct"
           />
-        <div class="mt-2 flex flex-col gap-1 lg:flex-row-reverse lg:items-center lg:gap-3">
-          <button ref="requestTrigger" type="button" data-testid="order-request-trigger" class="flex min-h-12 w-full items-center gap-3 rounded-xl border border-brand-300 bg-brand-50 px-3 py-2 text-left text-brand-900 focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-brand-600 dark:bg-brand-950 dark:text-brand-100 lg:w-auto lg:min-w-64" :aria-expanded="requestOpen" aria-controls="order-request-details" @click="toggleRequest">
-            <span class="material-icons-round text-[23px]" aria-hidden="true">description</span>
-            <span class="min-w-0 flex-1"><span class="block text-sm font-bold">Заявка и файлы</span><span class="block text-xs">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
-            <span aria-hidden="true">{{ requestOpen ? '−' : '+' }}</span>
+        <div v-show="!compactWorkspaceHeader || requestOpen || mobileContextOpen || contextControlsFocused" class="mt-1 grid grid-cols-2 gap-2" data-testid="order-context-controls" @focusin="contextControlsFocused = true" @focusout="contextControlsFocused = Boolean(($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node | null))">
+          <button ref="requestTrigger" type="button" data-testid="order-request-trigger" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-brand-900 transition hover:bg-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-100 dark:hover:bg-brand-900" :class="requestOpen ? 'border-brand-400 bg-brand-100 dark:border-brand-600 dark:bg-brand-900' : 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-950'" :aria-expanded="requestOpen" aria-controls="order-request-details" @click="toggleRequest">
+            <FileText :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" />
+            <span class="min-w-0 flex-1"><span class="block text-xs font-semibold leading-4 sm:truncate sm:text-sm">Заявка и файлы</span><span class="hidden truncate text-xs text-brand-700 dark:text-brand-200 sm:block">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
+            <ChevronDown :size="20" class="shrink-0 transition-transform" :class="requestOpen ? 'rotate-180' : ''" aria-hidden="true" />
           </button>
-          <button type="button" class="flex min-h-9 w-full items-center justify-between rounded-lg px-1 text-left text-xs font-semibold text-slate-600 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-300 lg:flex-1" :aria-expanded="mobileContextOpen && !requestOpen" aria-controls="order-context-details" @click="requestOpen = false; mobileContextOpen = !mobileContextOpen"><span>Ответственный, клиент и объект</span><span aria-hidden="true">{{ mobileContextOpen && !requestOpen ? '−' : '+' }}</span></button>
+          <button type="button" aria-label="Ответственный, клиент и объект" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-200 dark:hover:bg-slate-800 sm:text-sm" :class="mobileContextOpen && !requestOpen ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'" :aria-expanded="mobileContextOpen && !requestOpen" aria-controls="order-context-details" @click="requestOpen = false; mobileContextOpen = !mobileContextOpen"><UsersRound :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" /><span class="min-w-0 flex-1"><span class="sm:hidden">Клиент и объект</span><span class="hidden sm:inline">Ответственный, клиент и объект</span></span><ChevronDown :size="20" class="shrink-0 transition-transform" :class="mobileContextOpen && !requestOpen ? 'rotate-180' : ''" aria-hidden="true" /></button>
         </div>
       </div>
 
       <OrderWorkspaceUsageReport :open="usageReportOpen" @close="usageReportOpen = false" />
       <EnvelopePrintDialog v-if="showEnvelope && customer?.id" :key="customer.id" :customer-id="customer.id" :order-address="compactObjectAddress" @close="showEnvelope = false" />
 
-      <div ref="workspaceScrollContainer" data-order-scroll class="flex min-h-0 min-w-0 flex-1 flex-col content-start gap-3 overflow-y-auto p-3 lg:grid lg:grid-cols-1" :class="!proposalClientPreview && requestOpen ? 'lg:grid-cols-[minmax(0,1fr)_30rem]' : !proposalClientPreview && mobileContextOpen ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''">
+      <div ref="workspaceScrollContainer" data-order-scroll class="flex min-h-0 min-w-0 flex-1 flex-col content-start gap-3 overflow-y-auto p-3 xl:grid xl:grid-cols-1" :class="!proposalClientPreview && requestOpen ? 'xl:grid-cols-[minmax(0,1fr)_30rem]' : !proposalClientPreview && mobileContextOpen ? 'xl:grid-cols-[minmax(0,1fr)_18rem]' : ''">
         <div class="min-w-0 shrink-0">
 
           <p v-if="displayFormError && !proposalClientPreview" class="mt-4 rounded-xl border border-red-500/40 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -771,6 +792,7 @@ defineExpose({ prepareToLeave });
                 :order-id="order?.id ?? null"
                 :before-installation-action="orderSaving.flush"
                 :before-multi-split-save="orderSaving.flush"
+                :before-preview="pendingLines.finish"
                 :begin-installation-attach="beginInstallationAttach"
                 :after-installation-attach="refreshAfterInstallationAttach"
                 :end-installation-attach="endInstallationAttach"
@@ -840,8 +862,8 @@ defineExpose({ prepareToLeave });
             </section>
           </fieldset>
         </div>
-        <OrderRequestPanel v-if="requestOpen && !proposalClientPreview && order" :key="`request-${order.id}`" ref="requestPanel" class="order-first lg:sticky lg:top-0 lg:order-none lg:self-start" :context="requestEvidence.context.value" :description="comment" :loading="requestEvidence.loading.value" :error="requestEvidence.error.value" :resolve-access="requestEvidence.resolveAccess" @retry="requestEvidence.load" @close="closeRequest" />
-        <div v-if="contextMounted" v-show="!proposalClientPreview && mobileContextOpen && !requestOpen" id="order-context-details" class="order-first min-w-0 lg:order-none lg:self-start">
+        <OrderRequestPanel v-if="requestOpen && !proposalClientPreview && order" :key="`request-${order.id}`" ref="requestPanel" class="order-first xl:sticky xl:top-0 xl:order-none xl:self-start" :context="requestEvidence.context.value" :description="comment" :loading="requestEvidence.loading.value" :error="requestEvidence.error.value" :resolve-access="requestEvidence.resolveAccess" @retry="requestEvidence.load" @close="closeRequest" />
+        <div v-if="contextMounted" v-show="!proposalClientPreview && mobileContextOpen && !requestOpen" id="order-context-details" class="order-first min-w-0 xl:order-none xl:self-start">
           <div class="space-y-3">
           <OrderResponsiblePanel v-if="order" :order="order" :can-assign="canAssignResponsible" :busy="responsibilityBusy" :disabled="initializing || installationAttaching || sourceApplying || proposalActionLoading || workerAssignmentBusy || workerPayBusy" :error="responsibilityError" :assign="assignResponsible" />
           <OrderCustomerContext

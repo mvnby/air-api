@@ -13,6 +13,7 @@ import type { OrderWorkflowType } from './order-workspace';
 import { ManagerInstallationEstimatesService, type ManagerOrderDetailResponse, type ManagerInstallationStandardTariff } from '../../client';
 import { groupSuggestedInstallations, standardServiceChoice } from './service-installation-choices';
 import { managerSession } from '../../services/manager-session';
+import { hasLineEdits } from './order-line-drafts';
 
 const props = defineProps<{
   commercial: ReturnType<typeof useOrderCommercialEditor>;
@@ -36,6 +37,7 @@ const props = defineProps<{
   afterInstallationAttach: (orderId: number, proposalId: number, scopeKey: string, token: string) => Promise<boolean>;
   endInstallationAttach: (token: string) => void;
   beforeMultiSplitSave: () => Promise<boolean>;
+  beforePreview?: () => Promise<boolean>;
 }>();
 
 const emit = defineEmits<{ catalog: []; documents: []; multiSplitUpdated: [order: ManagerOrderDetailResponse] }>();
@@ -44,9 +46,23 @@ const clientPreview = defineModel<boolean>('clientPreview', { default: false });
 const showCosts = defineModel<boolean>('showCosts', { default: false });
 const demoReadOnly = useDemoReadOnly();
 const toolbarRef = ref<InstanceType<typeof OrderProposalToolbar> | null>(null);
+const productEditorRef = ref<InstanceType<typeof OrderProductLinesEditor> | null>(null);
+const serviceEditorRef = ref<InstanceType<typeof OrderServiceLinesEditor> | null>(null);
+let invalidLineEditor: 'product' | 'service' | null = null;
 const installationPanelRef = ref<InstanceType<typeof OrderInstallationEstimatePanel> | null>(null);
 const previewOpenButton = ref<HTMLButtonElement | null>(null);
 const previewReturnButton = ref<HTMLButtonElement | null>(null);
+const previewOpening = ref(false);
+const openClientPreview = async () => {
+  if (previewOpening.value) return;
+  const orderId = props.orderId, proposalId = proposal.activeProposal?.id;
+  previewOpening.value = true;
+  try {
+    if (props.beforePreview && !await props.beforePreview()) return;
+    if (props.orderId !== orderId || proposal.activeProposal?.id !== proposalId) return;
+    clientPreview.value = true;
+  } finally { previewOpening.value = false; }
+};
 watch(clientPreview, async (preview) => {
   await nextTick();
   (preview ? previewReturnButton.value : previewOpenButton.value)?.focus({ preventScroll: true });
@@ -94,6 +110,23 @@ const addSuggested = (index: number) => {
 };
 
 defineExpose({
+  applyLineEdits: () => {
+    const productsValid = productEditorRef.value?.validateDrafts() ?? true;
+    const servicesValid = serviceEditorRef.value?.validateDrafts() ?? true;
+    invalidLineEditor = !productsValid ? 'product' : !servicesValid ? 'service' : null;
+    // Validate the entire proposal first: one invalid row cannot partially
+    // publish the other editor's working copy.
+    if (!productsValid || !servicesValid) return false;
+    productEditorRef.value?.commitDrafts();
+    serviceEditorRef.value?.commitDrafts();
+    return true;
+  },
+  focusLineEdits: () => {
+    if (invalidLineEditor === 'product') productEditorRef.value?.focusDraft();
+    else if (invalidLineEditor === 'service') serviceEditorRef.value?.focusDraft();
+    else if (hasLineEdits(commercial.productLines)) productEditorRef.value?.focusDraft();
+    else serviceEditorRef.value?.focusDraft();
+  },
   addProduct: () => commercial.addProductLine(),
   addService: () => commercial.addServiceLine(),
   openResponse: () => toolbarRef.value?.openResponse(),
@@ -101,7 +134,7 @@ defineExpose({
 </script>
 
 <template>
-  <section id="order-workspace-proposal" class="min-w-0" :aria-label="title">
+  <section id="order-workspace-proposal" class="order-proposal-container min-w-0" :aria-label="title">
     <div v-if="clientPreview" class="mb-3 flex justify-end">
       <button ref="previewReturnButton" type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="true" @click="clientPreview = false">Вернуться в редактор</button>
     </div>
@@ -126,7 +159,7 @@ defineExpose({
       >
         <template #controls>
           <label v-if="!demoReadOnly" class="inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"><input v-model="showCosts" type="checkbox" class="rounded border-slate-300 text-brand-600" />Себестоимость</label>
-          <button ref="previewOpenButton" type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="false" @click="clientPreview = true">Предпросмотр для клиента</button>
+          <button ref="previewOpenButton" type="button" class="btn-mini-outline min-h-8 text-xs" aria-pressed="false" :disabled="previewOpening" @click="openClientPreview">Предпросмотр для клиента</button>
         </template>
       </OrderProposalToolbar>
 
@@ -154,11 +187,12 @@ defineExpose({
           <slot name="source-equipment" />
           <button type="button" class="h-8 px-1 text-xs text-slate-500 hover:text-brand-700" :aria-expanded="commercial.showEstimateImport" @click="commercial.toggleEstimateImport">Из сметы</button>
         </div>
-        <div class="hidden gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 md:grid" :class="showCosts && !demoReadOnly ? 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_6.5rem]' : 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6.5rem]'" aria-hidden="true">
-          <span>Наименование и состав</span><span class="text-center">Кол-во</span><span class="text-right">Цена</span><span class="text-right">Сумма</span><span v-if="showCosts && !demoReadOnly" class="text-right">Себест.</span><span class="text-center">Действия</span>
+        <div class="proposal-table-heading hidden gap-2 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900" :data-costs="showCosts && !demoReadOnly" :class="showCosts && !demoReadOnly ? 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_3rem]' : 'grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_3rem]'" aria-hidden="true">
+          <span>Наименование и состав</span><span class="text-center">Кол-во</span><span class="text-right">Цена</span><span class="text-right">Сумма</span><span v-if="showCosts && !demoReadOnly" class="text-right">Себест.</span><span />
         </div>
         <OrderProductLinesEditor
           v-if="showProductLines"
+          ref="productEditorRef"
           compact
           hide-actions
           :show-costs="showCosts"
@@ -187,6 +221,7 @@ defineExpose({
         />
 
         <OrderServiceLinesEditor
+          ref="serviceEditorRef"
           compact
           hide-actions
           :show-costs="showCosts"
@@ -243,3 +278,13 @@ defineExpose({
     </div>
   </section>
 </template>
+
+<style scoped>
+.order-proposal-container { container: order-proposal / inline-size; }
+@container order-proposal (min-width: 650px) {
+  .proposal-table-heading[data-costs="false"] { display: grid; }
+}
+@container order-proposal (min-width: 750px) {
+  .proposal-table-heading[data-costs="true"] { display: grid; }
+}
+</style>

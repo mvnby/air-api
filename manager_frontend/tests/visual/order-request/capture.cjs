@@ -18,7 +18,10 @@ async function run(width,scenario,task){
 }
 const trigger=page=>page.getByTestId('order-request-trigger');
 const panel=page=>page.getByRole('region',{name:'Заявка и файлы',exact:true});
-async function open(page){await trigger(page).click();await panel(page).waitFor();}
+async function open(page){
+ if(!await trigger(page).isVisible())await page.locator('[data-order-scroll]').evaluate(el=>el.scrollTo({top:0,behavior:'instant'}));
+ await trigger(page).click();await panel(page).waitFor();
+}
 async function inViewport(locator,width){const b=await locator.boundingBox();assert(b&&b.x>=0&&b.x+b.width<=width+1,JSON.stringify(b));}
 (async()=>{
  await new Promise(resolve=>fixture.server.listen(fixture.port,'127.0.0.1',resolve));
@@ -46,13 +49,14 @@ async function inViewport(locator,width){const b=await locator.boundingBox();ass
      await inViewport(button,width);
     }
     await panel(page).getByRole('button',{name:'Закрыть заявку и файлы',exact:true}).click();assert.equal(await trigger(page).evaluate(el=>el===document.activeElement),true);
-    // An unfinished proposal row survives panel and tab changes.
+    // Evidence stays available during input; leaving a changed row is explicit.
     const edit=page.getByRole('button',{name:/Редактировать услугу #1/}).first();await edit.click();
     const prices=page.locator('label').filter({has:page.locator('span',{hasText:'Цена'})}).locator('input[type=number]');
     const field=prices.first();await field.fill('987.65');await open(page);await page.keyboard.press('Escape');
     assert.equal(await field.inputValue(),'987.65');
     await page.getByRole('navigation',{name:'Рабочая область заказа'}).getByRole('button',{name:'Документы',exact:true}).click();
-    await page.getByRole('navigation',{name:'Рабочая область заказа'}).getByRole('button',{name:'Предложение',exact:true}).click();
+    await page.getByRole('button',{name:'Продолжить ввод',exact:true}).click();
+    assert.equal(new URL(page.url()).searchParams.get('section'),'proposal');
     assert.equal(await field.inputValue(),'987.65');await shot('draft-preserved');
    });
    for(const scenario of ['tender','manual','empty','unavailable'])await run(width,scenario,async(page,shot)=>{

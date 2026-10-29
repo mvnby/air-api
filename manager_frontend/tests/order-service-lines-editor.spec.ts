@@ -4,6 +4,7 @@ import OrderServiceLinesEditor from '../src/components/orders/OrderServiceLinesE
 import ServiceDescriptionModeSwitch from '../src/components/orders/ServiceDescriptionModeSwitch.vue';
 import type { ServiceLine } from '../src/components/orders/order-editor-types';
 import { managerSession } from '../src/services/manager-session';
+import { committedLines } from '../src/components/orders/order-line-drafts';
 
 const apiMock = vi.hoisted(() => ({ listManagerQuickTariffs: vi.fn() }));
 vi.mock('../src/api', () => ({ api: apiMock }));
@@ -159,5 +160,53 @@ it('cancels an existing service edit without publishing it or touching its neigh
   expect(saved.price).toBe(500);
   expect(saved.description).toBe('До 3 м');
   expect(neighbour.price).toBe(100);
+  expect(wrapper.emitted('remove')).toBeUndefined();
+});
+
+it('validates service drafts without partial publication and ignores an untouched empty row', async () => {
+  const saved: ServiceLine = { link_id: 31, title: 'Монтаж', quantity: 1, price: 500, cost: 100 };
+  const manual: ServiceLine = { title: 'Промывка', quantity: 0, price: 150, cost: 0, editor: { original: null } };
+  const blank: ServiceLine = { title: '', quantity: 1, price: 0, cost: 0, editor: { original: null } };
+  const wrapper = mountEditor([saved, manual, blank], { compact: true, editingIndex: 0 });
+  await flushPromises();
+  await wrapper.get('input[type="number"]').setValue(600);
+  expect(wrapper.vm.validateDrafts()).toBe(false);
+  expect(committedLines(wrapper.props('lines'))).toHaveLength(1);
+  expect(committedLines(wrapper.props('lines'))[0]!.price).toBe(500);
+  await flushPromises();
+  expect(wrapper.text()).toContain('Целое число больше 0');
+  expect(wrapper.text()).not.toContain('Укажите название');
+
+  manual.quantity = 2;
+  expect(wrapper.vm.validateDrafts()).toBe(true);
+  wrapper.vm.commitDrafts();
+  expect(wrapper.props('lines')).toEqual([saved, manual]);
+  expect(committedLines(wrapper.props('lines')).map(row => row.price)).toEqual([600, 150]);
+  expect(wrapper.emitted('update:editingIndex')?.at(-1)).toEqual([null]);
+});
+
+it('focuses the invalid quantity on direct Add without refocusing the service title', async () => {
+  const draft: ServiceLine = { title: 'Услуга с подробным названием '.repeat(8), quantity: 0, price: 100, cost: 0, editor: { original: null } };
+  const wrapper = mount(OrderServiceLinesEditor, { attachTo: document.body, props: baseProps([draft], { compact: true, editingIndex: 0 }) });
+  mounted.push(wrapper);
+  await flushPromises();
+  const titleFocusCount = wrapper.emitted('focus')?.length || 0;
+  await wrapper.findAll('button').find(button => button.text() === 'Добавить услугу')!.trigger('click');
+  await flushPromises();
+  expect(document.activeElement).toBe(wrapper.get('input[aria-invalid="true"]').element);
+  expect(wrapper.get('[role="alert"]').text()).toBe('Целое число больше 0');
+  expect(wrapper.emitted('focus')?.length || 0).toBe(titleFocusCount);
+  expect(committedLines(wrapper.props('lines'))).toHaveLength(0);
+});
+
+it('cancels a grouped installation draft through the workspace API as one edit', async () => {
+  const original: ServiceLine = { link_id: 31, title: 'Монтаж', quantity: 1, price: 600, cost: 0 };
+  const first: ServiceLine = { ...original, price: 700, editor: { original: { ...original }, group: 9 } };
+  const second: ServiceLine = { title: 'Дополнительная трасса', quantity: 2, price: 50, cost: 0, editor: { original: null, group: 9 } };
+  const neighbour: ServiceLine = { title: 'Диагностика', quantity: 1, price: 100, cost: 0 };
+  const wrapper = mountEditor([first, second, neighbour], { compact: true, editingIndex: 0 });
+  await flushPromises();
+  wrapper.vm.cancelDrafts();
+  expect(wrapper.props('lines')).toEqual([original, neighbour]);
   expect(wrapper.emitted('remove')).toBeUndefined();
 });

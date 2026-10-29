@@ -34,6 +34,7 @@ type UseOrderProposalLifecycleOptions = {
   setToast: ToastHandler;
   onUpdated: (order: ManagerOrderDetailResponse) => void;
   onReload: (orderId: number) => void;
+  beforeAction?: () => Promise<boolean>;
   saveOrder?: () => Promise<ManagerOrderDetailResponse | null>;
   onLoaded?: () => void;
 };
@@ -54,12 +55,18 @@ export const useOrderProposalLifecycle = ({
   setToast,
   onUpdated,
   onReload,
+  beforeAction,
   saveOrder,
   onLoaded,
 }: UseOrderProposalLifecycleOptions) => {
   const proposalStatus = ref<ProposalLifecycleStatus>('draft');
   const activeProposalId = ref<number | null>(null);
   const proposalActionLoading = ref(false);
+  const prepareAction = async () => {
+    const orderId = order.value?.id, proposalId = activeProposalId.value;
+    if (beforeAction && !await beforeAction()) return false;
+    return order.value?.id === orderId && activeProposalId.value === proposalId && !proposalActionLoading.value;
+  };
 
   const proposals = computed(() => [...(order.value?.proposals || [])]
     .filter((proposal) => !proposal.is_archived)
@@ -151,6 +158,7 @@ export const useOrderProposalLifecycle = ({
 
   const setActiveProposal = async (proposal: OrderProposalResponse) => {
     if (!proposal || activeProposalId.value === proposal.id || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     proposalActionLoading.value = true;
     try {
       await saveCurrentProposalLines();
@@ -166,6 +174,7 @@ export const useOrderProposalLifecycle = ({
 
   const createProposal = async () => {
     if (!order.value?.id || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     const name = await promptDialog({
       title: 'Новое предложение',
       inputLabel: 'Название',
@@ -190,6 +199,7 @@ export const useOrderProposalLifecycle = ({
 
   const duplicateProposal = async () => {
     if (!order.value?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     const name = await promptDialog({
       title: 'Копия предложения',
       inputLabel: 'Название',
@@ -215,6 +225,7 @@ export const useOrderProposalLifecycle = ({
 
   const renameProposal = async () => {
     if (!order.value?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     const name = await promptDialog({
       title: 'Переименовать предложение',
       inputLabel: 'Название',
@@ -239,6 +250,7 @@ export const useOrderProposalLifecycle = ({
 
   const archiveProposal = async () => {
     if (!order.value?.id || !activeProposal.value?.id || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     if (proposals.value.length <= 1) {
       setToast('Нельзя удалить единственное предложение', 'error');
       return;
@@ -269,6 +281,7 @@ export const useOrderProposalLifecycle = ({
   const selectProposalForOrder = async (proposal?: OrderProposalResponse) => {
     const target = proposal || activeProposal.value;
     if (!order.value?.id || !target?.id || target.is_selected || proposalActionLoading.value) return;
+    if (!await prepareAction()) return;
     proposalActionLoading.value = true;
     try {
       await saveCurrentProposalLines();
@@ -286,6 +299,7 @@ export const useOrderProposalLifecycle = ({
     const proposal = activeProposal.value;
     if (!order.value?.id || !proposal?.id || proposalActionLoading.value) return;
     if (nextStatus === activeProposalStatus.value) return;
+    if (!await prepareAction()) return;
     if (nextStatus === 'ready_to_send') {
       const validationError = validateLines();
       if (validationError || total.value <= 0) {

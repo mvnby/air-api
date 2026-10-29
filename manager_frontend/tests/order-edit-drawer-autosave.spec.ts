@@ -55,11 +55,11 @@ const commit = (payload: any) => {
   if (payload.services) { const index = Math.max(0, stored.proposals!.findIndex(item => item.id === payload.line_proposal_id)); stored.proposals![index] = { ...stored.proposals![index]!, service_lines: payload.services }; }
   return structuredClone(stored);
 };
-const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false, openContext = true, realHeader = false) => {
+const mountDrawer = async (presentation: 'page' | 'dialog' = 'dialog', realCustomer = false, openContext = true, realHeader = false, realProposal = false) => {
   wrapper = shallowMount(OrderEditDrawer, {
     attachTo: realHeader ? document.body : undefined,
     props: { modelValue: false, presentation, order: stored, onUpdated: (order: ManagerOrderDetailResponse) => { void wrapper.setProps({ order }); } },
-    global: { components: { OrderPaymentWorkspace, OrderWorkWorkspace }, stubs: { OrderWorkspaceHeader: !realHeader, OrderAsyncPanel: false, OrderPaymentWorkspace: false, OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer } },
+    global: { components: { OrderPaymentWorkspace, OrderWorkWorkspace }, stubs: { OrderWorkspaceHeader: !realHeader, OrderAsyncPanel: false, OrderPaymentWorkspace: false, OrderCustomerContext: !realCustomer, OrderWorkspaceContext: !realCustomer, OrderProposalWorkspace: !realProposal, OrderProposalToolbar: !realProposal, OrderProductLinesEditor: !realProposal, OrderServiceLinesEditor: !realProposal } },
   });
   await wrapper.setProps({ modelValue: true });
   await flushPromises();
@@ -90,6 +90,78 @@ beforeEach(() => {
   vi.spyOn(ManagerOrdersService, 'patchManagerOrder').mockImplementation(async (_id, payload) => commit(payload));
 });
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); managerSession.auth.value = null; managerStorefrontSelection.selectedSlug.value = null; });
+
+describe('unfinished line actions with the real proposal editors', () => {
+  const editNewService = async () => {
+    await mountDrawer('dialog', false, false, false, true);
+    Object.assign(wrapper.get('[data-order-scroll]').element, { scrollTo: vi.fn() });
+    const commercial = wrapper.findComponent(OrderProposalWorkspace).props('commercial') as any;
+    commercial.addServiceLine();
+    Object.assign(commercial.serviceLines.value[0], { title: 'Введённая услуга', price: 125.5 });
+    await nextTick();
+    return commercial.serviceLines.value[0];
+  };
+  it('warns when changing tabs and keeps the input visible and uncommitted on continue editing', async () => {
+    const line = await editNewService();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockResolvedValueOnce(false);
+    await openDocuments();
+    expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ confirmText: 'Применить и сохранить' }));
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('proposal');
+    expect(line.editor).toBeDefined(); expect(line.title).toBe('Введённая услуга');
+    expect(header().props('pendingLineEdits')).toBe(true);
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+  });
+  it.each([true, false])('applies and saves before switching tabs with autosave %s', async automatic => {
+    const line = await editNewService();
+    if (!automatic) { header().vm.$emit('toggle-autosave'); await nextTick(); }
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockResolvedValueOnce(true);
+    await openDocuments();
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('documents');
+    expect(line.editor).toBeUndefined();
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Введённая услуга', price: 125.5 })]));
+    expect(header().props('pendingLineEdits')).toBe(false);
+  });
+  it('explicit Save applies the open row instead of reporting success while omitting it', async () => {
+    const line = await editNewService();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockClear();
+    header().vm.$emit('save'); await flushPromises();
+    expect(line.editor).toBeUndefined(); expect(confirmDialog).not.toHaveBeenCalled();
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Введённая услуга', price: 125.5 })]));
+    expect(header().props('pendingLineEdits')).toBe(false);
+  });
+  it('keeps the editor on declined preview, then includes the accepted row in the preview', async () => {
+    const line = await editNewService();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    const workspace = wrapper.findComponent(OrderProposalWorkspace);
+    const previewButton = () => workspace.findAll('button').find(button => button.text() === 'Предпросмотр для клиента')!;
+    vi.mocked(confirmDialog).mockResolvedValueOnce(false);
+    await previewButton().trigger('click'); await flushPromises();
+    expect(workspace.props('clientPreview')).toBe(false); expect(line.editor).toBeDefined();
+    expect(ManagerOrdersService.patchManagerOrder).not.toHaveBeenCalled();
+    vi.mocked(confirmDialog).mockResolvedValueOnce(true);
+    await previewButton().trigger('click'); await flushPromises();
+    expect(workspace.props('clientPreview')).toBe(true); expect(line.editor).toBeUndefined();
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Введённая услуга', price: 125.5 })]));
+  });
+  it('retries a failed save on the next tab click after the line editor has already committed', async () => {
+    const line = await editNewService();
+    const { confirmDialog } = await import('../src/services/ui-feedback');
+    vi.mocked(confirmDialog).mockClear().mockResolvedValueOnce(true);
+    vi.mocked(ManagerOrdersService.patchManagerOrder).mockRejectedValueOnce(new Error('offline'));
+    await openDocuments();
+    expect(line.editor).toBeUndefined(); expect(header().props('pendingLineEdits')).toBe(false);
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('proposal');
+    expect(header().props('saveFailed')).toBe(true);
+    await openDocuments();
+    expect(wrapper.findComponent(OrderWorkspaceNav).props('active')).toBe('documents');
+    expect(ManagerOrdersService.patchManagerOrder).toHaveBeenCalledTimes(2);
+    expect(confirmDialog).toHaveBeenCalledOnce();
+    expect(stored.proposals![0].service_lines).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Введённая услуга', price: 125.5 })]));
+  });
+});
 
 
 // This fixture enforces the backend's proposal-line ownership boundary.

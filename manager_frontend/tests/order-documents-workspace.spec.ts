@@ -8,7 +8,7 @@ const documentStubs = {
   OrderAsyncPanel: false,
   OrderDrawerSection: {
     name: 'OrderDrawerSection',
-    props: ['summary', 'hasError'],
+    props: { summary: String, hasError: Boolean, flat: Boolean },
     template: '<section><slot /></section>',
   },
   OrderDocumentsPanel: {
@@ -84,6 +84,7 @@ describe('OrderDocumentsWorkspace', () => {
     const section = wrapper.getComponent({ name: 'OrderDrawerSection' });
     expect(section.props('summary')).toBe('Документов нет');
     expect(section.props('hasError')).toBe(false);
+    expect(section.props('flat')).toBe(true);
   });
 
   it('mounts the Google editor only on first use and keeps it mounted when returning to CRM documents', async () => {

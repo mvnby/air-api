@@ -3,6 +3,7 @@ defineProps<{
   title: string;
   summary?: string;
   expanded: boolean;
+  flat?: boolean;
   icon?: string;
   tone?: 'default' | 'blue' | 'amber' | 'emerald';
   hasError?: boolean;
@@ -21,8 +22,9 @@ const toneClasses = {
 </script>
 
 <template>
-  <section class="mt-4 rounded-2xl border p-0 shadow-sm" :class="[toneClasses[tone || 'default'], hasError ? 'ring-2 ring-red-400/50' : '']">
+  <section :aria-label="flat ? title : undefined" :class="[flat ? 'min-w-0' : ['mt-4 rounded-2xl border p-0 shadow-sm', toneClasses[tone || 'default']], hasError ? 'ring-2 ring-red-400/50' : '']">
     <button
+      v-if="!flat"
       type="button"
       class="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left"
       :aria-expanded="expanded"
@@ -38,7 +40,7 @@ const toneClasses = {
       <span class="material-icons-round shrink-0 text-[20px] text-slate-500 dark:text-slate-400" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
     </button>
 
-    <div v-show="expanded" class="border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700">
+    <div v-show="flat || expanded" :class="flat ? 'min-w-0' : 'border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700'">
       <slot />
     </div>
   </section>

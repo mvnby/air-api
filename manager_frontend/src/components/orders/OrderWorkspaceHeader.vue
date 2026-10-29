@@ -23,6 +23,7 @@ const props = defineProps<{
   waitingSummary?: string;
   canPrintEnvelope?: boolean;
   dirty?: boolean;
+  pendingLineEdits?: boolean;
   saving?: boolean;
   writeBlocked?: boolean;
   titleResetVersion?: number;
@@ -62,7 +63,7 @@ const titleTriggerRef = ref<HTMLButtonElement | null>(null);
 const titleInputRef = ref<HTMLInputElement | null>(null);
 const menuTriggerRef = ref<HTMLButtonElement | null>(null);
 const menuRef = ref<HTMLElement | null>(null);
-const saveLabel = computed(() => props.saving ? 'Сохраняем' : props.saveFailed ? 'Не удалось сохранить' : props.dirty ? 'Есть изменения' : 'Сохранено');
+const saveLabel = computed(() => props.saving ? 'Сохраняем' : props.saveFailed ? 'Не удалось сохранить' : props.pendingLineEdits ? 'Строка не применена' : props.dirty ? 'Есть изменения' : 'Сохранено');
 const showCustomerName = computed(() => {
   const customerName = String(props.customerName || '').trim();
   return Boolean(customerName);
@@ -207,7 +208,7 @@ const onWorkflowChange = async (event: Event) => {
   <header
     ref="headerRef"
     class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
-    :class="effectiveCompact ? 'py-2' : 'py-3'"
+    :class="workspace ? 'py-1' : effectiveCompact ? 'py-2' : 'py-3'"
     @focusin="refreshFocusLock"
     @focusout="refreshFocusLock"
   >
@@ -224,8 +225,8 @@ const onWorkflowChange = async (event: Event) => {
           </div>
           <button v-else ref="titleTriggerRef" :disabled="writeBlocked" type="button" class="min-w-0 flex-1 truncate rounded text-left text-sm font-semibold leading-5 text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-white" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">{{ title || 'Без названия' }}</button>
         </div>
-        <p v-if="effectiveCompact" class="h-5 truncate text-xs leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
-        <template v-else>
+        <p v-if="effectiveCompact && !workspace" class="h-5 truncate text-xs leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
+        <template v-if="!effectiveCompact">
         <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <span class="font-semibold text-slate-700 dark:text-slate-200">Заказ №{{ orderId }}</span>
           <span v-if="isWebsiteOrder" class="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">Сайт</span>
@@ -262,7 +263,7 @@ const onWorkflowChange = async (event: Event) => {
 
       <div class="flex shrink-0 items-center gap-1">
         <button
-          v-if="(effectiveCompact || workspace) && (dirty || saveFailed)"
+          v-if="(effectiveCompact || workspace) && (dirty || pendingLineEdits || saveFailed)"
           type="button"
           class="btn-mini h-9 w-9 justify-center p-0"
           :disabled="saving || writeBlocked"
@@ -315,7 +316,7 @@ const onWorkflowChange = async (event: Event) => {
             </button>
           </div>
         </div>
-        <button v-if="canWait" type="button" class="min-h-9 rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50" :disabled="writeBlocked" @click="emit('hold')">{{ isOnHold ? 'Вернуть в работу' : 'В ожидание' }}</button>
+        <button v-if="canWait && !workspace" type="button" class="min-h-9 rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50" :disabled="writeBlocked" @click="emit('hold')">{{ isOnHold ? 'Вернуть в работу' : 'В ожидание' }}</button>
         <button v-if="!backLabel" type="button" class="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Закрыть карточку заказа" @click="emit('close')">
           <X :size="20" />
         </button>
@@ -323,7 +324,8 @@ const onWorkflowChange = async (event: Event) => {
     </div>
 
     <p v-if="isOnHold" class="mt-1 break-words text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingSummary || 'Причина не указана' }}</p>
-    <div class="mt-1 flex min-h-8 items-center gap-x-3 text-xs" :class="workspace ? 'flex-nowrap' : 'flex-wrap gap-y-1'">
+    <div class="flex min-h-8 items-center gap-x-2 text-xs" :class="workspace ? 'flex-nowrap' : 'mt-1 flex-wrap gap-y-1'">
+      <p v-if="workspace" class="min-w-0 flex-1 truncate leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
       <button
         type="button"
         role="switch"
@@ -337,10 +339,11 @@ const onWorkflowChange = async (event: Event) => {
         <span class="relative h-4 w-7 rounded-full" :class="autosaveEnabled ? 'bg-brand-600' : 'bg-slate-400'" aria-hidden="true">
           <span class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform" :class="autosaveEnabled ? 'left-0.5 translate-x-3' : 'left-0.5'" />
         </span>
-        <span :class="workspace ? 'hidden sm:inline' : ''">Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}</span>
+        <span v-if="workspace" class="lg:hidden">Авто</span>
+        <span :class="workspace ? 'hidden lg:inline' : ''">Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}</span>
       </button>
-      <span role="status" aria-live="polite" class="w-36 shrink-0" :title="saveStatusText" :class="saveFailed && !saving ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">{{ saveLabel }}</span>
-      <span v-if="workspace" class="min-w-0 truncate rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" :title="viewModel.stageLabel">{{ viewModel.stageLabel }}</span>
+      <span role="status" aria-live="polite" class="shrink-0 text-[11px] sm:text-xs" :title="saveStatusText" :class="saveFailed && !saving ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">{{ saveLabel }}</span>
+      <span v-if="workspace" class="hidden min-w-0 max-w-48 truncate xl:inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" :title="viewModel.stageLabel">{{ viewModel.stageLabel }}</span>
     </div>
 
     <div v-if="effectiveCompact && !workspace" class="mt-2 flex h-8 min-w-0 items-center gap-2">
