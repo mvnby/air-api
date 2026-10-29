@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
+import OrderLineEditorActions from './OrderLineEditorActions.vue';
+import { Pencil, Trash2 } from 'lucide-vue-next';
 import LineFormattedText from './LineFormattedText.vue';
 import { computed, nextTick, ref, watch } from 'vue';
-import { beginLineEdit, cancelLineEdit, commitLineEdit, focusLineEditor, lineErrors, lineKey } from './order-line-drafts';
+import { beginLineEdit, cancelLineEdit, commitLineEdit, focusInvalidLineEditor, focusLineEditor, hasLineEdits, lineErrors, lineKey } from './order-line-drafts';
 import type { ProductLine, ProductOption } from './order-editor-types';
 import { formatMoney } from './order-utils';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
@@ -58,6 +60,7 @@ const touch = (line: ProductLine, field: string) => {
 };
 const fieldError = (line: ProductLine, field: string) => touched.value[lineKey(line)]?.includes(field) ? errorsFor(line)[field] : '';
 const focusEditor = async (line: ProductLine) => { await nextTick(); await focusLineEditor(rows.get(lineKey(line))); };
+const focusInvalidEditor = (line: ProductLine) => focusInvalidLineEditor(rows.get(lineKey(line)));
 const visibleCosts = computed(() => Boolean(props.showCosts && !demoReadOnly.value));
 
 watch(
@@ -89,7 +92,7 @@ const editLine = (line: ProductLine) => {
 };
 const finishEditing = (line: ProductLine) => {
   touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
-  if (Object.keys(errorsFor(line)).length) return;
+  if (Object.keys(errorsFor(line)).length) { void focusInvalidEditor(line); return; }
   commitLineEdit(line);
   editingLine.value = null;
 };
@@ -98,6 +101,31 @@ const cancelEditing = (line: ProductLine) => {
   editingLine.value = null;
 };
 const isEditing = (line: ProductLine) => Boolean(line.editor) || editingLine.value === line;
+const validateDrafts = () => {
+  const drafts = lines.value.filter(line => line.editor && (line.editor.original || hasLineEdits([line])));
+  for (const line of drafts) touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
+  const invalid = drafts.find(line => Object.keys(errorsFor(line)).length);
+  if (invalid) void focusInvalidEditor(invalid);
+  return !invalid;
+};
+const commitDrafts = () => {
+  for (const line of [...lines.value]) {
+    if (!line.editor) continue;
+    if (!line.editor.original && !hasLineEdits([line])) cancelLineEdit(lines.value, line);
+    else commitLineEdit(line);
+  }
+  editingLine.value = null;
+};
+const cancelDrafts = () => {
+  for (const line of [...lines.value]) if (line.editor) cancelLineEdit(lines.value, line);
+  editingLine.value = null;
+};
+const focusDraft = () => {
+  const invalid = lines.value.find(line => line.editor && touched.value[lineKey(line)]?.length && Object.keys(errorsFor(line)).length);
+  const line = invalid || lines.value.find(line => hasLineEdits([line])) || lines.value.find(line => line.editor);
+  if (line) void (invalid ? focusInvalidEditor(line) : focusEditor(line));
+};
+defineExpose({ validateDrafts, commitDrafts, cancelDrafts, focusDraft });
 
 const suggestionsFor = (index: number) => (
   props.activeSuggestionIndex === index ? props.productOptions.slice(0, 10) : []
@@ -132,7 +160,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
 </script>
 
 <template>
-  <section :class="compact ? '' : 'mt-2'" aria-label="Товары">
+  <section class="order-lines" :class="compact ? '' : 'mt-2'" aria-label="Товары">
     <div v-if="!hideActions" class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-3">
         <h4 class="text-md font-semibold text-gray-800" :class="compact ? 'text-sm' : ''">Товары</h4>
@@ -150,11 +178,10 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
         <template v-if="!compact || isEditing(line)">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
           <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ line.editor?.original === null ? 'Новый товар' : 'Редактирование товара' }}</span>
-          <button type="button" class="btn-mini-outline min-h-9 px-3 text-xs" :aria-label="`Отмена: товар #${index + 1}`" @click="cancelEditing(line)">Отмена</button>
           <label v-if="hideActions && canManagePlatform" class="flex items-center gap-1 text-xs text-slate-500"><input v-model="searchInStock" type="checkbox" />Искать в наличии</label>
         </div>
-        <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start" :class="compact ? 'px-3 pb-3' : ''">
-          <label class="relative col-span-6 min-w-0 space-y-1 md:col-span-5">
+        <div class="order-line-form grid grid-cols-6 items-start gap-3" :class="compact ? 'p-3' : ''">
+          <label class="relative min-w-0 space-y-1 col-span-full">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
               <button v-if="line.product_id && canManagePlatform" type="button" data-order-usage="order_product_open_catalog" class="text-xs font-semibold text-brand-700 hover:text-brand-900" @click="emit('open', index)">
@@ -173,7 +200,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               @blur="touch(line, 'title'); emit('blur', index)"
             />
             <p v-if="fieldError(line, 'title')" :id="`product-title-error-${lineKey(line)}`" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'title') }}</p>
-            <div v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || suggestionsFor(index).length)" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
+            <div v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || suggestionsFor(index).length)" class="relative z-20 mt-2 max-h-80 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
               <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
               <button
                 v-for="item in suggestionsFor(index)"
@@ -185,7 +212,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
                 @mousedown.prevent
                 @click="emit('select', { index, option: item })"
               >
-                <p class="truncate font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
+                <p class="break-words font-medium text-gray-900 dark:text-slate-100">{{ item.title }}</p>
                 <p class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-slate-300">
                   <span><OrderMoney :value="item.price" /></span><span>·</span><span>{{ item.is_inverter ? 'Инвертор' : 'On/Off' }}</span><span>·</span>
                   <template v-if="item.vitebsk_qty > 0 || item.minsk_qty > 0">
@@ -200,26 +227,26 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               </button>
             </div>
           </label>
-          <label class="col-span-4 min-w-0 space-y-1 md:col-span-2">
+          <label class="col-span-3 min-w-0 space-y-1">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span>
             <input v-model.number="line.price" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" />
             <p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p>
           </label>
-          <label class="col-span-2 min-w-0 space-y-1 md:col-span-1">
+          <label class="col-span-3 min-w-0 space-y-1">
             <span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span>
             <input v-model.number="line.quantity" type="number" min="1" class="field-input w-full min-w-0 px-2 text-sm" placeholder="1" :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" />
             <p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p>
           </label>
-          <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 min-w-0 space-y-1 md:col-span-2">
+          <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 min-w-0 space-y-1">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
             <input v-model.number="line.cost" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" />
             <p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p>
           </label>
-          <div class="col-span-3 space-y-1 md:col-span-2">
+          <div class="col-span-3 min-w-0 space-y-1">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span>
             <div class="rounded-lg bg-gray-50 px-2 py-1.5 md:px-3 md:py-2"><p class="whitespace-nowrap text-sm font-semibold leading-tight text-gray-900 md:text-base"><OrderMoney :value="lineTotal(line)" /></p></div>
           </div>
-          <label class="col-span-6 min-w-0 space-y-1 md:col-span-12">
+          <label class="min-w-0 space-y-1 col-span-full">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
               <span>Описание для клиента</span>
               <button
@@ -242,12 +269,12 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               placeholder="Ключевые характеристики и уточнения для клиента"
             />
           </label>
-          <p v-if="fieldError(line, 'description')" class="col-span-6 text-xs text-red-600 md:col-span-12" role="alert">{{ fieldError(line, 'description') }}</p>
-          <p v-if="!line.product_id && line.product_query.trim()" role="note" class="col-span-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 md:col-span-12">Товар не связан с каталогом; наличие и цена не подтверждены</p>
-          <p v-if="isPriceDifferent(line)" class="col-span-6 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 md:col-span-12">
+          <p v-if="fieldError(line, 'description')" class="text-xs text-red-600 col-span-full" role="alert">{{ fieldError(line, 'description') }}</p>
+          <p v-if="!line.product_id && line.product_query.trim()" role="note" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 col-span-full">Товар не связан с каталогом; наличие и цена не подтверждены</p>
+          <p v-if="isPriceDifferent(line)" class="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 col-span-full">
             Цена строки отличается от каталожной (<OrderMoney :value="catalogPrice(line.product_id) || 0" />).
           </p>
-          <div v-if="canManagePlatform && line.product_id" class="col-span-6 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 md:col-span-12">
+          <div v-if="canManagePlatform && line.product_id" class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 col-span-full">
             <span v-if="supplyBadgeForLine(line)" class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
               Поставка: {{ supplyBadgeForLine(line)?.label }}
             </span>
@@ -256,34 +283,38 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <button type="button" data-order-usage="order_product_reserve" class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" :disabled="!line.product_id || supplyActionLoadingLineId === line.link_id" @click="emit('supply', { line, intent: 'reserve' })">Забронировать</button>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-3 py-3 dark:border-slate-800">
-          <button v-if="line.editor?.original !== null" type="button" class="mr-auto min-h-9 px-2 text-xs text-red-600" data-order-usage="order_product_remove" :aria-label="`Удалить товар #${index + 1}`" @click="emit('remove', index)">Удалить товар</button>
-          <button type="button" class="btn-mini min-h-9 px-4 text-xs" :aria-label="`Готово: товар #${index + 1}`" @click="finishEditing(line)">{{ line.editor?.original === null ? 'Добавить' : 'Готово' }}</button>
-        </div>
+        <OrderLineEditorActions
+          :commit-label="line.editor?.original === null ? 'Добавить товар' : 'Применить'"
+          :commit-aria-label="line.editor?.original === null ? `Добавить товар #${index + 1}` : `Применить: товар #${index + 1}`"
+          :cancel-aria-label="`Отмена: товар #${index + 1}`"
+          :remove-label="line.editor?.original !== null ? `Удалить товар #${index + 1}` : undefined"
+          remove-usage="order_product_remove"
+          @commit="finishEditing(line)" @cancel="cancelEditing(line)" @remove="emit('remove', index)"
+        />
         </template>
-        <div v-else class="grid grid-cols-3 gap-3 px-3 py-2.5 text-sm md:items-center md:gap-2" :class="visibleCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_6.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6.5rem]'">
-          <div class="col-span-3 min-w-0 md:col-auto">
+        <div v-else class="order-line-row grid items-center gap-2 px-3 py-2.5 text-sm" :class="{ 'has-costs': visibleCosts }">
+          <div class="order-line-name min-w-0">
             <p class="break-words text-sm font-semibold text-gray-900 dark:text-slate-100"><LineFormattedText :text="line.product_query || 'Новый товар'" /></p>
             <p v-if="!line.product_id" role="note" class="mt-1 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Товар не связан с каталогом; наличие и цена не подтверждены</p>
             <p v-if="line.client_description" class="mt-0.5 whitespace-pre-wrap break-words text-xs font-normal leading-relaxed text-gray-500 dark:text-slate-400"><LineFormattedText :text="line.client_description" /></p>
           </div>
-          <p class="flex flex-col gap-1 md:block md:text-center"><span class="text-xs text-gray-500 md:hidden">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
-          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.price" /></span>
+          <p class="order-line-quantity flex flex-col gap-1"><span class="order-line-mobile-label text-xs text-gray-500">Кол-во</span><span class="font-medium text-gray-700 dark:text-slate-300">{{ line.quantity }}</span></p>
+          <p class="flex flex-col gap-1"><span class="order-line-mobile-label text-xs text-gray-500">Цена</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.price" /></span>
             <span
               v-if="priceAdjustment(line)"
               data-testid="product-price-adjustment"
-              class="mt-0.5 block text-[11px] leading-tight md:whitespace-nowrap"
+              class="mt-0.5 block text-[11px] leading-tight"
               role="note"
               :class="priceAdjustment(line)?.direction === 'discount' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'"
               :aria-label="priceAdjustment(line)?.details"
               :title="priceAdjustment(line)?.details"
             >{{ priceAdjustment(line)?.direction === 'discount' ? '↓' : '↑' }} {{ priceAdjustment(line)?.description }} {{ priceAdjustment(line)?.percentLabel }}</span>
           </p>
-          <p class="flex flex-col gap-1 md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Итого</span><span class="font-semibold text-gray-900 dark:text-slate-100"><OrderMoney :value="lineTotal(line)" /></span></p>
-          <p v-if="visibleCosts" class="col-span-2 flex flex-col gap-1 md:col-auto md:block md:text-right"><span class="text-xs text-gray-500 md:hidden">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.cost" /></span></p>
-          <div class="flex justify-end gap-1 md:justify-center" :class="visibleCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
-            <button type="button" data-order-usage="order_product_edit" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50" :aria-label="`Редактировать товар #${index + 1}`" title="Редактировать" @click="editLine(line)">✎</button>
-            <button type="button" data-order-usage="order_product_remove" class="inline-flex min-h-8 items-center justify-center rounded-lg px-2 text-xs text-red-600 hover:bg-red-50" :aria-label="`Удалить товар #${index + 1}`" title="Удалить" @click="emit('remove', index)">Удалить</button>
+          <p class="flex flex-col gap-1"><span class="order-line-mobile-label text-xs text-gray-500">Итого</span><span class="font-semibold text-gray-900 dark:text-slate-100"><OrderMoney :value="lineTotal(line)" /></span></p>
+          <p v-if="visibleCosts" class="order-line-cost flex flex-col gap-1"><span class="order-line-mobile-label text-xs text-gray-500">Себест.</span><span class="font-medium text-gray-700 dark:text-slate-300"><OrderMoney :value="line.cost" /></span></p>
+          <div class="order-line-actions flex items-center justify-end gap-2">
+            <button type="button" data-order-usage="order_product_edit" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-brand-800 dark:bg-brand-950 dark:text-brand-300" :aria-label="`Редактировать товар #${index + 1}`" title="Редактировать" @click="editLine(line)"><Pencil class="h-5 w-5 shrink-0" aria-hidden="true" /></button>
+            <button type="button" data-order-usage="order_product_remove" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400" :aria-label="`Удалить товар #${index + 1}`" title="Удалить" @click="emit('remove', index)"><Trash2 class="h-5 w-5 shrink-0" aria-hidden="true" /></button>
           </div>
         </div>
       </div>
@@ -291,3 +322,39 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
     <button v-if="!hideActions" type="button" data-testid="add-product-line" data-order-usage="order_product_add" class="btn-mini mt-3 justify-center" :class="compact ? '' : 'w-full'" @click="emit('add')">+ товар</button>
   </section>
 </template>
+
+<style scoped>
+.order-lines { container-type: inline-size; }
+.order-line-row { grid-template-columns: var(--line-columns, repeat(3, minmax(0, 1fr))); }
+.order-line-row > * { text-align: var(--line-align, left); }
+.order-line-row > .order-line-name { grid-column: var(--line-name-column, span 3 / span 3); text-align: left; }
+.order-line-row > .order-line-quantity { text-align: var(--line-quantity-align, left); }
+.order-line-cost { grid-column: var(--line-cost-column, span 2 / span 2); }
+.order-line-mobile-label { display: var(--line-label-display, block); }
+.order-line-actions { grid-column: var(--line-actions-column, span 3 / span 3); flex-direction: var(--line-actions-direction, row); }
+.has-costs .order-line-actions { grid-column: var(--line-actions-column, auto); }
+@container (min-width: 650px) {
+  .order-line-form { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .order-line-row:not(.has-costs) {
+    --line-columns: minmax(0, 1fr) 3.5rem 6rem 6.5rem 3rem;
+    --line-name-column: auto;
+    --line-actions-column: auto;
+    --line-label-display: none;
+    --line-align: right;
+    --line-quantity-align: center;
+    --line-actions-direction: column;
+  }
+}
+@container (min-width: 750px) {
+  .order-line-row.has-costs {
+    --line-columns: minmax(0, 1fr) 3.5rem 6rem 6.5rem 6rem 3rem;
+    --line-name-column: auto;
+    --line-actions-column: auto;
+    --line-cost-column: auto;
+    --line-label-display: none;
+    --line-align: right;
+    --line-quantity-align: center;
+    --line-actions-direction: column;
+  }
+}
+</style>

@@ -11,6 +11,7 @@ import { standardServiceChoice, type SuggestedInstallation } from './service-ins
 const props = defineProps<{
   workflow: OrderWorkflowType;
   autofocus?: boolean;
+  invalid?: boolean;
   suggestions?: SuggestedInstallation[];
 }>();
 const title = defineModel<string>({ required: true });
@@ -122,15 +123,15 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
 
 <template>
   <div ref="container" class="min-w-0" @focusout="focusOut">
-    <textarea ref="field" v-model="title" data-testid="service-title-input" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги — можно написать своё" aria-label="Название услуги" :aria-expanded="open" aria-autocomplete="list" @focus="focus" @click="focus" @input="input" @keydown="keydown" />
+    <textarea ref="field" v-model="title" data-testid="service-title-input" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги — можно написать своё" aria-label="Название услуги" :aria-invalid="invalid || undefined" :aria-expanded="open" aria-autocomplete="list" @focus="focus" @click="focus" @input="input" @keydown="keydown" />
     <div v-if="open" data-testid="service-context-menu" class="mt-1 min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
       <div class="flex flex-wrap gap-1" role="group" aria-label="Разделы услуг">
-        <button v-for="item in kinds" :key="item.value" type="button" class="min-h-8 rounded-lg px-2 text-xs font-medium" :class="activeKind === item.value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" :aria-pressed="activeKind === item.value" @mousedown.prevent @click="selectKind(item.value)">{{ item.label }}</button>
+        <button v-for="item in kinds" :key="item.value" type="button" class="min-h-10 rounded-lg px-3 text-xs font-medium focus-visible:ring-2 focus-visible:ring-brand-500" :class="activeKind === item.value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" :aria-pressed="activeKind === item.value" @mousedown.prevent @click="selectKind(item.value)">{{ item.label }}</button>
       </div>
-      <div class="mt-2 max-h-72 space-y-1 overflow-y-auto" aria-label="Подсказки услуг">
+      <div class="mt-2 max-h-[min(24rem,50dvh)] space-y-1 overflow-y-auto overscroll-contain" aria-label="Подсказки услуг">
         <div v-if="suggestions?.length && !title.trim() && activeKind === 'installation'" class="border-b border-slate-100 pb-2">
           <p class="px-2 text-[11px] text-slate-500">Для оборудования в предложении</p>
-          <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
+          <button v-for="group in suggestions" :key="group.tariff.code" type="button" class="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-slate-800" @mousedown.prevent @click="choose(standardServiceChoice(group.tariff), group.quantity)">
             <span class="block font-medium text-slate-900 dark:text-slate-100">{{ group.tariff.title }}</span>
             <span class="text-slate-500 dark:text-slate-400">{{ group.quantity }} шт. × <OrderMoney :value="Number(group.tariff.price)" /></span>
           </button>
@@ -138,7 +139,7 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
         </div>
         <p v-if="loading" class="px-2 py-2 text-xs text-slate-500">Ищем услуги…</p>
         <p v-else-if="error" class="px-2 py-2 text-xs text-slate-500" role="status">Подсказки не загрузились. Можно заполнить услугу вручную. <button type="button" class="underline" @mousedown.prevent @click="load">Повторить</button></p>
-        <button v-for="(option, index) in options" :key="option.installation_standard?.code || option.tariff_id || index" type="button" :data-testid="`select-service-${option.installation_standard?.code || option.tariff_id}`" class="block w-full rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800" :class="highlighted === index ? 'bg-brand-50 dark:bg-slate-800' : ''" @mousedown.prevent @click="choose(option)">
+        <button v-for="(option, index) in options" :key="option.installation_standard?.code || option.tariff_id || index" type="button" :data-testid="`select-service-${option.installation_standard?.code || option.tariff_id}`" class="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-slate-800" :class="highlighted === index ? 'bg-brand-50 dark:bg-slate-800' : ''" @mousedown.prevent @click="choose(option)">
           <span class="block font-medium text-slate-900 dark:text-slate-100">{{ option.short_name || option.title }}</span>
           <span v-if="option.full_description" class="mt-0.5 block line-clamp-2 text-[11px] leading-snug text-slate-500">{{ option.full_description }}</span>
           <span class="mt-1 block text-slate-600 dark:text-slate-300"><OrderMoney :value="Number(option.price)" /></span>

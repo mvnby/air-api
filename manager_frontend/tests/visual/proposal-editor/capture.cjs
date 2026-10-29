@@ -24,7 +24,7 @@ async function fixture(browser, width, height) {
   page.setDefaultTimeout(10000);
   let current = structuredClone(makeOrder()), nextId = 1000;
   const attempts = [], errors = [];
-  page.on('pageerror', e => errors.push(e.message));
+  page.on('pageerror', e => { errors.push(e.message); console.error(e.message); });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin !== base) return route.abort();
@@ -52,6 +52,7 @@ async function fixture(browser, width, height) {
       }
       data = current;
     }
+    else if (url.pathname.endsWith('/request-context')) data = { order_id: 477, sources: [], files: [], warnings: [] };
     else if (url.pathname.endsWith('/installer-workspace')) data = { order_id: 477, assignments: [], materials: [], collection: { version: 1, assignment_id: null, amount: null, currency: null, status: 'not_assigned', updated_at: null }, balances: [], financial_fingerprint: 'synthetic' };
     else if (url.pathname.endsWith('/worker-pay')) data = { order_id: 477, agreements: [], candidates: [], can_manage: true };
     else if (url.pathname.endsWith('/tender-workflow')) data = { order_id: 477, stage: null, deadline_at: null, price_enquiry: null, publications: [], history: [] };
@@ -67,7 +68,7 @@ async function fixture(browser, width, height) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, ...(process.env.KITLANE_CHROMIUM_PATH ? { executablePath: process.env.KITLANE_CHROMIUM_PATH } : {}) });
   try {
     for (const [width, height] of [[675, 608], [390, 844], [1440, 1000]]) {
       const { page, context, workspace, attempts, errors, current } = await fixture(browser, width, height);
@@ -119,7 +120,7 @@ async function fixture(browser, width, height) {
       await manual.locator('input[type="number"]').nth(2).fill('200');
       await manual.locator('[data-order-usage="order_product_description"]').fill('Белый, по размерам заказчика');
       await screenshot('manual-entry');
-      await manual.getByRole('button', { name: 'Готово: товар #8', exact: true }).click();
+      await manual.getByRole('button', { name: 'Добавить товар #8', exact: true }).click();
       await page.waitForTimeout(1200);
       const saved = current().proposals[0].product_lines.find(line => !line.product_id);
       assert(saved && saved.product_title === 'Декоративный экран для кондиционера' && saved.quantity === 2 && saved.price === 350 && saved.cost === 200);
@@ -137,9 +138,17 @@ async function fixture(browser, width, height) {
       assert.equal(await rows.count(), 8);
       assert.equal(new URL(page.url()).searchParams.get('proposalId'), '24');
       assert.equal(new URL(page.url()).searchParams.get('returnTo'), '/manager/orders?segment=b2b');
+      await rows.last().getByRole('button', { name: 'Редактировать товар #8', exact: true }).click();
+      await rows.last().locator('[data-order-usage="order_product_description"]').fill('Белый экран с уточнёнными размерами');
       await workspace.getByRole('button', { name: 'Предпросмотр для клиента', exact: true }).click();
+      await page.getByRole('button', { name: 'Продолжить ввод', exact: true }).click();
+      assert.equal(await rows.last().locator('[data-order-usage="order_product_description"]').inputValue(), 'Белый экран с уточнёнными размерами');
+      assert.equal(await workspace.getByTestId('proposal-client-preview').count(), 0);
+      await workspace.getByRole('button', { name: 'Предпросмотр для клиента', exact: true }).click();
+      await page.getByRole('button', { name: 'Применить и сохранить', exact: true }).click();
       const preview = workspace.getByTestId('proposal-client-preview');
       await preview.getByText('Декоративный экран для кондиционера', { exact: true }).waitFor();
+      await preview.getByText('Белый экран с уточнёнными размерами', { exact: true }).waitFor();
       assert.equal(await preview.getByText('Товар не связан с каталогом; наличие и цена не подтверждены', { exact: true }).count(), 0);
       await screenshot('client-preview');
       await workspace.getByRole('button', { name: 'Вернуться в редактор', exact: true }).click();

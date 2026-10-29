@@ -126,6 +126,28 @@ const sharedStubs = (addStandard: ReturnType<typeof vi.fn>) => ({
 });
 
 describe('OrderProposalWorkspace', () => {
+  it('validates products and services together and focuses the invalid service before applying either', async () => {
+    const fixture = createWorkspaceFixture({
+      productLines: [{ product_id: 0, product_query: 'Новый товар', quantity: 1, price: 1200, cost: 0, editor: { original: null } }],
+      serviceLines: [{ title: 'Новая услуга', quantity: 0, price: 500, cost: 0, editor: { original: null } }],
+    });
+    const wrapper = mount(OrderProposalWorkspace, {
+      attachTo: document.body, props: fixture.props, global: { stubs: sharedStubs(vi.fn()) },
+    });
+    const editor = (wrapper.vm as any).$.exposed;
+    expect(editor.applyLineEdits()).toBe(false);
+    editor.focusLineEdits(); await flushPromises();
+    expect(fixture.commercial.productLines.value[0].editor).toBeDefined();
+    expect(fixture.commercial.serviceLines.value[0].editor).toBeDefined();
+    const invalid = wrapper.find('[aria-label="Услуги"] [aria-invalid="true"]');
+    expect(invalid.exists()).toBe(true); expect(document.activeElement).toBe(invalid.element);
+    fixture.commercial.serviceLines.value[0].quantity = 1;
+    expect(editor.applyLineEdits()).toBe(true);
+    expect(fixture.commercial.productLines.value[0].editor).toBeUndefined();
+    expect(fixture.commercial.serviceLines.value[0].editor).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('keeps locked-revision actions inside the proposal workspace', async () => {
     const duplicateProposal = vi.fn();
     const changeActiveProposalStatus = vi.fn();
@@ -271,7 +293,7 @@ describe('OrderProposalWorkspace', () => {
     expect(editorAfter.get('input[type="number"]').element).toHaveProperty('value', '1850');
     expect((editorAfter.get('[data-order-usage="order_product_description"]').element as HTMLTextAreaElement).value)
       .toBe('Комплект и параметры согласованы с клиентом.');
-    expect(editorAfter.get('[aria-label="Готово: товар #1"]').exists()).toBe(true);
+    expect(editorAfter.get('[aria-label="Применить: товар #1"]').exists()).toBe(true);
     expect(document.activeElement).toBe(wrapper.get('button[aria-pressed="false"]').element);
     wrapper.unmount();
   });

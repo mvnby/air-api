@@ -17,6 +17,7 @@ import { useDemoReadOnly } from '../../services/manager-demo';
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
   expanded: boolean;
+  workspace?: boolean;
   payments: PaymentResponse[];
   enableCurrency: boolean;
   targetCurrency: PaymentCurrency | null;
@@ -118,7 +119,7 @@ const loadCandidateBankReceipts = async () => {
 };
 
 watch(
-  [() => props.order.id, () => props.order.customer?.inn, () => props.expanded],
+  [() => props.order.id, () => props.order.customer?.inn, () => props.workspace || props.expanded],
   ([, inn, expanded]) => {
     ++bankReceiptsRequestId;
     if (!expanded || !inn) {
@@ -250,10 +251,10 @@ const deletePayment = async (paymentId: number) => {
 </script>
 
 <template>
-  <section id="order-workspace-payments" class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-0 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-    <button type="button" class="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left" :aria-expanded="expanded" @click="expandedModel = !expanded">
+  <section id="order-workspace-payments" aria-label="Оплаты" :class="workspace ? 'min-w-0' : 'mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-0 shadow-sm dark:border-slate-700 dark:bg-slate-900'">
+    <component :is="workspace ? 'div' : 'button'" :type="workspace ? undefined : 'button'" class="flex w-full items-center justify-between gap-3 text-left" :class="workspace ? 'pb-3' : 'rounded-2xl px-4 py-3'" :aria-expanded="workspace ? undefined : expanded" @click="!workspace && (expandedModel = !expanded)">
       <div class="min-w-0">
-        <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+        <h3 v-if="!workspace" class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
           <span class="material-icons-round text-[18px] text-brand-600 dark:text-brand-300" aria-hidden="true">account_balance_wallet</span>
           Оплаты
         </h3>
@@ -264,9 +265,9 @@ const deletePayment = async (paymentId: number) => {
           <span v-if="!demoReadOnly">· маржа <OrderMoney :value="margin" /></span>
         </p>
       </div>
-      <span class="material-icons-round shrink-0 text-[20px] text-slate-500 dark:text-slate-400" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
-    </button>
-    <div v-show="expanded" class="border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700">
+      <span v-if="!workspace" class="material-icons-round shrink-0 text-[20px] text-slate-500 dark:text-slate-400" aria-hidden="true">{{ expanded ? 'expand_less' : 'expand_more' }}</span>
+    </component>
+    <div v-show="workspace || expanded" :class="workspace ? 'min-w-0' : 'border-t border-white/70 px-4 pb-4 pt-3 dark:border-slate-700'">
     <section
       class="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-5"
       data-testid="order-payments-panel"

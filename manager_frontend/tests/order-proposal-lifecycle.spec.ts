@@ -70,6 +70,32 @@ afterEach(() => {
 });
 
 describe('useOrderProposalLifecycle', () => {
+  it('quietly keeps the current proposal when applying line edits is declined', async () => {
+    const beforeAction = vi.fn().mockResolvedValue(false);
+    const other = { ...proposal, id: 18, is_selected: false };
+    const localOrder = ref({ ...order.value, proposals: [proposal, other] });
+    const { lifecycle, options } = createLifecycle({ order: localOrder, beforeAction });
+    lifecycle.loadProposalLines(proposal as any, localOrder.value);
+    await lifecycle.selectProposalForOrder(other as any);
+    expect(lifecycle.activeProposalId.value).toBe(proposal.id);
+    expect(beforeAction).toHaveBeenCalledOnce();
+    expect(ordersMock.patchManagerOrder).not.toHaveBeenCalled();
+    expect(options.setToast).not.toHaveBeenCalled();
+  });
+
+  it('does not run a proposal command after its order changes during line confirmation', async () => {
+    let finish!: (value: boolean) => void;
+    const beforeAction = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    const localOrder = ref({ ...order.value });
+    const { lifecycle } = createLifecycle({ order: localOrder, beforeAction });
+    lifecycle.loadProposalLines(proposal as any, localOrder.value);
+    const action = lifecycle.changeActiveProposalStatus('ready_to_send');
+    localOrder.value = { ...localOrder.value, id: 99 };
+    finish(true); await action;
+    expect(ordersMock.patchManagerOrderProposal).not.toHaveBeenCalled();
+    expect(ordersMock.patchManagerOrder).not.toHaveBeenCalled();
+  });
+
   it('loads the remaining ready-to-send proposal after archiving the active one and saves to its ID', async () => {
     const remaining = { ...proposal, id: 18, status: 'ready_to_send', is_selected: false,
       product_lines: [{ id: 71, proposal_id: 18, product_id: 44, product_title: 'Кондиционер', quantity: 1, price: 1200 }],

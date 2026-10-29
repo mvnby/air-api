@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import OrderMoney from './OrderMoney.vue';
+import OrderLineEditorActions from './OrderLineEditorActions.vue';
 import LineFormattedText from './LineFormattedText.vue';
 import { computed, nextTick, ref, watch } from 'vue';
-import { beginLineEdit, cancelLineEdit, commitLineEdit, focusLineEditor, lineErrors, lineKey } from './order-line-drafts';
+import { beginLineEdit, cancelLineEdit, commitLineEdit, focusInvalidLineEditor, focusLineEditor, hasLineEdits, lineErrors, lineKey } from './order-line-drafts';
 import OrderServiceTitleInput from './OrderServiceTitleInput.vue';
 import OrderServiceInstallationCalculator from './OrderServiceInstallationCalculator.vue';
 import { type SuggestedInstallation } from './service-installation-choices';
-import { Pencil } from 'lucide-vue-next';
+import { Pencil, Trash2 } from 'lucide-vue-next';
 import type { ManagerQuickTariffResponse, ManagerServiceEstimateResponse, ManagerInstallationStandardTariff } from '../../client';
 import OrderServiceCatalogPicker from './OrderServiceCatalogPicker.vue';
 import type { OrderWorkflowType } from './order-workspace';
@@ -65,13 +66,15 @@ const finishEditing = (line: ServiceLine) => {
   const group = line.editor?.group;
   const targets = group != null ? lines.value.filter(row => row.editor?.group === group) : [line];
   for (const row of targets) touched.value[lineKey(row)] = ['title', 'quantity', 'price', 'cost', 'description'];
-  if (targets.some(row => Object.keys(errorsFor(row)).length)) return;
+  const invalid = targets.find(row => Object.keys(errorsFor(row)).length);
+  if (invalid) { void focusInvalidEditor(invalid); return; }
   commitLineEdit(line, lines.value);
   editingIndex.value = null;
   calculatingLine.value = null;
 };
 const cancelEditing = (line: ServiceLine) => { cancelLineEdit(lines.value, line); editingIndex.value = null; calculatingLine.value = null; };
 const focusEditor = async (line: ServiceLine) => { await nextTick(); await focusLineEditor(rows.get(lineKey(line))); };
+const focusInvalidEditor = (line: ServiceLine) => focusInvalidLineEditor(rows.get(lineKey(line)));
 const showCatalog = ref(false);
 const calculatingLine = ref<ServiceLine | null>(null);
 const applyCalculation = (line: ServiceLine, result: { title: string; description: string; price: number; installation_standard: ManagerInstallationStandardTariff }) => {
@@ -79,7 +82,33 @@ const applyCalculation = (line: ServiceLine, result: { title: string; descriptio
   Object.assign(line, result);
   calculatingLine.value = null;
 };
-defineExpose({ openCatalog: () => { showCatalog.value = !showCatalog.value; } });
+const validateDrafts = () => {
+  const drafts = lines.value.filter(line => line.editor && (line.editor.original || hasLineEdits([line])));
+  for (const line of drafts) touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
+  const invalid = drafts.find(line => Object.keys(errorsFor(line)).length);
+  if (invalid) void focusInvalidEditor(invalid);
+  return !invalid;
+};
+const commitDrafts = () => {
+  for (const line of [...lines.value]) {
+    if (!line.editor) continue;
+    if (!line.editor.original && !hasLineEdits([line])) cancelLineEdit(lines.value, line);
+    else commitLineEdit(line, lines.value);
+  }
+  editingIndex.value = null;
+  calculatingLine.value = null;
+};
+const cancelDrafts = () => {
+  for (const line of [...lines.value]) if (line.editor) cancelLineEdit(lines.value, line);
+  editingIndex.value = null;
+  calculatingLine.value = null;
+};
+const focusDraft = () => {
+  const invalid = lines.value.find(line => line.editor && touched.value[lineKey(line)]?.length && Object.keys(errorsFor(line)).length);
+  const line = invalid || lines.value.find(line => hasLineEdits([line])) || lines.value.find(line => line.editor);
+  if (line) void (invalid ? focusInvalidEditor(line) : focusEditor(line));
+};
+defineExpose({ openCatalog: () => { showCatalog.value = !showCatalog.value; }, validateDrafts, commitDrafts, cancelDrafts, focusDraft });
 const chooseTariff = (option: ManagerQuickTariffResponse) => {
   emit('addTariff', option);
   showCatalog.value = false;
@@ -132,47 +161,53 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
 </script>
 
 <template>
-  <section :class="compact ? 'border-t border-slate-200 dark:border-slate-700' : 'mt-6'" aria-label="Услуги">
+  <section class="order-lines" :class="compact ? 'border-t border-slate-200 dark:border-slate-700' : 'mt-6'" aria-label="Услуги">
     <div v-if="!hideActions" class="mb-2"><h4 class="text-md font-semibold text-gray-800">Услуги</h4></div>
     <p v-if="servicesError" class="mb-2 text-xs text-red-300">{{ servicesError }}</p>
     <div class="space-y-2">
       <div v-for="(line, index) in lines" :key="lineKey(line)" :ref="element => { if (element) rows.set(lineKey(line), element as HTMLElement); else rows.delete(lineKey(line)); }" class="relative bg-white" :class="compact ? 'border-b border-gray-100 dark:border-slate-800 dark:bg-slate-950' : 'rounded-xl border border-gray-200 p-3 shadow-sm'">
         <template v-if="compact">
           <div v-if="(editingIndex === index || line.editor) && !line.installation_estimate_revision_id" class="p-3">
-            <div class="mb-2 flex items-center justify-between gap-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ line.editor?.original === null && !line.editor?.group ? 'Новая услуга' : 'Редактирование услуги' }}</p><button type="button" class="btn-mini-outline min-h-9 px-3 text-xs" @click="cancelEditing(line)">Отмена</button></div>
-            <button v-if="!line.editor?.group && line.editor?.original !== null" type="button" data-order-usage="order_service_remove" class="mb-2 inline-flex h-8 items-center rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-600 hover:bg-red-100" :aria-label="`Удалить услугу #${index + 1}`" @click="emit('remove', index)">Удалить услугу</button>
-            <div class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
-              <div class="relative col-span-6 space-y-1 md:col-span-5">
+            <div class="mb-2 flex items-center justify-between gap-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300">{{ line.editor?.original === null && !line.editor?.group ? 'Новая услуга' : 'Редактирование услуги' }}</p></div>
+            <div class="order-line-form grid grid-cols-6 items-start gap-3">
+              <div data-line-field class="relative min-w-0 space-y-1 col-span-full">
                 <span class="flex min-h-6 items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
                   <span>Название</span>
                   <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
                 </span>
-                <OrderServiceTitleInput v-model="line.title" :workflow="workflow" :autofocus="false" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="touch(line, 'title'); emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
+                <OrderServiceTitleInput v-model="line.title" :invalid="Boolean(fieldError(line, 'title'))" :workflow="workflow" :autofocus="false" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="touch(line, 'title'); emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
                 <p v-if="fieldError(line, 'title')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'title') }}</p>
               </div>
-              <label class="col-span-4 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p></label>
-              <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /><p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p></label>
-              <label v-if="compactShowCosts" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p></label>
-              <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900"><OrderMoney :value="lineTotal(line)" /></p></div></div>
-              <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea :aria-invalid="Boolean(fieldError(line, 'description'))" @blur="touch(line, 'description')" v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /><p v-if="fieldError(line, 'description')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'description') }}</p></label>
-              <div class="col-span-6 flex flex-wrap items-center justify-between gap-2 md:col-span-12"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button><div class="ml-auto flex items-center gap-2"><button type="button" class="btn-mini min-h-9 px-4 text-xs" @click="finishEditing(line)">{{ line.editor?.original === null && !line.editor?.group ? 'Добавить' : 'Готово' }}</button></div></div>
-              <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-6 md:col-span-12" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
+              <label class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p></label>
+              <label class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /><p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p></label>
+              <label v-if="compactShowCosts" class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p></label>
+              <div class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900"><OrderMoney :value="lineTotal(line)" /></p></div></div>
+              <label class="space-y-1 col-span-full"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea :aria-invalid="Boolean(fieldError(line, 'description'))" @blur="touch(line, 'description')" v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /><p v-if="fieldError(line, 'description')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'description') }}</p></label>
+              <div class="flex flex-wrap items-center justify-between gap-2 col-span-full"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button></div>
+              <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-full" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
             </div>
+            <OrderLineEditorActions
+                class="-mx-3 -mb-3 mt-3"
+                :commit-label="line.editor?.original === null && !line.editor?.group ? 'Добавить услугу' : 'Применить'"
+                :remove-label="!line.editor?.group && line.editor?.original !== null ? `Удалить услугу #${index + 1}` : undefined"
+                remove-usage="order_service_remove"
+                @commit="finishEditing(line)" @cancel="cancelEditing(line)" @remove="emit('remove', index)"
+              />
           </div>
           <div v-else class="divide-y divide-gray-100">
-            <div v-for="(display, displayIndex) in displayLines(line)" :key="`compact-service-${index}-${displayIndex}`" class="grid grid-cols-3 items-center gap-2 px-3 py-2.5" :class="compactShowCosts ? 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6rem_6.5rem]' : 'md:grid-cols-[minmax(0,1fr)_3.5rem_6rem_6.5rem_6.5rem]'" :data-testid="`compact-service-row-${index}-${displayIndex}`">
-              <div class="col-span-3 min-w-0 md:col-auto">
+            <div v-for="(display, displayIndex) in displayLines(line)" :key="`compact-service-${index}-${displayIndex}`" class="order-line-row grid items-center gap-2 px-3 py-2.5" :class="{ 'has-costs': compactShowCosts }" :data-testid="`compact-service-row-${index}-${displayIndex}`">
+              <div class="order-line-name min-w-0">
                 <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"><LineFormattedText :text="display.title || 'Новая услуга'" /></p>
                 <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400"><LineFormattedText :text="display.description" /></p>
                 <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-slate-500">По расчёту</span>
               </div>
-              <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-center"><span class="mb-1 block font-medium text-slate-500 md:hidden">Кол-во</span>{{ display.quantity }}</span>
-              <span class="text-left text-xs text-slate-600 dark:text-slate-300 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Цена</span><OrderMoney :value="display.price" /></span>
-              <span class="text-left text-xs font-semibold text-slate-900 dark:text-slate-100 md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Итого</span><OrderMoney :value="display.quantity * display.price" /></span>
-              <span v-if="compactShowCosts" class="col-span-2 text-left text-xs text-slate-600 dark:text-slate-300 md:col-auto md:text-right"><span class="mb-1 block font-medium text-slate-500 md:hidden">Себест.</span><span v-if="line.installation_estimate_revision_id">—</span><OrderMoney v-else :value="line.cost" /></span>
-              <div class="flex justify-end md:justify-center" :class="compactShowCosts ? 'md:col-auto' : 'col-span-3 md:col-auto'">
-                <button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 w-8 shrink-0 justify-center p-0" :aria-label="`Редактировать услугу #${index + 1}.${displayIndex + 1}`" title="Редактировать услугу" @click="editLine(index, displayIndex)"><Pencil :size="16" aria-hidden="true" /></button>
-                <button type="button" data-order-usage="order_service_remove" class="ml-1 inline-flex min-h-8 items-center justify-center rounded-lg px-2 text-xs text-red-600 hover:bg-red-50" :aria-label="`Удалить услугу #${index + 1}.${displayIndex + 1}`" title="Удалить услугу" @click="emit('remove', index, displayIndex)">Удалить</button>
+              <span class="order-line-quantity text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Кол-во</span>{{ display.quantity }}</span>
+              <span class="text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Цена</span><OrderMoney :value="display.price" /></span>
+              <span class="text-xs font-semibold text-slate-900 dark:text-slate-100"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Итого</span><OrderMoney :value="display.quantity * display.price" /></span>
+              <span v-if="compactShowCosts" class="order-line-cost text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Себест.</span><span v-if="line.installation_estimate_revision_id">—</span><OrderMoney v-else :value="line.cost" /></span>
+              <div class="order-line-actions flex items-center justify-end gap-2">
+                <button type="button" data-order-usage="order_service_edit" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-brand-800 dark:bg-brand-950 dark:text-brand-300" :aria-label="`Редактировать услугу #${index + 1}.${displayIndex + 1}`" title="Редактировать услугу" @click="editLine(index, displayIndex)"><Pencil class="h-5 w-5 shrink-0" aria-hidden="true" /></button>
+                <button type="button" data-order-usage="order_service_remove" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400" :aria-label="`Удалить услугу #${index + 1}.${displayIndex + 1}`" title="Удалить услугу" @click="emit('remove', index, displayIndex)"><Trash2 class="h-5 w-5 shrink-0" aria-hidden="true" /></button>
               </div>
             </div>
           </div>
@@ -191,22 +226,31 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
             </div>
           </div>
         </div>
-        <div v-else class="grid grid-cols-6 gap-2 md:grid-cols-12 md:items-start">
-          <div class="relative col-span-6 space-y-1 md:col-span-5">
+        <div v-else>
+        <div class="order-line-form grid grid-cols-6 items-start gap-3">
+          <div data-line-field class="relative min-w-0 space-y-1 col-span-full">
             <span class="flex min-h-6 items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500">
               <span>Название</span>
               <ServiceDescriptionModeSwitch v-if="line.template_full_description" :model-value="line.description_mode || 'short'" @update:model-value="emit('descriptionMode', { index, mode: $event })" />
             </span>
-            <OrderServiceTitleInput v-model="line.title" :workflow="workflow" :autofocus="false" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="touch(line, 'title'); emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
+            <OrderServiceTitleInput v-model="line.title" :invalid="Boolean(fieldError(line, 'title'))" :workflow="workflow" :autofocus="false" :suggestions="suggestedInstallations" @focus="emit('focus', index)" @input="emit('input', index)" @blur="touch(line, 'title'); emit('blur', index)" @select="(option, quantity) => emit('select', { index, option, quantity })" @add-suggested="emit('addSuggested', index)" />
                 <p v-if="fieldError(line, 'title')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'title') }}</p>
           </div>
-          <label class="col-span-4 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p></label>
-          <label class="col-span-2 space-y-1 md:col-span-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /><p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p></label>
-          <label v-if="!demoReadOnly" class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p></label>
-          <div class="col-span-3 space-y-1 md:col-span-2"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900"><OrderMoney :value="lineTotal(line)" /></p></div></div>
-          <label class="col-span-6 space-y-1 md:col-span-12"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea :aria-invalid="Boolean(fieldError(line, 'description'))" @blur="touch(line, 'description')" v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /><p v-if="fieldError(line, 'description')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'description') }}</p></label>
-          <div class="col-span-6 flex flex-wrap items-center justify-between gap-2 md:col-span-12"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button><div class="ml-auto flex items-center gap-2"><button type="button" class="btn-mini-outline min-h-9 px-3 text-xs" @click="cancelEditing(line)">Отмена</button><button type="button" class="btn-mini min-h-9 px-4 text-xs" @click="finishEditing(line)">{{ line.editor?.original === null && !line.editor?.group ? 'Добавить' : 'Готово' }}</button></div></div>
-          <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-6 md:col-span-12" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
+          <label class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Цена</span><input :aria-invalid="Boolean(fieldError(line, 'price'))" @blur="touch(line, 'price')" v-model.number="line.price" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'price')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'price') }}</p></label>
+          <label class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center whitespace-nowrap px-1 text-xs font-medium text-gray-500 md:h-6 md:text-[11px]">Кол-во</span><input :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" v-model.number="line.quantity" type="number" min="1" class="field-input" placeholder="1" /><p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p></label>
+          <label v-if="!demoReadOnly" class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span><input :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" v-model.number="line.cost" type="number" min="0" step="0.01" class="field-input" placeholder="0" /><p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p></label>
+          <div class="col-span-3 min-w-0 space-y-1"><span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Итого</span><div class="rounded-lg bg-gray-50 px-3 py-2"><p class="whitespace-nowrap text-base font-semibold leading-tight text-gray-900"><OrderMoney :value="lineTotal(line)" /></p></div></div>
+          <label class="space-y-1 col-span-full"><span class="block text-xs font-medium text-gray-500">Описание для клиента</span><textarea :aria-invalid="Boolean(fieldError(line, 'description'))" @blur="touch(line, 'description')" v-model="line.description" data-testid="service-client-description" rows="2" maxlength="10000" class="field-input min-h-[64px] resize-y text-sm leading-relaxed [field-sizing:content]" placeholder="Состав работ и согласованные условия" /><p v-if="fieldError(line, 'description')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'description') }}</p></label>
+          <div class="flex flex-wrap items-center justify-between gap-2 col-span-full"><button type="button" data-testid="service-open-calculator" class="min-h-8 text-xs text-brand-700" @click="calculatingLine = calculatingLine === line ? null : line">{{ calculatingLine === line ? 'Скрыть расчёт' : 'Рассчитать монтаж' }}</button></div>
+          <OrderServiceInstallationCalculator v-if="calculatingLine === line" class="col-span-full" :initial-tariff="line.installation_standard" :quantity="line.quantity" @close="calculatingLine = null" @apply="applyCalculation(line, $event)" />
+        </div>
+        <OrderLineEditorActions
+                class="-mx-3 -mb-3 mt-3"
+                :commit-label="line.editor?.original === null && !line.editor?.group ? 'Добавить услугу' : 'Применить'"
+                :remove-label="!line.editor?.group && line.editor?.original !== null ? `Удалить услугу #${index + 1}` : undefined"
+                remove-usage="order_service_remove"
+                @commit="finishEditing(line)" @cancel="cancelEditing(line)" @remove="emit('remove', index)"
+              />
         </div>
         </template>
       </div>
@@ -250,3 +294,39 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.order-lines { container-type: inline-size; }
+.order-line-row { grid-template-columns: var(--line-columns, repeat(3, minmax(0, 1fr))); }
+.order-line-row > * { text-align: var(--line-align, left); }
+.order-line-row > .order-line-name { grid-column: var(--line-name-column, span 3 / span 3); text-align: left; }
+.order-line-row > .order-line-quantity { text-align: var(--line-quantity-align, left); }
+.order-line-cost { grid-column: var(--line-cost-column, span 2 / span 2); }
+.order-line-mobile-label { display: var(--line-label-display, block); }
+.order-line-actions { grid-column: var(--line-actions-column, span 3 / span 3); flex-direction: var(--line-actions-direction, row); }
+.has-costs .order-line-actions { grid-column: var(--line-actions-column, auto); }
+@container (min-width: 650px) {
+  .order-line-form { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .order-line-row:not(.has-costs) {
+    --line-columns: minmax(0, 1fr) 3.5rem 6rem 6.5rem 3rem;
+    --line-name-column: auto;
+    --line-actions-column: auto;
+    --line-label-display: none;
+    --line-align: right;
+    --line-quantity-align: center;
+    --line-actions-direction: column;
+  }
+}
+@container (min-width: 750px) {
+  .order-line-row.has-costs {
+    --line-columns: minmax(0, 1fr) 3.5rem 6rem 6.5rem 6rem 3rem;
+    --line-name-column: auto;
+    --line-actions-column: auto;
+    --line-cost-column: auto;
+    --line-label-display: none;
+    --line-align: right;
+    --line-quantity-align: center;
+    --line-actions-direction: column;
+  }
+}
+</style>

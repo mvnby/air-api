@@ -111,6 +111,15 @@ afterEach(() => {
 });
 
 describe('OrderPaymentsPanel', () => {
+  it('keeps payments available on their dedicated tab regardless of a stored collapsed state', async () => {
+    const wrapper = mountPanel([], false);
+    await wrapper.setProps({ workspace: true });
+    await flushPromises();
+    expect(wrapper.find('[aria-expanded]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="payment-amount"]').isVisible()).toBe(true);
+    expect(listReceiptsMock).toHaveBeenCalled();
+  });
+
   it('uses the BYN sign for local payments and retains fixed USD/EUR amounts', async () => {
     const wrapper = mountPanel([
       { ...payment, amount: 0 },

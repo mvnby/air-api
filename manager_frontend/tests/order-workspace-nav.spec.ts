@@ -25,14 +25,14 @@ describe('OrderWorkspaceNav', () => {
     expect(wrapper.get('[data-order-usage="workspace-payments"]').attributes('aria-current')).toBe('page');
   });
 
-  it('labels the work section as repair and routes the product shortcut to the proposal editor', async () => {
+  it('keeps navigation focused on sections with addition in the proposal footer', async () => {
     const wrapper = shallowMount(OrderWorkspaceNav, {
       props: { active: 'work', workflow: 'repair' },
     });
 
     expect(wrapper.text()).toContain('Ремонт');
-    await wrapper.get('[data-order-usage="workspace-add-product"]').trigger('click');
-    expect(wrapper.emitted('add-product')).toEqual([[]]);
+    expect(wrapper.findAll('button')).toHaveLength(4);
+    expect(wrapper.find('[data-order-usage="workspace-add-product"]').exists()).toBe(false);
 
     await wrapper.get('[data-order-usage="workspace-documents"]').trigger('click');
     expect(wrapper.emitted('select')).toEqual([['documents']]);

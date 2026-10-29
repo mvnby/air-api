@@ -62,6 +62,41 @@ export async function focusLineEditor(row: HTMLElement | null | undefined) {
   }
 }
 
+/** Reveal the invalid control and its explanation without moving the page. */
+export async function focusInvalidLineEditor(row: HTMLElement | null | undefined) {
+  await nextTick();
+  const field = row?.querySelector<HTMLElement>('[aria-invalid="true"]');
+  if (!field) return;
+  // Focusing the title first would open suggestions and move the actual error.
+  field.focus({ preventScroll: true });
+  await nextTick();
+  const container = field.closest<HTMLElement>('[data-order-scroll]');
+  if (!container) return;
+
+  const reveal = () => {
+    if (!field.isConnected || document.activeElement !== field) return;
+    const viewport = container.getBoundingClientRect();
+    if (viewport.height <= 0) return;
+    const actions = row?.querySelector<HTMLElement>('[data-line-editor-actions]')?.getBoundingClientRect();
+    const visibleTop = viewport.top + 12;
+    const visibleBottom = Math.min(viewport.bottom,
+      actions && actions.bottom > viewport.top && actions.top < viewport.bottom ? actions.top : viewport.bottom) - 12;
+    const fieldBox = field.getBoundingClientRect();
+    const error = field.closest('label, [data-line-field]')?.querySelector<HTMLElement>('[role="alert"]')?.getBoundingClientRect();
+    const bottom = Math.max(fieldBox.bottom, error?.bottom || fieldBox.bottom);
+    // Prefer the field's top when a long textarea cannot fit in the workspace.
+    const delta = fieldBox.top < visibleTop || bottom - fieldBox.top > visibleBottom - visibleTop
+      ? fieldBox.top - visibleTop : bottom > visibleBottom ? bottom - visibleBottom : 0;
+    if (Math.abs(delta) > 1) container.scrollTo({ top: Math.max(0, container.scrollTop + delta), behavior: 'instant' });
+  };
+  reveal();
+  // A scroll can compact/expand the order header. Re-measure after that layout
+  // update, while respecting any field the manager has chosen in the meantime.
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(reveal));
+  }
+}
+
 export const lineErrors = (line: { product_id?: number; quantity: number; price: number; cost: number }, title: string, product = false) => {
   const errors: Record<string, string> = {};
   if (!title.trim()) errors.title = 'Укажите название';

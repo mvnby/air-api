@@ -32,7 +32,7 @@ export const syncStickyHeaderAfterLayout = (
 export const getStickyHeaderLogicalScrollTop = (
   rawScrollTop: number,
   compensation: number,
-) => Math.max(0, rawScrollTop + compensation);
+) => rawScrollTop <= 0 ? 0 : Math.max(0, rawScrollTop + compensation);
 
 export const getStickyHeaderLayoutCompensation = (
   logicalScrollTop: number,
@@ -97,6 +97,16 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
           layoutFrameId = null;
           if (generation !== layoutSyncGeneration || !currentContainer) return;
           const rawScrollTop = currentContainer.scrollTop;
+          // A manager can scroll back while the header is resizing. Those
+          // events are deferred, but the real top must never be compensated
+          // into an imaginary offset that leaves the controls hidden.
+          if (rawScrollTop <= 0) {
+            scrollCompensation = 0;
+            motionState = initialStickyHeaderState();
+            compact.value = false;
+            layoutSyncPending = false;
+            return;
+          }
           scrollCompensation = getStickyHeaderLayoutCompensation(
             logicalScrollTop,
             rawScrollTop,

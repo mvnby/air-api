@@ -75,6 +75,15 @@ describe('compact order workspace header', () => {
     expect(wrapper.emitted('toggle-autosave')).toHaveLength(1);
   });
 
+  it('distinguishes an unapplied proposal row from a saved order and offers an explicit save action', async () => {
+    make();
+    await wrapper.setProps({ pendingLineEdits: true });
+    expect(wrapper.get('[role="status"]').text()).toBe('Строка не применена');
+    await wrapper.get('[aria-label="Сохранить изменения"]').trigger('click');
+    expect(wrapper.emitted('save')).toHaveLength(1);
+    expect(wrapper.get('[data-order-header-customer]').text()).toBe(customerName);
+  });
+
   it('shows customer in the expanded presentation as well', async () => {
     wrapper = mount(OrderWorkspaceHeader, { props: { ...props, workspace: false } });
     expect(wrapper.text()).toContain(customerName);
