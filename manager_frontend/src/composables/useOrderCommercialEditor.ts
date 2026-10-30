@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue';
 import { committedLines } from '../components/orders/order-line-drafts';
+import { toIntegerMoney } from '../components/orders/order-utils';
 import { useDebounceFn } from '@vueuse/core';
 import { api } from '../api';
 import type {
@@ -47,11 +48,6 @@ const SUPPLY_STATUS_LABELS: Record<string, string> = {
 };
 
 const LOGISTICS_COMPONENT_KINDS = new Set(['indoor', 'outdoor', 'accessory', 'other']);
-
-const toIntegerMoney = (value: number | null | undefined): number | null => {
-  if (value == null || Number.isNaN(Number(value))) return null;
-  return Math.round(Number(value));
-};
 
 const normalizeLogisticsKind = (value: unknown): LogisticsComponentKind => {
   const raw = String(value || '').trim();

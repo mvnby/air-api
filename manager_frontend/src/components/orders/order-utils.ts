@@ -194,6 +194,12 @@ export function getOrderExecutionLabel(order: ManagerOrderListItemResponse): str
     return EXECUTION_STATUS_LABELS[getOrderExecutionStatus(order)] || 'Назначить работы';
 }
 
+// Product order API/storage uses whole BYN; keep the existing payload policy.
+export const toIntegerMoney = (value: number | null | undefined): number | null => {
+    if (value == null || Number.isNaN(Number(value))) return null;
+    return Math.round(Number(value));
+};
+
 export function formatMoneyAmount(value: number): string {
     const amount = Number(value);
     return amount.toLocaleString('ru-RU', {

@@ -143,3 +143,25 @@ Unedited evidence: the same 320/360 view [before](screenshots/keyboard-before-32
 and [after](screenshots/keyboard-after-320.png),
 [catalog suggestions with accessible actions](screenshots/keyboard-catalog-320.png),
 and [a service applied after its first touch](screenshots/keyboard-first-add-390.png).
+
+The six catalog-cost regressions reproduce the reported master-catalog selection
+with `catalog.master.edit`; the tenant mapper omits purchase-cost metadata and
+cannot reproduce this hidden-cost failure.
+
+```sh
+node manager_frontend/tests/visual/order-usability/catalog-cost.cjs
+```
+
+Using the same runtime overrides, port 5208 and `/tmp/order-catalog-cost`, four
+cases select product 117 / TCL Elite TAC-24CHSA/XAB1N with untouched price 2470 and
+cost 1559.65, then set quantity 2: desktop/mobile direct Add and navigation Apply.
+Two mobile cases restore an old pending V2 draft. Every case asserts exactly one
+PATCH, cost 1560 under the existing whole-BYN product payload policy, unchanged
+price/quantity, product subtotal 4940, order total 6560 and the persisted GET/reload.
+Raw catalog metadata remains unchanged.
+
+Component checks retain negative/NaN/unsafe values as invalid, reveal/focus the
+hidden cost, and keep its field mounted while clearing and typing a correction.
+Independent acceptance covers eight fresh/restored paths and two typed repairs.
+Evidence: [saved mobile row](screenshots/catalog-cost-saved-320.png) and
+[actionable cost error](screenshots/catalog-cost-invalid-320.png).

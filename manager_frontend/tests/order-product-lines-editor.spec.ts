@@ -194,6 +194,40 @@ describe('proposal product draft lifecycle', () => {
     wrapper.unmount();
   });
 
+  it.each(['direct', 'pending'] as const)('applies untouched catalog cost through the %s path, including restored drafts', async path => {
+    const pending = line({ link_id:null, product_id:117, product_query:'TCL Elite TAC-24CHSA/XAB1N',
+      quantity:2, price:2470, cost:1559.65, editor:{ original:null } });
+    const wrapper = mount(OrderProductLinesEditor, { attachTo:document.body, props:props([pending]) });
+    expect(wrapper.find('input[aria-label="Себестоимость"]').exists()).toBe(false);
+    if (path === 'direct') await wrapper.get('[aria-label="Добавить товар #1"]').trigger('click');
+    else { expect(wrapper.vm.validateDrafts()).toBe(true); wrapper.vm.commitDrafts(); await nextTick(); }
+    expect(committedLines(wrapper.props('lines'))).toEqual([expect.objectContaining({ product_id:117, quantity:2, price:2470, cost:1560 })]);
+    expect(wrapper.findAll('textarea')).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it.each([-1, Number.NaN, Number.MAX_SAFE_INTEGER+1])('reveals and focuses invalid hidden cost %s with an actionable summary', async cost => {
+    const pending = line({ link_id:null, cost, editor:{ original:null } });
+    const wrapper = mount(OrderProductLinesEditor, { attachTo:document.body, props:props([pending]) });
+    expect(wrapper.find('input[aria-label="Себестоимость"]').exists()).toBe(false);
+    expect(wrapper.vm.validateDrafts()).toBe(false);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="product-line-errors"]').text()).toContain('Себестоимость');
+    const field = wrapper.get('input[aria-label="Себестоимость"]');
+    expect(field.attributes('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(field.element);
+    expect(committedLines(wrapper.props('lines'))).toEqual([]);
+    expect(Object.is(pending.cost, cost)).toBe(true);
+    for (const value of ['', '1', '15', '156', '1560']) {
+      await field.setValue(value);
+      expect(wrapper.get('input[aria-label="Себестоимость"]').element).toBe(field.element);
+      expect(document.activeElement).toBe(field.element);
+    }
+    await wrapper.get('[aria-label="Добавить товар #1"]').trigger('click');
+    expect(committedLines(wrapper.props('lines'))[0]!.cost).toBe(1560);
+    wrapper.unmount();
+  });
+
   it('validates all pending products without publishing any, then applies them together', async () => {
     const saved = line();
     const manual = line({ link_id: null, product_id: 0, product_query: 'Решётка', price: -1, editor: { original: null } });

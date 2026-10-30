@@ -6,7 +6,7 @@ import LineFormattedText from './LineFormattedText.vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { beginLineEdit, cancelLineEdit, commitLineEdit, focusInvalidLineEditor, focusLineEditor, hasLineEdits, lineErrors, lineKey } from './order-line-drafts';
 import type { ProductLine, ProductOption } from './order-editor-types';
-import { formatMoney } from './order-utils';
+import { formatMoney, toIntegerMoney } from './order-utils';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../manager-capabilities';
 import { managerSession } from '../../services/manager-session';
 import { useDemoReadOnly } from '../../services/manager-demo';
@@ -52,6 +52,7 @@ const demoReadOnly = useDemoReadOnly();
 const editingLine = ref<ProductLine | null>(null);
 const rows = new Map<number, HTMLElement>();
 const touched = ref<Record<number, string[]>>({});
+const revealedCostRows = ref(new Set<number>());
 const errorsFor = (line: ProductLine): Record<string, string> => ({ ...lineErrors(line, line.product_query, true),
   ...((line.client_description?.length || 0) > 2000 ? { description: 'Не более 2000 символов' } : {}) });
 const touch = (line: ProductLine, field: string) => {
@@ -59,6 +60,22 @@ const touch = (line: ProductLine, field: string) => {
   touched.value[key] = [...(touched.value[key] || []), field];
 };
 const fieldError = (line: ProductLine, field: string) => touched.value[lineKey(line)]?.includes(field) ? errorsFor(line)[field] : '';
+const errorSummary = (line: ProductLine) => !props.showCosts && fieldError(line, 'cost')
+  ? `Себестоимость: ${fieldError(line, 'cost')}` : '';
+const prepareValidation = (line: ProductLine) => {
+  // Supplier conversion costs can be fractional. Apply the existing integer
+  // payload policy before validating new rows AND restored pending drafts.
+  if (typeof line.cost === 'number' && Number.isFinite(line.cost) && line.cost >= 0) {
+    const cost = toIntegerMoney(line.cost);
+    if (cost !== null && Number.isSafeInteger(cost)) line.cost = cost;
+  }
+  if (errorsFor(line).cost) revealedCostRows.value = new Set([...revealedCostRows.value, lineKey(line)]);
+};
+const clearRevealedCost = (line: ProductLine) => {
+  const next = new Set(revealedCostRows.value);
+  next.delete(lineKey(line));
+  revealedCostRows.value = next;
+};
 const focusEditor = async (line: ProductLine) => { await nextTick(); await focusLineEditor(rows.get(lineKey(line))); };
 const focusInvalidEditor = (line: ProductLine) => focusInvalidLineEditor(rows.get(lineKey(line)));
 const visibleCosts = computed(() => Boolean(props.showCosts && !demoReadOnly.value));
@@ -91,19 +108,25 @@ const editLine = (line: ProductLine) => {
   void focusEditor(line);
 };
 const finishEditing = (line: ProductLine) => {
+  prepareValidation(line);
   touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
   if (Object.keys(errorsFor(line)).length) { void focusInvalidEditor(line); return; }
   commitLineEdit(line);
+  clearRevealedCost(line);
   editingLine.value = null;
 };
 const cancelEditing = (line: ProductLine) => {
   cancelLineEdit(lines.value, line);
+  clearRevealedCost(line);
   editingLine.value = null;
 };
 const isEditing = (line: ProductLine) => Boolean(line.editor) || editingLine.value === line;
 const validateDrafts = () => {
   const drafts = lines.value.filter(line => line.editor && (line.editor.original || hasLineEdits([line])));
-  for (const line of drafts) touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
+  for (const line of drafts) {
+    prepareValidation(line);
+    touched.value[lineKey(line)] = ['title', 'quantity', 'price', 'cost', 'description'];
+  }
   const invalid = drafts.find(line => Object.keys(errorsFor(line)).length);
   if (invalid) void focusInvalidEditor(invalid);
   return !invalid;
@@ -113,11 +136,15 @@ const commitDrafts = () => {
     if (!line.editor) continue;
     if (!line.editor.original && !hasLineEdits([line])) cancelLineEdit(lines.value, line);
     else commitLineEdit(line);
+    clearRevealedCost(line);
   }
   editingLine.value = null;
 };
 const cancelDrafts = () => {
-  for (const line of [...lines.value]) if (line.editor) cancelLineEdit(lines.value, line);
+  for (const line of [...lines.value]) if (line.editor) {
+    cancelLineEdit(lines.value, line);
+    clearRevealedCost(line);
+  }
   editingLine.value = null;
 };
 const focusDraft = () => {
@@ -181,6 +208,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
           <label v-if="hideActions && canManagePlatform" class="flex items-center gap-1 text-xs text-slate-500"><input v-model="searchInStock" type="checkbox" />Искать в наличии</label>
         </div>
         <div class="order-line-form grid grid-cols-6 items-start gap-3" :class="compact ? 'p-3' : ''">
+          <p v-if="errorSummary(line)" data-testid="product-line-errors" role="alert" class="col-span-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">Проверьте строку: {{ errorSummary(line) }}</p>
           <label class="relative min-w-0 space-y-1 col-span-full">
             <span class="flex items-center justify-between gap-2 px-1 text-xs font-medium text-gray-500 md:h-6">
               <span>Название</span>
@@ -237,9 +265,9 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
             <input v-model.number="line.quantity" type="number" min="1" class="field-input w-full min-w-0 px-2 text-sm" placeholder="1" :aria-invalid="Boolean(fieldError(line, 'quantity'))" @blur="touch(line, 'quantity')" />
             <p v-if="fieldError(line, 'quantity')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'quantity') }}</p>
           </label>
-          <label v-if="compact ? visibleCosts : !demoReadOnly" class="col-span-3 min-w-0 space-y-1">
+          <label v-if="!demoReadOnly && (!compact || visibleCosts || revealedCostRows.has(lineKey(line)))" class="col-span-3 min-w-0 space-y-1">
             <span class="flex h-auto items-center px-1 text-xs font-medium text-gray-500 md:h-6">Себест.</span>
-            <input v-model.number="line.cost" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" />
+            <input v-model.number="line.cost" aria-label="Себестоимость" type="number" min="0" class="field-input w-full min-w-0 px-2 text-sm" placeholder="0" :aria-invalid="Boolean(fieldError(line, 'cost'))" @blur="touch(line, 'cost')" />
             <p v-if="fieldError(line, 'cost')" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'cost') }}</p>
           </label>
           <div class="col-span-3 min-w-0 space-y-1">
