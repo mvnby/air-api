@@ -16,6 +16,8 @@ const emit = defineEmits<{
 }>();
 const contextHeader = provideManagerContextHeader();
 const topbar = ref<HTMLElement | null>(null);
+const unifiedHeader = computed(() => Boolean(contextHeader.workspaceActionsTarget.value));
+const mobileContextLabel = computed(() => `Компания: ${managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || props.name || 'Рабочее пространство'}. Сайт: ${managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—'}`);
 const topbarHeight = ref(72);
 let headerObserver: ResizeObserver | null = null;
 const measureHeader = () => { topbarHeight.value = topbar.value?.getBoundingClientRect().height ?? 72; };
@@ -84,19 +86,23 @@ onBeforeUnmount(() => {
       </div>
     </aside>
     <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen" :style="{ '--kitlane-sticky-header-height': `${topbarHeight}px` }">
-      <header :inert="chromeCompact" @focusin="topbarFocused = true" @focusout="topbarFocused = Boolean(topbar?.contains($event.relatedTarget as Node | null))" ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value, 'has-compact-context': contextHeader.compact.value, 'is-scroll-collapsed': chromeCompact }">
-        <div class="kitlane-mobile-company">
-          <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
-          <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
-        </div>
+      <header :inert="chromeCompact" @focusin="topbarFocused = true" @focusout="topbarFocused = Boolean(topbar?.contains($event.relatedTarget as Node | null))" ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value, 'has-compact-context': contextHeader.compact.value, 'is-scroll-collapsed': chromeCompact, 'is-workspace-hosted': unifiedHeader }">
         <div :ref="element => { contextHeader.target.value = element as HTMLElement | null; }" class="kitlane-context-header" :hidden="!contextHeader.active.value" />
-        <div class="kitlane-topbar-actions">
-          <button class="kitlane-icon-button" type="button" :aria-label="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" :title="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" @click="emit('toggleTheme')"><Moon v-if="theme === 'light'" :size="19" /><Sun v-else :size="19" /></button>
-          <slot name="account" />
-          <div class="kitlane-platform-divider"><KitlanePlatformBrand /></div>
-        </div>
+        <Teleport :to="contextHeader.workspaceActionsTarget.value || 'body'" :disabled="!unifiedHeader">
+          <div class="kitlane-global-controls" :class="{ 'is-workspace-unified': unifiedHeader }">
+            <div class="kitlane-mobile-company">
+              <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
+              <button class="kitlane-home" type="button" :title="unifiedHeader ? mobileContextLabel : undefined" :aria-label="`${name || 'Рабочее пространство'} — главная${unifiedHeader ? ' · ' + mobileContextLabel : ''}`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
+            </div>
+            <div class="kitlane-topbar-actions">
+              <button class="kitlane-icon-button" type="button" :aria-label="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" :title="theme === 'light' ? 'Тёмная тема' : 'Светлая тема'" @click="emit('toggleTheme')"><Moon v-if="theme === 'light'" :size="19" /><Sun v-else :size="19" /></button>
+              <slot name="account" :compact="unifiedHeader" />
+              <div class="kitlane-platform-divider"><KitlanePlatformBrand :compact="unifiedHeader" /></div>
+            </div>
+          </div>
+        </Teleport>
       </header>
-      <div :class="{ 'is-scroll-collapsed': chromeCompact }" class="kitlane-context-bar border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
+      <div :class="{ 'is-scroll-collapsed': chromeCompact, 'is-workspace-hosted': unifiedHeader }" class="kitlane-context-bar border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
       <slot />
     </main>
   </div>
@@ -154,5 +160,33 @@ onBeforeUnmount(() => {
   .has-context-header .kitlane-mobile-company { grid-column:1; grid-row:1; }
   .has-context-header .kitlane-context-header { grid-column:1 / -1; grid-row:2; }
   .has-context-header .kitlane-topbar-actions { grid-column:2; grid-row:1; }
+}
+.kitlane-global-controls {
+  display: contents;
+}
+.kitlane-global-controls.is-workspace-unified {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.is-workspace-unified .kitlane-topbar-actions {
+  gap: 4px;
+}
+.is-workspace-unified .kitlane-platform-divider {
+  padding-left: 6px;
+}
+.kitlane-topbar.is-workspace-hosted, .kitlane-context-bar.is-workspace-hosted {
+  display: none;
+}
+@media (max-width:767px) {
+  .kitlane-global-controls.is-workspace-unified {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .is-workspace-unified .kitlane-icon-button {
+    width: 44px;
+    height: 44px;
+  }
 }
 </style>

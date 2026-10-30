@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Clock3, MoreVertical, Pause, Pencil, Play
 import OrderMoney from './OrderMoney.vue';
 import MoneyText from '../money/MoneyText.vue';
 import { ORDER_WORKFLOW_OPTIONS, type OrderWorkflowType, type OrderWorkspaceViewModel } from './order-workspace';
+import { useManagerWorkspaceActions } from '../../composables/useManagerContextHeader';
 import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
 
 const props = defineProps<{
@@ -32,6 +33,7 @@ const props = defineProps<{
   saveStatusText?: string;
   compact?: boolean;
   workspace?: boolean;
+  unified?: boolean;
   usageEnabled?: boolean;
   canViewUsageReport?: boolean;
 }>();
@@ -59,8 +61,17 @@ const titleDraft = ref('');
 const headerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
 const focusLocksCompactMode = ref(false);
+const globalActionsHost = ref<HTMLElement | null>(null);
+const hasShell = useManagerWorkspaceActions(globalActionsHost, () => Boolean(props.workspace && props.unified));
+const unifiedHeader = computed(() => Boolean(hasShell && props.workspace && props.unified));
+const expandedMenu = ref(false);
+let menuObserver: MutationObserver | null = null;
 const effectiveCompact = computed(() => Boolean(props.workspace || (props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value)));
-const workspaceCollapsed = computed(() => Boolean(props.workspace && props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value && !restoringFocus.value));
+const workspaceCollapsed = computed(() => Boolean(
+  props.workspace && props.compact
+  && !editingTitle.value && !menuOpen.value && !expandedMenu.value
+  && !focusLocksCompactMode.value && !restoringFocus.value
+));
 const titleTriggerRef = ref<HTMLButtonElement | null>(null);
 const titleInputRef = ref<HTMLInputElement | null>(null);
 const menuTriggerRef = ref<HTMLButtonElement | null>(null);
@@ -186,7 +197,19 @@ const onDocumentPointerDown = (event: PointerEvent) => {
   const target = event.target as Node | null;
   if (menuOpen.value && target && !menuRef.value?.contains(target) && !menuTriggerRef.value?.contains(target)) void closeMenu(false);
 };
-onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown));
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown);
+  menuObserver = new MutationObserver(() => {
+    expandedMenu.value = Boolean(headerRef.value?.querySelector('[aria-expanded="true"]'));
+  });
+  if (headerRef.value) menuObserver.observe(headerRef.value, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['aria-expanded'],
+  });
+});
+onBeforeUnmount(() => menuObserver?.disconnect());
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPointerDown));
 
 const commitTitle = () => {
@@ -208,15 +231,15 @@ const onWorkflowChange = async (event: Event) => {
     :inert="workspaceCollapsed"
     :data-scroll-collapsed="workspaceCollapsed || undefined"
     class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
-    :class="[workspace ? 'py-1' : effectiveCompact ? 'py-2' : 'py-3', { 'order-header-scroll-collapsed': workspaceCollapsed }]"
+    :class="[workspace ? 'py-1' : effectiveCompact ? 'py-2' : 'py-3', { 'order-header-scroll-collapsed': workspaceCollapsed, 'order-header-unified': unifiedHeader }]"
     @focusin="refreshFocusLock"
     @focusout="refreshFocusLock"
   >
     <div ref="contentRef">
     <button v-if="backLabel && !workspace" type="button" class="mb-1 inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-brand-700 dark:text-brand-200" @click="emit('close')"><ArrowLeft :size="17" />{{ backLabel }}</button>
-    <div class="flex gap-2 sm:gap-3" :class="effectiveCompact ? 'min-h-9 items-center' : 'items-start'">
+    <div class="order-header-identity-row flex gap-2 sm:gap-3" :class="effectiveCompact ? 'min-h-9 items-center' : 'items-start'">
       <button v-if="backLabel && workspace" type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-brand-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-brand-200 dark:hover:bg-slate-800" :aria-label="backLabel" :title="backLabel" @click="emit('close')"><ArrowLeft :size="18" aria-hidden="true" /></button>
-      <div class="min-w-0 flex-1">
+      <div class="order-header-title min-w-0 flex-1">
         <div v-if="effectiveCompact" class="flex h-6 min-w-0 items-center gap-2">
           <span class="shrink-0 text-xs font-semibold text-slate-600 dark:text-slate-300">№{{ orderId }}</span>
           <div v-if="editingTitle" class="flex h-6 min-w-0 flex-1 items-center gap-1">
@@ -224,6 +247,7 @@ const onWorkflowChange = async (event: Event) => {
             <button type="button" class="btn-mini-outline h-7 px-1" aria-label="Применить название" @click="commitTitle"><Check :size="15" aria-hidden="true" /></button>
           </div>
           <button v-else ref="titleTriggerRef" :disabled="writeBlocked" type="button" class="min-w-0 flex-1 truncate rounded text-left text-sm font-semibold leading-5 text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-white" :title="title || 'Без названия'" :aria-label="`Изменить название: ${title || 'Без названия'}`" @click="startTitleEdit">{{ title || 'Без названия' }}</button>
+      <span v-if="unifiedHeader" class="order-header-stage" :title="viewModel.stageLabel" data-order-header-stage>{{ viewModel.stageLabel }}</span>
         </div>
         <p v-if="effectiveCompact && !workspace" class="h-5 truncate text-xs leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
         <template v-if="!effectiveCompact">
@@ -261,9 +285,9 @@ const onWorkflowChange = async (event: Event) => {
         </template>
       </div>
 
-      <div class="flex shrink-0 items-center gap-1">
+      <div class="order-header-actions flex shrink-0 items-center gap-1">
         <button
-          v-if="(effectiveCompact || workspace) && (dirty || pendingLineEdits || saveFailed)"
+          v-if="!unifiedHeader && (effectiveCompact || workspace) && (dirty || pendingLineEdits || saveFailed)"
           type="button"
           class="btn-mini h-9 w-9 justify-center p-0"
           :disabled="saving || writeBlocked"
@@ -273,7 +297,7 @@ const onWorkflowChange = async (event: Event) => {
         >
           <Save :size="15" />
         </button>
-        <button v-if="workspace && dirty" type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')"><Undo2 :size="15" /></button>
+        <button v-if="!unifiedHeader && workspace && dirty" type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')"><Undo2 :size="15" /></button>
         <div class="relative">
           <button
             ref="menuTriggerRef"
@@ -321,11 +345,13 @@ const onWorkflowChange = async (event: Event) => {
           <X :size="20" />
         </button>
       </div>
+      <div v-if="unifiedHeader" ref="globalActionsHost" class="order-header-shell-actions" />
     </div>
 
     <p v-if="isOnHold" class="mt-1 break-words text-xs text-amber-800 dark:text-amber-300">Ожидание: {{ waitingSummary || 'Причина не указана' }}</p>
-    <div class="flex min-h-8 items-center gap-x-2 text-xs" :class="workspace ? 'flex-nowrap' : 'mt-1 flex-wrap gap-y-1'">
+    <div class="order-header-details-row flex min-h-8 items-center gap-x-2 text-xs" :class="workspace ? 'flex-nowrap' : 'mt-1 flex-wrap gap-y-1'">
       <p v-if="workspace" class="min-w-0 flex-1 truncate leading-5 text-slate-600 dark:text-slate-300" :title="[customerName || 'Клиент не указан', objectLabel].filter(Boolean).join(' · ')" data-order-header-customer>{{ customerName || 'Клиент не указан' }}<span v-if="objectLabel"> · {{ objectLabel }}</span></p>
+      <div class="order-header-save-controls" :class="{ 'is-unified': unifiedHeader }">
       <button
         type="button"
         role="switch"
@@ -339,11 +365,16 @@ const onWorkflowChange = async (event: Event) => {
         <span class="relative h-4 w-7 rounded-full" :class="autosaveEnabled ? 'bg-brand-600' : 'bg-slate-400'" aria-hidden="true">
           <span class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform" :class="autosaveEnabled ? 'left-0.5 translate-x-3' : 'left-0.5'" />
         </span>
-        <span v-if="workspace" class="lg:hidden">Авто</span>
-        <span :class="workspace ? 'hidden lg:inline' : ''">Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}</span>
+        <span v-if="workspace" :class="unifiedHeader ? '' : 'lg:hidden'">Авто</span>
+        <span :class="unifiedHeader ? 'hidden' : workspace ? 'hidden lg:inline' : ''">Автосохранение {{ autosaveEnabled ? 'вкл.' : 'выкл.' }}</span>
       </button>
-      <span role="status" aria-live="polite" class="shrink-0 text-[11px] sm:text-xs" :title="saveStatusText" :class="saveFailed && !saving ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">{{ saveLabel }}</span>
-      <span v-if="workspace" class="hidden min-w-0 max-w-48 truncate xl:inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" :title="viewModel.stageLabel">{{ viewModel.stageLabel }}</span>
+      <span role="status" aria-live="polite" class="order-header-save-status shrink-0 text-[11px] sm:text-xs" :title="saveStatusText" :class="saveFailed && !saving ? 'text-red-700 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'">{{ saveLabel }}</span>
+      <div v-if="unifiedHeader" class="order-header-save-actions">
+        <button v-if="dirty || pendingLineEdits || saveFailed" type="button" class="btn-mini h-9 w-9 justify-center p-0" :disabled="saving || writeBlocked" :title="saving ? 'Сохраняем' : saveFailed ? 'Повторить сохранение' : 'Сохранить изменения'" :aria-label="saving ? 'Сохраняем изменения' : saveFailed ? 'Повторить сохранение' : 'Сохранить изменения'" @click="emit('save')"><Save :size="15" /></button>
+        <button v-if="dirty" type="button" class="btn-mini-outline h-9 w-9 justify-center p-0" :disabled="saving" title="Отменить изменения" aria-label="Отменить изменения" @click="emit('discard')"><Undo2 :size="15" /></button>
+      </div>
+      </div>
+      <span v-if="workspace && !unifiedHeader" class="hidden min-w-0 max-w-48 truncate xl:inline-block rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" :title="viewModel.stageLabel">{{ viewModel.stageLabel }}</span>
     </div>
 
     <div v-if="effectiveCompact && !workspace" class="mt-2 flex h-8 min-w-0 items-center gap-2">
@@ -391,5 +422,115 @@ const onWorkflowChange = async (event: Event) => {
 </template>
 
 <style scoped>
-.order-header-scroll-collapsed { height:0; min-height:0; padding-top:0; padding-bottom:0; border:0; overflow:hidden; visibility:hidden; }
+.order-header-scroll-collapsed.order-header-unified, .order-header-scroll-collapsed {
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.order-header-save-controls {
+  display: contents;
+}
+.order-header-unified {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.order-header-unified .order-header-identity-row {
+  min-height: 44px;
+  gap: 8px;
+}
+.order-header-unified .order-header-stage {
+  flex-shrink: 0;
+  max-width: 12rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--kitlane-muted);
+}
+.order-header-unified .order-header-shell-actions {
+  flex-shrink: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--kitlane-border);
+}
+.order-header-unified .order-header-title button[aria-label^="Изменить название:"] {
+  flex: 0 1 auto;
+}
+.order-header-unified .order-header-details-row {
+  min-height: 36px;
+  gap: 12px;
+}
+.order-header-save-controls.is-unified {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.is-unified .order-header-save-status {
+  width: 8.5rem;
+  white-space: normal;
+  line-height: 16px;
+}
+.order-header-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 76px;
+}
+@media (max-width:1023px) {
+  .order-header-unified .order-header-stage {
+    display: none;
+  }
+}
+@media (max-width:767px) {
+  .order-header-unified .order-header-identity-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .order-header-unified .order-header-shell-actions {
+    order: -1;
+    flex-basis: 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .order-header-unified .order-header-title {
+    flex-basis: calc(100% - 96px);
+  }
+  .order-header-unified .order-header-details-row {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .order-header-unified [data-order-header-customer] {
+    flex-basis: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    line-height: 18px;
+  }
+  .order-header-save-controls.is-unified {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .order-header-unified button {
+    min-height: 44px;
+  }
+  .is-unified .order-header-save-status {
+    width: 8rem;
+  }
+  .order-header-unified .order-header-save-actions {
+    width: 92px;
+  }
+  .order-header-unified .order-header-save-actions button {
+    width: 44px;
+  }
+  .order-header-unified .order-header-identity-row > button, .order-header-unified .order-header-actions > .relative > button {
+    width: 44px;
+  }
+}
 </style>

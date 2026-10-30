@@ -1,10 +1,10 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ attribution?: boolean }>(), { attribution: true });
+withDefaults(defineProps<{ attribution?: boolean; compact?: boolean }>(), { attribution: true });
 const markUrl = `${import.meta.env.BASE_URL}assets/kitlane-mark.svg`;
 </script>
 
 <template>
-  <span class="kitlane-platform" :class="{ 'is-attributed': attribution }" :aria-label="attribution ? 'На платформе KitLane' : 'KitLane'">
+  <span class="kitlane-platform" :class="{ 'is-attributed': attribution, 'is-compact': compact }" :aria-label="attribution ? 'На платформе KitLane' : 'KitLane'">
     <span v-if="attribution" class="kitlane-platform-caption" aria-hidden="true">На платформе</span>
     <img :src="markUrl" width="28" height="28" alt="" aria-hidden="true" />
     <span class="kitlane-platform-wordmark" aria-hidden="true">KitLane</span>
@@ -17,4 +17,5 @@ const markUrl = `${import.meta.env.BASE_URL}assets/kitlane-mark.svg`;
 .kitlane-platform-wordmark { font-size: 17px; font-weight: 750; letter-spacing: -.6px; }
 @media (max-width: 1100px) { .kitlane-platform-caption { display: none; } }
 @media (max-width: 639px) { .is-attributed .kitlane-platform-wordmark { display: none; } }
+.is-compact .kitlane-platform-caption, .is-compact .kitlane-platform-wordmark { display:none; }
 </style>
