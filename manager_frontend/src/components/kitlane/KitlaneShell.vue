@@ -18,7 +18,12 @@ const contextHeader = provideManagerContextHeader();
 const topbar = ref<HTMLElement | null>(null);
 const topbarHeight = ref(72);
 let headerObserver: ResizeObserver | null = null;
-const measureHeader = () => { topbarHeight.value = topbar.value?.getBoundingClientRect().height || 72; };
+const measureHeader = () => { topbarHeight.value = topbar.value?.getBoundingClientRect().height ?? 72; };
+const topbarFocused = ref(false);
+const topbarMenuOpen = ref(false);
+const chromeCompact = computed(() => props.workspace && contextHeader.workspaceChromeCompact.value && !topbarFocused.value && !topbarMenuOpen.value && !props.mobileOpen);
+let menuObserver: MutationObserver | null = null;
+const refreshMenuLock = () => { topbarMenuOpen.value = Boolean(topbar.value?.querySelector('[aria-expanded="true"]')); };
 watch(contextHeader.active, async () => { await nextTick(); measureHeader(); });
 const sidebar = ref<HTMLElement | null>(null);
 const menuButton = ref<HTMLButtonElement | null>(null);
@@ -43,6 +48,8 @@ watch(drawerOpen, async open => {
 });
 onMounted(() => {
   measureHeader();
+  menuObserver = new MutationObserver(refreshMenuLock);
+  if (topbar.value) menuObserver.observe(topbar.value, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
   if (typeof ResizeObserver !== 'undefined') { headerObserver = new ResizeObserver(measureHeader); if (topbar.value) headerObserver.observe(topbar.value); }
   if (typeof window.matchMedia !== 'function') return;
   breakpoint = window.matchMedia('(min-width: 768px)');
@@ -51,6 +58,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   headerObserver?.disconnect();
+  menuObserver?.disconnect();
   breakpoint?.removeEventListener('change', updateDesktop);
   document.removeEventListener('keydown', onKeydown);
 });
@@ -76,7 +84,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
     <main class="kitlane-main" :class="{ 'kitlane-main-workspace': workspace }" :inert="drawerOpen" :style="{ '--kitlane-sticky-header-height': `${topbarHeight}px` }">
-      <header ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value, 'has-compact-context': contextHeader.compact.value }">
+      <header :inert="chromeCompact" @focusin="topbarFocused = true" @focusout="topbarFocused = Boolean(topbar?.contains($event.relatedTarget as Node | null))" ref="topbar" class="kitlane-topbar" :class="{ 'has-context-header': contextHeader.active.value, 'has-compact-context': contextHeader.compact.value, 'is-scroll-collapsed': chromeCompact }">
         <div class="kitlane-mobile-company">
           <button ref="menuButton" class="kitlane-icon-button" type="button" aria-label="Открыть меню" aria-controls="manager-mobile-navigation" :aria-expanded="mobileOpen" @click="emit('update:mobileOpen', true)"><Menu :size="20" /></button>
           <button class="kitlane-home" type="button" :aria-label="`${name || 'Рабочее пространство'} — главная`" @click="emit('home')"><KitlanePartnerIdentity :name="name" :logo-url="logoUrl" :compact-logo-url="compactLogoUrl" :context-key="contextKey" compact /></button>
@@ -88,7 +96,7 @@ onBeforeUnmount(() => {
           <div class="kitlane-platform-divider"><KitlanePlatformBrand /></div>
         </div>
       </header>
-      <div class="kitlane-context-bar border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
+      <div :class="{ 'is-scroll-collapsed': chromeCompact }" class="kitlane-context-bar border-b bg-[var(--kitlane-surface)] px-4 py-2 text-xs text-[var(--kitlane-muted)] md:hidden"><span class="font-medium">Компания:</span> {{ managerStorefrontSelection.companies.value.find(item => item.tenant_id === managerStorefrontSelection.selectedTenantId.value)?.display_name || name }}<span class="ml-3 font-medium">Сайт:</span> {{ managerStorefrontSelection.storefronts.value.find(item => item.slug === managerStorefrontSelection.selectedSlug.value)?.display_name || '—' }}</div>
       <slot />
     </main>
   </div>
@@ -107,6 +115,10 @@ onBeforeUnmount(() => {
 .kitlane-main-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
 .kitlane-main-workspace > .kitlane-topbar, .kitlane-main-workspace > .kitlane-context-bar { flex-shrink: 0; }
 .kitlane-topbar { position: sticky; top: 0; display: flex; align-items: center; justify-content: flex-end; height: var(--kitlane-header-height); padding: 0 28px; border-bottom: 1px solid var(--kitlane-border); background: var(--kitlane-surface); z-index: 30; }
+.kitlane-topbar { transition: height 360ms cubic-bezier(0.4, 0, 0.2, 1); }
+.kitlane-topbar.is-scroll-collapsed { height:0; min-height:0; padding:0; border:0; overflow:hidden; visibility:hidden; }
+.kitlane-context-bar.is-scroll-collapsed { display:none; }
+@media (prefers-reduced-motion: reduce) { .kitlane-topbar { transition:none; } }
 .kitlane-topbar-actions { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .kitlane-platform-divider { display: flex; padding-left: 20px; border-left: 1px solid var(--kitlane-border); }
 .kitlane-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; color: inherit; border-radius: var(--kitlane-control-radius); }

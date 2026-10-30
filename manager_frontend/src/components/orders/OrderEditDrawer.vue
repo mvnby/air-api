@@ -36,6 +36,7 @@ import { ManagerOrdersService } from '../../client';
 import {
   buildOrderWorkspaceViewModel,
 } from './order-workspace';
+import { useManagerWorkspaceChrome } from '../../composables/useManagerContextHeader';
 import { useSmartStickyHeader } from '../../composables/useSmartStickyHeader';
 import { useOrderCommercialEditor } from '../../composables/useOrderCommercialEditor';
 import { useOrderProposalLifecycle } from '../../composables/useOrderProposalLifecycle';
@@ -105,7 +106,8 @@ const demoReadOnly = useDemoReadOnly();
 const isPage = computed(() => props.presentation === 'page');
 useDocumentScrollLock(() => props.modelValue && !isPage.value);
 const { captureFocus, focusContainer, restoreFocus, trapFocus } = useDrawerFocusTrap(drawerScrollContainer);
-const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer);
+const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer, { retainCompactWhenContentFits: true });
+useManagerWorkspaceChrome(() => isPage.value && props.modelValue && compactWorkspaceHeader.value);
 watch(() => [props.order?.id, props.modelValue], () => {
   proposalClientPreview.value = false;
   showProposalCosts.value = false;
@@ -398,6 +400,7 @@ const handleSourceApplied = (result: SourceAppliedEvent) => {
   setToast(sourceEquipmentPrefillMessage(result.equipmentPrefill) || 'Данные из источника применены');
 };
 watch(activeWorkspaceSection, (section) => {
+  resetWorkspaceHeader();
   if (section !== 'proposal') proposalClientPreview.value = false;
   if (section === 'proposal') proposalMounted.value = true;
   if (section === 'documents') documentsMounted.value = true;
@@ -684,6 +687,22 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
   return saved;
 };
 
+const onWorkspaceKeydown = async (event: KeyboardEvent) => {
+  if (!isPage.value) trapFocus(event);
+  if (!compactWorkspaceHeader.value || (event.target as HTMLElement).matches('input, textarea, select, [contenteditable="true"]')) return;
+  if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) resetWorkspaceHeader();
+  if (event.key !== 'Tab') return;
+  const firstTab = drawerScrollContainer.value?.querySelector('[data-testid="order-section-navigation"] button');
+  const returnToHeader = event.shiftKey && event.target === firstTab;
+  if (returnToHeader) {
+    event.preventDefault();
+    resetWorkspaceHeader();
+    await nextTick();
+    const controls = drawerScrollContainer.value?.querySelector(':scope > header')?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
+    controls?.item(controls.length - 1)?.focus({ preventScroll: true });
+  }
+};
+
 defineExpose({ prepareToLeave });
 </script>
 
@@ -696,7 +715,7 @@ defineExpose({ prepareToLeave });
       </div>
     </Transition>
     <div v-if="!isPage" class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" :style="keyboardStyle" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="!isPage && trapFocus($event)" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" :style="keyboardStyle" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="onWorkspaceKeydown" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
