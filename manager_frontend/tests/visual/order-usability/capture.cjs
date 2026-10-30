@@ -93,7 +93,7 @@ async function confirmation(page, proceed) {
         await scroller.evaluate(el => { el.scrollTop = 400; });
         await controls.waitFor({ state: 'hidden' });
         await page.waitForTimeout(450); // Existing sticky-header layout compensation interval.
-        near((await box(nav)).y, tabs.y, 'Section navigation remains fixed');
+        near((await box(nav)).y, 0, 'Section navigation stays discoverable after shell and identity collapse');
         const compactContent = await box(scroller);
         assert(compactContent.height > content.height + 40, 'Downward scroll gives the workspace the context row height');
         await shot('scrolled');

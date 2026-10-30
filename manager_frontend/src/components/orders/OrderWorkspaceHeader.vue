@@ -54,11 +54,13 @@ const emit = defineEmits<{
 
 const editingTitle = ref(false);
 const menuOpen = ref(false);
+const restoringFocus = ref(false);
 const titleDraft = ref('');
 const headerRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
 const focusLocksCompactMode = ref(false);
 const effectiveCompact = computed(() => Boolean(props.workspace || (props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value)));
+const workspaceCollapsed = computed(() => Boolean(props.workspace && props.compact && !editingTitle.value && !menuOpen.value && !focusLocksCompactMode.value && !restoringFocus.value));
 const titleTriggerRef = ref<HTMLButtonElement | null>(null);
 const titleInputRef = ref<HTMLInputElement | null>(null);
 const menuTriggerRef = ref<HTMLButtonElement | null>(null);
@@ -81,7 +83,7 @@ const clearResizeAnimation = () => {
   headerRef.value?.style.removeProperty('overflow');
 };
 
-watch(effectiveCompact, async (isCompact) => {
+watch([effectiveCompact, workspaceCollapsed], async ([isCompact]) => {
   const header = headerRef.value;
   if (!header) return;
   const generation = ++resizeGeneration;
@@ -139,18 +141,10 @@ watch(effectiveCompact, async (isCompact) => {
 
 onBeforeUnmount(clearResizeAnimation);
 
-const refreshFocusLock = () => {
-  window.requestAnimationFrame(() => {
-    const activeElement = document.activeElement;
-    focusLocksCompactMode.value = Boolean(
-      activeElement
-      && headerRef.value?.contains(activeElement)
-      && (
-        activeElement.matches('input, select, textarea')
-        || activeElement.hasAttribute('data-sticky-header-lock')
-      )
-    );
-  });
+const refreshFocusLock = (event: FocusEvent) => {
+  const activeElement = event.type === 'focusout' ? event.relatedTarget as Node | null : document.activeElement;
+  // Any focused control must remain visible, including back/save and menu triggers.
+  focusLocksCompactMode.value = Boolean(activeElement && headerRef.value?.contains(activeElement) && (props.workspace || (activeElement instanceof HTMLElement && (activeElement.matches('input, select, textarea') || activeElement.hasAttribute('data-sticky-header-lock')))));
 };
 const startTitleEdit = async () => {
   titleDraft.value = props.title;
@@ -159,9 +153,11 @@ const startTitleEdit = async () => {
   titleInputRef.value?.focus();
 };
 const finishTitleEdit = async () => {
+  restoringFocus.value = true;
   editingTitle.value = false;
   await nextTick();
   titleTriggerRef.value?.focus();
+  restoringFocus.value = false;
 };
 // Only an explicit successful discard resets an open editor; normal saves preserve input and caret.
 watch(() => props.titleResetVersion, () => {
@@ -169,10 +165,12 @@ watch(() => props.titleResetVersion, () => {
   if (editingTitle.value) void finishTitleEdit();
 });
 const closeMenu = async (restoreFocus = true) => {
+  restoringFocus.value = restoreFocus;
   menuOpen.value = false;
   if (!restoreFocus) return;
   await nextTick();
   menuTriggerRef.value?.focus();
+  restoringFocus.value = false;
 };
 const runMenuAction = async (action: () => void) => {
   await closeMenu();
@@ -207,8 +205,10 @@ const onWorkflowChange = async (event: Event) => {
 <template>
   <header
     ref="headerRef"
+    :inert="workspaceCollapsed"
+    :data-scroll-collapsed="workspaceCollapsed || undefined"
     class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-950/95 sm:px-5"
-    :class="workspace ? 'py-1' : effectiveCompact ? 'py-2' : 'py-3'"
+    :class="[workspace ? 'py-1' : effectiveCompact ? 'py-2' : 'py-3', { 'order-header-scroll-collapsed': workspaceCollapsed }]"
     @focusin="refreshFocusLock"
     @focusout="refreshFocusLock"
   >
@@ -389,3 +389,7 @@ const onWorkflowChange = async (event: Event) => {
     </div>
   </header>
 </template>
+
+<style scoped>
+.order-header-scroll-collapsed { height:0; min-height:0; padding-top:0; padding-bottom:0; border:0; overflow:hidden; visibility:hidden; }
+</style>

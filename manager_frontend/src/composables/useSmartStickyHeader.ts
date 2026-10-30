@@ -73,7 +73,7 @@ export const reduceStickyHeaderScroll = (
   };
 };
 
-export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) => {
+export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>, options: { retainCompactWhenContentFits?: boolean } = {}) => {
   const compact = ref(false);
   let motionState = initialStickyHeaderState();
   let frameId: number | null = null;
@@ -83,6 +83,16 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
   let layoutSyncPending = false;
   let scrollCompensation = 0;
   let currentContainer: HTMLElement | null = null;
+  let upwardIntent = 0;
+  let touchY: number | null = null;
+
+  const cancelLayoutSync = () => {
+    layoutSyncGeneration += 1;
+    layoutSyncPending = false;
+    if (layoutTimerId !== null) window.clearTimeout(layoutTimerId);
+    if (layoutFrameId !== null) window.cancelAnimationFrame(layoutFrameId);
+    layoutTimerId = layoutFrameId = null;
+  };
 
   const syncAfterLayoutChange = (logicalScrollTop: number, targetCompact: boolean) => {
     layoutSyncPending = true;
@@ -100,7 +110,7 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
           // A manager can scroll back while the header is resizing. Those
           // events are deferred, but the real top must never be compensated
           // into an imaginary offset that leaves the controls hidden.
-          if (rawScrollTop <= 0) {
+          if (rawScrollTop <= 0 && !(options.retainCompactWhenContentFits && targetCompact && currentContainer.scrollHeight <= currentContainer.clientHeight)) {
             scrollCompensation = 0;
             motionState = initialStickyHeaderState();
             compact.value = false;
@@ -144,8 +154,31 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
     if (frameId === null) frameId = window.requestAnimationFrame(updateFromScroll);
   };
 
+  // Resizing can consume all overflow. Wheel/touch intent still reveals chrome,
+  // even when the browser can no longer produce an upward scroll event.
+  const revealFromIntent = (travel: number) => {
+    upwardIntent = travel > 0 ? upwardIntent + travel : 0;
+    if (!compact.value || upwardIntent < STICKY_HEADER_EXPAND_TRAVEL_PX) return;
+    cancelLayoutSync();
+    scrollCompensation = 0;
+    motionState = initialStickyHeaderState(currentContainer?.scrollTop || 0);
+    compact.value = false;
+    syncAfterLayoutChange(motionState.lastScrollTop, false);
+    upwardIntent = 0;
+  };
+  const onWheel = (event: WheelEvent) => revealFromIntent(-event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (currentContainer?.clientHeight || 1) : 1));
+  const onTouchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? null; upwardIntent = 0; };
+  const onTouchMove = (event: TouchEvent) => {
+    const next = event.touches[0]?.clientY ?? null;
+    if (next !== null && touchY !== null) revealFromIntent(next - touchY);
+    touchY = next;
+  };
+
   const detach = () => {
     currentContainer?.removeEventListener('scroll', onScroll);
+    currentContainer?.removeEventListener('wheel', onWheel);
+    currentContainer?.removeEventListener('touchstart', onTouchStart);
+    currentContainer?.removeEventListener('touchmove', onTouchMove);
     currentContainer = null;
     layoutSyncPending = false;
     scrollCompensation = 0;
@@ -165,10 +198,14 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
   };
 
   const reset = () => {
+    const wasCompact = compact.value;
+    cancelLayoutSync();
+    upwardIntent = 0;
     const scrollTop = currentContainer?.scrollTop || 0;
     scrollCompensation = 0;
     motionState = initialStickyHeaderState(scrollTop);
     compact.value = false;
+    if (wasCompact && currentContainer) syncAfterLayoutChange(scrollTop, false);
   };
 
   watch(scrollContainer, (container) => {
@@ -176,6 +213,11 @@ export const useSmartStickyHeader = (scrollContainer: Ref<HTMLElement | null>) =
     currentContainer = container;
     reset();
     currentContainer?.addEventListener('scroll', onScroll, { passive: true });
+    if (options.retainCompactWhenContentFits) {
+      currentContainer?.addEventListener('wheel', onWheel, { passive: true });
+      currentContainer?.addEventListener('touchstart', onTouchStart, { passive: true });
+      currentContainer?.addEventListener('touchmove', onTouchMove, { passive: true });
+    }
   }, { immediate: true, flush: 'post' });
 
   onBeforeUnmount(detach);

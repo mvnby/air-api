@@ -1,4 +1,5 @@
 import { nextTick } from 'vue';
+import { STICKY_HEADER_RESIZE_DURATION_MS } from '../../composables/useSmartStickyHeader';
 
 type Editable = { link_id?: number | null; editor?: { original: unknown | null; group?: number } };
 // Only committed values participate in autosave, totals and document previews.
@@ -94,6 +95,19 @@ export async function focusInvalidLineEditor(row: HTMLElement | null | undefined
   // update, while respecting any field the manager has chosen in the meantime.
   if (typeof window.requestAnimationFrame === 'function') {
     window.requestAnimationFrame(() => window.requestAnimationFrame(reveal));
+  }
+  // The full shell and order headers resize for longer than two frames. Keep
+  // the invalid field above its sticky actions throughout that viewport change.
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(reveal);
+    const cleanup = () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+      field.removeEventListener('blur', cleanup);
+    };
+    const timer = window.setTimeout(cleanup, STICKY_HEADER_RESIZE_DURATION_MS + 80);
+    observer.observe(container);
+    field.addEventListener('blur', cleanup, { once: true });
   }
 }
 
