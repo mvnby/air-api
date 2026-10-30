@@ -20,7 +20,7 @@ import {
 } from '../../services/manager-session';
 import { getApiErrorMessage } from '../../utils/api-errors';
 
-const props = defineProps<{ auth: ManagerAuthStatusResponse }>();
+const props = defineProps<{ auth: ManagerAuthStatusResponse; compact?: boolean }>();
 const emit = defineEmits<{
   navigate: [path: string];
   loggedOut: [];
@@ -108,17 +108,18 @@ onBeforeUnmount(() => {
       ref="trigger"
       type="button"
       class="kitlane-account-trigger"
+      :class="{ 'is-compact': compact }"
       :aria-label="`Аккаунт: ${accountName}`"
       :aria-expanded="open"
       aria-haspopup="menu"
       @click="open = !open"
     >
       <PersonAvatar :name="accountName" :src="auth.avatar_url" size="sm" />
-      <span class="hidden min-w-0 sm:block">
+      <span class="hidden min-w-0 sm:block kitlane-account-identity">
         <span class="block max-w-44 truncate text-sm font-semibold text-gray-900">{{ accountName }}</span>
         <span class="block max-w-44 truncate text-[11px] text-gray-500">{{ currentStorefront }}</span>
       </span>
-      <ChevronDown class="h-4 w-4 text-gray-500 transition" :class="open ? 'rotate-180' : ''" />
+      <ChevronDown class="h-4 w-4 text-gray-500 transition kitlane-account-chevron" :class="open ? 'rotate-180' : ''" />
     </button>
 
     <div
@@ -191,4 +192,5 @@ onBeforeUnmount(() => {
 .kitlane-account-trigger:hover { background: var(--kitlane-bg); }
 .kitlane-account-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--kitlane-accent-text); background: var(--kitlane-accent-soft); font-size: 14px; font-weight: 700; }
 @media (max-width: 639px) { .kitlane-account-popover { position: fixed; top: 64px; right: 12px; width: min(256px, calc(100vw - 24px)); } }
+.is-compact .kitlane-account-identity, .is-compact .kitlane-account-chevron { display:none; }
 </style>

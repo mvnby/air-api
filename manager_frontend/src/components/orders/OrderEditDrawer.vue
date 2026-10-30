@@ -94,6 +94,11 @@ const requestOpen = ref(false);
 const requestTrigger = ref<HTMLButtonElement | null>(null);
 const requestPanel = ref<InstanceType<typeof OrderRequestPanel> | null>(null);
 const requestEvidence = useOrderRequestContext(computed(() => props.order?.id), computed(() => props.modelValue));
+const requestFileCount = computed(() => {
+  if (requestEvidence.loading.value) return '…';
+  if (requestEvidence.error.value) return '?';
+  return String(requestEvidence.context.value?.files.length ?? props.order?.attachment_count ?? 0);
+});
 const closeRequest = () => { requestOpen.value = false; requestTrigger.value?.focus({ preventScroll: true }); };
 const toggleRequest = async () => {
   if (requestOpen.value) return closeRequest();
@@ -689,8 +694,13 @@ const saveContextObject = async (draft: { address: string; branchId: number | nu
 
 const onWorkspaceKeydown = async (event: KeyboardEvent) => {
   if (!isPage.value) trapFocus(event);
-  if (!compactWorkspaceHeader.value || (event.target as HTMLElement).matches('input, textarea, select, [contenteditable="true"]')) return;
-  if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) resetWorkspaceHeader();
+  if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+  if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) {
+    // Also resync a downward frame queued by editor focus before it compacts.
+    resetWorkspaceHeader();
+    return;
+  }
+  if (!compactWorkspaceHeader.value) return;
   if (event.key !== 'Tab') return;
   const firstTab = drawerScrollContainer.value?.querySelector('[data-testid="order-section-navigation"] button');
   const returnToHeader = event.shiftKey && event.target === firstTab;
@@ -720,6 +730,7 @@ defineExpose({ prepareToLeave });
         v-show="!proposalClientPreview"
         class="shrink-0"
         :workspace="true"
+        :unified="isPage"
         :write-blocked="draftBlocked || waiting.busy.value"
         :title-reset-version="titleResetVersion"
         :order-id="order?.id"
@@ -758,20 +769,20 @@ defineExpose({ prepareToLeave });
         @usage-report="usageReportOpen = true"
         @close="isPage ? emit('back') : closeDrawer()"
       />
-      <div v-show="!proposalClientPreview" class="shrink-0 border-b border-slate-200 bg-white px-3 pb-2 dark:border-slate-700 dark:bg-slate-950" data-testid="order-section-navigation">
+      <div v-show="!proposalClientPreview" class="order-section-navigation shrink-0 border-b border-slate-200 bg-white px-3 pb-2 dark:border-slate-700 dark:bg-slate-950" data-testid="order-section-navigation">
           <OrderWorkspaceNav
             v-show="!proposalClientPreview"
             :active="activeWorkspaceSection"
             :workflow="workflowType"
             @select="selectWorkspaceSection"
           />
-        <div v-show="!compactWorkspaceHeader || requestOpen || mobileContextOpen || contextControlsFocused" class="mt-1 grid grid-cols-2 gap-2" data-testid="order-context-controls" @focusin="contextControlsFocused = true" @focusout="contextControlsFocused = Boolean(($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node | null))">
+        <div v-show="!compactWorkspaceHeader || requestOpen || mobileContextOpen || contextControlsFocused" class="order-context-controls mt-1 grid grid-cols-2 gap-2" data-testid="order-context-controls" @focusin="contextControlsFocused = true" @focusout="contextControlsFocused = Boolean(($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node | null))">
           <button ref="requestTrigger" type="button" data-testid="order-request-trigger" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-brand-900 transition hover:bg-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-100 dark:hover:bg-brand-900" :class="requestOpen ? 'border-brand-400 bg-brand-100 dark:border-brand-600 dark:bg-brand-900' : 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-950'" :aria-expanded="requestOpen" aria-controls="order-request-details" @click="toggleRequest">
             <FileText :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" />
-            <span class="min-w-0 flex-1"><span class="block text-xs font-semibold leading-4 sm:truncate sm:text-sm">Заявка и файлы</span><span class="hidden truncate text-xs text-brand-700 dark:text-brand-200 sm:block">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
+            <span class="min-w-0 flex-1"><span class="order-request-title block text-xs font-semibold leading-4 sm:truncate sm:text-sm"><span class="min-w-0 truncate">Заявка и файлы</span><span class="order-request-file-count shrink-0"> · {{ requestFileCount }}</span></span><span class="hidden truncate text-xs text-brand-700 dark:text-brand-200 sm:block">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
             <ChevronDown :size="20" class="shrink-0 transition-transform" :class="requestOpen ? 'rotate-180' : ''" aria-hidden="true" />
           </button>
-          <button type="button" aria-label="Ответственный, клиент и объект" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-200 dark:hover:bg-slate-800 sm:text-sm" :class="mobileContextOpen && !requestOpen ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'" :aria-expanded="mobileContextOpen && !requestOpen" aria-controls="order-context-details" @click="requestOpen = false; mobileContextOpen = !mobileContextOpen"><UsersRound :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" /><span class="min-w-0 flex-1"><span class="sm:hidden">Клиент и объект</span><span class="hidden sm:inline">Ответственный, клиент и объект</span></span><ChevronDown :size="20" class="shrink-0 transition-transform" :class="mobileContextOpen && !requestOpen ? 'rotate-180' : ''" aria-hidden="true" /></button>
+          <button type="button" aria-label="Ответственный, клиент и объект" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-200 dark:hover:bg-slate-800 sm:text-sm" :class="mobileContextOpen && !requestOpen ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-950' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'" :aria-expanded="mobileContextOpen && !requestOpen" aria-controls="order-context-details" @click="requestOpen = false; mobileContextOpen = !mobileContextOpen"><UsersRound :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" /><span class="min-w-0 flex-1"><span class="order-context-short-label sm:hidden">Клиент и объект</span><span class="order-context-full-label hidden sm:inline">Ответственный, клиент и объект</span></span><ChevronDown :size="20" class="shrink-0 transition-transform" :class="mobileContextOpen && !requestOpen ? 'rotate-180' : ''" aria-hidden="true" /></button>
         </div>
       </div>
 
@@ -959,4 +970,52 @@ defineExpose({ prepareToLeave });
 
 <style scoped>
 .order-page-workspace { height: 100%; min-height: 0; }
+</style>
+
+<style scoped>
+.order-request-file-count {
+  display: none;
+}
+@media (min-width:1280px) {
+  .order-page-workspace .order-section-navigation {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .order-page-workspace .order-section-navigation > nav {
+    flex-shrink: 0;
+  }
+  .order-page-workspace .order-context-controls {
+    margin-top: 0;
+    margin-left: auto;
+    min-width: 0;
+    flex: 1;
+    max-width: 34rem;
+  }
+  .order-page-workspace .order-context-controls button {
+    min-width: 0;
+  }
+  .order-page-workspace .order-context-controls button span span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .order-page-workspace .order-context-controls [data-testid="order-request-trigger"] > span > span + span {
+    display: none;
+  }
+  .order-page-workspace .order-request-file-count {
+    display: inline;
+  }
+  .order-page-workspace .order-request-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .order-page-workspace .order-context-short-label {
+    display: inline;
+  }
+  .order-page-workspace .order-context-full-label {
+    display: none;
+  }
+}
 </style>

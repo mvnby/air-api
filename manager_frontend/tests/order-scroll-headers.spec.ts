@@ -9,22 +9,23 @@ import { useSmartStickyHeader } from '../src/composables/useSmartStickyHeader';
 
 let wrapper: VueWrapper;
 const visible = ref(true);
+const headerOverrides = ref<Record<string, unknown>>({});
 let state: ReturnType<typeof useSmartStickyHeader>;
 const Page = defineComponent({ setup() {
   const scroll = ref<HTMLElement | null>(null);
   state = useSmartStickyHeader(scroll, { retainCompactWhenContentFits: true });
   useManagerWorkspaceChrome(() => state.compact.value);
   return () => h('section', [h(OrderWorkspaceHeader, {
-    workspace: true, compact: state.compact.value, orderId: 595, title: 'Тестовый заказ', workflow: 'maintenance',
+    workspace: true, unified: true, compact: state.compact.value, orderId: 595, title: 'Тестовый заказ', workflow: 'maintenance',
     viewModel: { stageLabel: 'Предложение', stageAge: '', nextAction: { label: 'Продолжить' } } as any,
-    total: 0, paid: 0, balance: 0, backLabel: 'К заказам',
+    total: 0, paid: 0, balance: 0, backLabel: 'К заказам', ...headerOverrides.value,
   }), h('nav', { tabindex: 0 }, 'Документы'), h('div', { ref: scroll, 'data-order-scroll': '' })]);
 } });
 const start = async () => {
   visible.value = true;
   wrapper = mount(defineComponent({ setup: () => () => h(KitlaneShell, {
     workspace: true, name: 'Тест', contextKey: 'test', collapsed: true, mobileOpen: false, theme: 'light',
-  }, { default: () => visible.value ? h(Page) : h('div', 'Главная'), account: () => h('button', { 'aria-expanded': false }, 'Профиль') }) }), { attachTo: document.body });
+  }, { default: () => visible.value ? h(Page) : h('div', 'Главная'), account: () => h('button', { 'aria-expanded': false, 'data-testid': 'test-account' }, 'Профиль') }) }), { attachTo: document.body });
   await nextTick();
 };
 const settle = async () => { await vi.advanceTimersByTimeAsync(400); await nextTick(); };
@@ -33,9 +34,10 @@ const scroll = async (top: number) => {
   (scroller.element as HTMLElement).scrollTop = top;
   await scroller.trigger('scroll'); await vi.advanceTimersByTimeAsync(20);
 };
-const shellCollapsed = () => wrapper.get('.kitlane-topbar').classes().includes('is-scroll-collapsed');
+const shellCollapsed = () => wrapper.get('.kitlane-global-controls').element.closest('header')?.classList.contains('order-header-scroll-collapsed') ?? false;
 const orderCollapsed = () => wrapper.getComponent(OrderWorkspaceHeader).attributes('data-scroll-collapsed') === 'true';
 beforeEach(() => {
+  headerOverrides.value = {};
   vi.useFakeTimers();
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(0), 16));
@@ -69,15 +71,20 @@ describe('order scroll owns the full shell header stack', () => {
     expect(document.activeElement).toBe(wrapper.get('[aria-label="Дополнительные действия"]').element);
   });
   it('protects shell focus and an open account menu independently, cleaning ownership on navigation', async () => {
-    await start(); const account = wrapper.get('.kitlane-topbar button[aria-expanded]');
+    await start(); const account = wrapper.get('[data-testid="test-account"]');
     (account.element as HTMLElement).focus();
     await scroll(240); await settle(); expect(shellCollapsed()).toBe(false);
     account.element.setAttribute('aria-expanded', 'true'); (account.element as HTMLElement).blur();
     await nextTick(); expect(shellCollapsed()).toBe(false);
     account.element.setAttribute('aria-expanded', 'false'); await nextTick(); await nextTick();
     expect(shellCollapsed()).toBe(true);
-    visible.value = false; await nextTick(); expect(shellCollapsed()).toBe(false);
+    const original = account.element;
+    visible.value = false; await nextTick(); await nextTick(); expect(shellCollapsed()).toBe(false);
+    expect(wrapper.get('.kitlane-topbar').element.contains(original)).toBe(true);
+    expect(wrapper.get('[data-testid="test-account"]').element).toBe(original);
     visible.value = true; await nextTick(); await nextTick(); expect(shellCollapsed()).toBe(false);
+    expect(wrapper.getComponent(OrderWorkspaceHeader).element.contains(original)).toBe(true);
+    expect(wrapper.findAll('.kitlane-global-controls')).toHaveLength(1);
   });
   it('stays collapsed after content clamps to zero and reveals on upward intent during resize', async () => {
     await start(); const element = wrapper.get('[data-order-scroll]').element;
@@ -97,6 +104,31 @@ describe('order scroll owns the full shell header stack', () => {
     await scroller.trigger('touchstart', { touches: [{ clientY: 100 }] });
     await scroller.trigger('touchmove', { touches: [{ clientY: 150 }] }); await settle();
     expect(shellCollapsed()).toBe(false); expect(orderCollapsed()).toBe(false);
+  });
+  it('keeps one autosave/status/action group through saved, dirty, saving, failed, manual and pending states', async () => {
+    await start();
+    const header = wrapper.getComponent(OrderWorkspaceHeader);
+    const status = header.get('[role="status"]').element;
+    const autosave = header.get('[aria-label="Автосохранение заказа"]').element;
+    for (const [props, label] of [
+      [{ autosaveEnabled:true }, 'Сохранено'], [{ dirty:true }, 'Есть изменения'],
+      [{ dirty:true, saving:true }, 'Сохраняем'], [{ saveFailed:true }, 'Не удалось сохранить'],
+      [{ autosaveEnabled:false }, 'Сохранено'], [{ pendingLineEdits:true }, 'Строка не применена'],
+    ] as const) {
+      headerOverrides.value = props; await nextTick();
+      expect(header.get('[role="status"]').element).toBe(status);
+      expect(header.get('[role="status"]').text()).toBe(label);
+      expect(header.get('[aria-label="Автосохранение заказа"]').element).toBe(autosave);
+      expect(header.findAll('.order-header-save-controls')).toHaveLength(1);
+      expect(header.findAll('.order-header-save-actions')).toHaveLength(1);
+      expect(header.get('.order-header-details-row').element.contains(status)).toBe(true);
+      expect(header.get('.order-header-details-row').element.contains(autosave)).toBe(true);
+    }
+    await header.get('[aria-label="Сохранить изменения"]').trigger('click');
+    expect(header.emitted('save')).toHaveLength(1);
+    headerOverrides.value = { unified:false }; await nextTick(); await nextTick();
+    expect(wrapper.get('.kitlane-topbar').element.contains(wrapper.get('[data-testid="test-account"]').element)).toBe(true);
+    expect(header.find('.order-header-shell-actions').exists()).toBe(false);
   });
   it('cancels pending layout work when reset', async () => {
     await start(); await scroll(200); state.reset();

@@ -543,10 +543,11 @@ watch(currentPath, () => {
         </button>
       </div>
       </template>
-      <template #account>
+      <template #account="{ compact }">
         <ManagerAccountMenu
           v-if="auth"
           :auth="auth"
+          :compact="compact"
           @navigate="navigate"
           @logged-out="handleLogoutSuccess"
           @error="handleLogoutError"
