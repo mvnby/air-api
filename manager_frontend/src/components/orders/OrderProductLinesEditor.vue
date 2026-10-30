@@ -200,7 +200,7 @@ const lineTotal = (line: ProductLine) => Number(line.quantity || 0) * Number(lin
               @blur="touch(line, 'title'); emit('blur', index)"
             />
             <p v-if="fieldError(line, 'title')" :id="`product-title-error-${lineKey(line)}`" class="text-xs text-red-600" role="alert">{{ fieldError(line, 'title') }}</p>
-            <div v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || suggestionsFor(index).length)" class="relative z-20 mt-2 max-h-80 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
+            <div v-if="!line.product_id && line.product_query.trim().length >= 2 && (productLookupLoading || suggestionsFor(index).length)" data-line-suggestions style="max-height:var(--order-line-suggestions-height,20rem)" class="relative mt-2 max-h-80 overflow-auto rounded-[12px] border border-gray-200 bg-white p-1 shadow-xl">
               <div v-if="productLookupLoading" class="px-3 py-2 text-xs text-gray-500">Поиск товаров...</div>
               <button
                 v-for="item in suggestionsFor(index)"

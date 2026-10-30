@@ -107,3 +107,39 @@ and [after](screenshots/unified-after-973.png), expanded proposals at
 [390 px](screenshots/unified-after-390.png), a
 [two-line mobile customer](screenshots/unified-long-customer-390.png), and
 [save failure with direct retry at 320 px](screenshots/unified-save-error-320.png).
+
+The six keyboard scenarios keep the layout viewport fixed at 390×844 or 320×684
+while modelling only `visualViewport.height` (500/360 px) and `offsetTop` (0/80 px).
+They use actual Chromium touch events and hit tests with synthetic catalog and
+service suggestions. Run with the same Playwright/browser overrides:
+
+```sh
+node manager_frontend/tests/visual/order-usability/keyboard.cjs
+```
+
+The default fixture port is 5207; screenshots and `results.json` go to
+`/tmp/order-keyboard-acceptance`. `KITLANE_CASE` selects a case name printed by the
+suite. Coverage is bounded to four new-line Add/Cancel outcomes and two existing
+row Cancel/revert outcomes. It checks long titles, price/quantity/upward scroll,
+real suggestion selection, invalid Apply, first-touch command delivery and totals,
+action geometry through focusout up to click, and release after viewport restore.
+Manual mode must produce no order PATCH requests. No second tap is used.
+Automatic focus, input, resize and validation must reveal the active field above
+the actions. Intentional manual scrolling remains free to move that field out of
+view; it must preserve compact chrome and usable Add/Cancel. A genuine focus
+transition back to the quantity then verifies automatic reveal again.
+
+Before the fix, all four original new-line touch checks left the editor open:
+focusout moved the action row before click. At 320/360, returning headers also
+reduced useful editing space to zero. Independent acceptance after the fix
+confirmed 8/8 quantity/title first-touch outcomes and useful space of 224 px at
+320/360/offset0, 287 px at offset80, and 364 px at 390/500. The ordinary nine-case
+suite, including its unchanged 100 ms validation visibility checks, also passed.
+
+This models viewport geometry and touch delivery; it does not emulate a native
+IME or establish Android/iOS Safari behavior on a physical device.
+
+Unedited evidence: the same 320/360 view [before](screenshots/keyboard-before-320.png)
+and [after](screenshots/keyboard-after-320.png),
+[catalog suggestions with accessible actions](screenshots/keyboard-catalog-320.png),
+and [a service applied after its first touch](screenshots/keyboard-first-add-390.png).
