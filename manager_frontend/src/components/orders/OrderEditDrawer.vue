@@ -76,7 +76,9 @@ const emit = defineEmits<{
 }>();
 
 const drawerScrollContainer = ref<HTMLElement | null>(null);
-const { keyboardOpen, keyboardStyle } = useOrderKeyboardViewport(drawerScrollContainer);
+const { keyboardOpen, lineKeyboardOpen, keyboardStyle } = useOrderKeyboardViewport(
+  drawerScrollContainer, () => props.modelValue ? props.order?.id : null,
+);
 const workspaceScrollContainer = ref<HTMLElement | null>(null);
 const proposalClientPreview = ref(false);
 const proposalPanelRef = ref<InstanceType<typeof OrderAsyncPanel> | null>(null);
@@ -112,7 +114,8 @@ const isPage = computed(() => props.presentation === 'page');
 useDocumentScrollLock(() => props.modelValue && !isPage.value);
 const { captureFocus, focusContainer, restoreFocus, trapFocus } = useDrawerFocusTrap(drawerScrollContainer);
 const { compact: compactWorkspaceHeader, reset: resetWorkspaceHeader } = useSmartStickyHeader(workspaceScrollContainer, { retainCompactWhenContentFits: true });
-useManagerWorkspaceChrome(() => isPage.value && props.modelValue && compactWorkspaceHeader.value);
+const effectiveWorkspaceCompact = computed(() => compactWorkspaceHeader.value || lineKeyboardOpen.value);
+useManagerWorkspaceChrome(() => isPage.value && props.modelValue && effectiveWorkspaceCompact.value);
 watch(() => [props.order?.id, props.modelValue], () => {
   proposalClientPreview.value = false;
   showProposalCosts.value = false;
@@ -725,7 +728,7 @@ defineExpose({ prepareToLeave });
       </div>
     </Transition>
     <div v-if="!isPage" class="flex-1 bg-black/60" aria-hidden="true" @click="closeDrawer" />
-    <aside ref="drawerScrollContainer" :style="keyboardStyle" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="onWorkspaceKeydown" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
+    <aside ref="drawerScrollContainer" :style="keyboardStyle" :data-order-keyboard-line="lineKeyboardOpen || undefined" tabindex="-1" :role="isPage ? 'region' : 'dialog'" :aria-modal="isPage ? undefined : true" aria-label="Рабочая область заказа" :inert="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy ? true : undefined" :aria-busy="discardingDraft || installationAttaching || sourceApplying || responsibilityBusy || workerAssignmentBusy || workerPayBusy" class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-white text-gray-900 outline-none dark:bg-slate-950 dark:text-slate-100" :class="isPage ? '' : 'shadow-2xl md:my-4 md:h-[calc(100%-2rem)] md:w-[calc(100%-2rem)] md:rounded-2xl xl:max-w-[1680px] xl:border xl:border-gray-200 dark:xl:border-slate-700'" @keydown="onWorkspaceKeydown" @keydown.esc="!isPage && closeDrawer()" @click="trackUsageControl" @change="trackUsageControl">
       <OrderWorkspaceHeader
         v-show="!proposalClientPreview"
         class="shrink-0"
@@ -754,7 +757,8 @@ defineExpose({ prepareToLeave });
         :save-failed="saveFailed"
         :save-status-text="saveStatusText"
         @toggle-autosave="orderSaving.toggle"
-        :compact="compactWorkspaceHeader"
+        :compact="effectiveWorkspaceCompact"
+        :keyboard-editing="lineKeyboardOpen"
         @update:title="!draftBlocked && (orderTitle = $event)"
         @change-workflow="!draftBlocked && setWorkflowType($event)"
         @next="handleWorkspaceNextAction"
@@ -776,7 +780,7 @@ defineExpose({ prepareToLeave });
             :workflow="workflowType"
             @select="selectWorkspaceSection"
           />
-        <div v-show="!compactWorkspaceHeader || requestOpen || mobileContextOpen || contextControlsFocused" class="order-context-controls mt-1 grid grid-cols-2 gap-2" data-testid="order-context-controls" @focusin="contextControlsFocused = true" @focusout="contextControlsFocused = Boolean(($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node | null))">
+        <div v-show="!lineKeyboardOpen && (!compactWorkspaceHeader || requestOpen || mobileContextOpen || contextControlsFocused)" class="order-context-controls mt-1 grid grid-cols-2 gap-2" data-testid="order-context-controls" @focusin="contextControlsFocused = true" @focusout="contextControlsFocused = Boolean(($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node | null))">
           <button ref="requestTrigger" type="button" data-testid="order-request-trigger" class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-brand-900 transition hover:bg-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-100 dark:hover:bg-brand-900" :class="requestOpen ? 'border-brand-400 bg-brand-100 dark:border-brand-600 dark:bg-brand-900' : 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-950'" :aria-expanded="requestOpen" aria-controls="order-request-details" @click="toggleRequest">
             <FileText :size="18" class="hidden shrink-0 sm:block" aria-hidden="true" />
             <span class="min-w-0 flex-1"><span class="order-request-title block text-xs font-semibold leading-4 sm:truncate sm:text-sm"><span class="min-w-0 truncate">Заявка и файлы</span><span class="order-request-file-count shrink-0"> · {{ requestFileCount }}</span></span><span class="hidden truncate text-xs text-brand-700 dark:text-brand-200 sm:block">{{ comment.trim() || requestEvidence.context.value?.sources.some(source => source.text.trim()) ? 'Есть текст' : requestEvidence.loading.value ? 'Проверяем текст…' : requestEvidence.error.value ? 'Текст не загружен' : 'Текст не указан' }} · {{ requestEvidence.summary.value }}</span></span>
@@ -932,6 +936,7 @@ defineExpose({ prepareToLeave });
         </div>
       </div>
       <OrderProposalTotalsBar
+        v-show="!lineKeyboardOpen"
         v-if="activeWorkspaceSection === 'proposal'"
         :keyboard-open="keyboardOpen"
         :editable="!activeProposalLocked && !demoReadOnly"
@@ -973,6 +978,10 @@ defineExpose({ prepareToLeave });
 </style>
 
 <style scoped>
+[data-order-keyboard-line] :deep(.order-line-form textarea) {
+  max-height: var(--order-line-field-max-height);
+  overflow-y: auto;
+}
 .order-request-file-count {
   display: none;
 }

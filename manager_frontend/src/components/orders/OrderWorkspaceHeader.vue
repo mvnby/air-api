@@ -34,6 +34,7 @@ const props = defineProps<{
   compact?: boolean;
   workspace?: boolean;
   unified?: boolean;
+  keyboardEditing?: boolean;
   usageEnabled?: boolean;
   canViewUsageReport?: boolean;
 }>();
@@ -94,7 +95,7 @@ const clearResizeAnimation = () => {
   headerRef.value?.style.removeProperty('overflow');
 };
 
-watch([effectiveCompact, workspaceCollapsed], async ([isCompact]) => {
+watch([effectiveCompact, workspaceCollapsed, () => props.keyboardEditing], async ([isCompact]) => {
   const header = headerRef.value;
   if (!header) return;
   const generation = ++resizeGeneration;
@@ -109,7 +110,8 @@ watch([effectiveCompact, workspaceCollapsed], async ([isCompact]) => {
   if (generation !== resizeGeneration || headerRef.value !== header) return;
   const toHeight = header.getBoundingClientRect().height;
   if (
-    Math.abs(toHeight - fromHeight) < 1
+    props.keyboardEditing
+    || Math.abs(toHeight - fromHeight) < 1
     || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     || typeof header.animate !== 'function'
   ) return;

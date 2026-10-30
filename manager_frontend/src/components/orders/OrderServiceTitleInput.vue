@@ -124,7 +124,7 @@ onBeforeUnmount(() => { request += 1; clearTimeout(timer); });
 <template>
   <div ref="container" class="min-w-0" @focusout="focusOut">
     <textarea ref="field" v-model="title" data-testid="service-title-input" data-order-usage="order_service_edit" class="field-input min-h-[64px] resize-y text-sm leading-snug [field-sizing:content]" rows="2" placeholder="Название услуги — можно написать своё" aria-label="Название услуги" :aria-invalid="invalid || undefined" :aria-expanded="open" aria-autocomplete="list" @focus="focus" @click="focus" @input="input" @keydown="keydown" />
-    <div v-if="open" data-testid="service-context-menu" class="mt-1 min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
+    <div v-if="open" data-testid="service-context-menu" data-line-suggestions style="max-height:var(--order-line-suggestions-height,none)" class="overflow-y-auto mt-1 min-w-0 rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
       <div class="flex flex-wrap gap-1" role="group" aria-label="Разделы услуг">
         <button v-for="item in kinds" :key="item.value" type="button" class="min-h-10 rounded-lg px-3 text-xs font-medium focus-visible:ring-2 focus-visible:ring-brand-500" :class="activeKind === item.value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'" :aria-pressed="activeKind === item.value" @mousedown.prevent @click="selectKind(item.value)">{{ item.label }}</button>
       </div>
