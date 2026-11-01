@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -122,10 +122,19 @@ class CanonicalPublicCatalogDAO:
             faceted_tag_ids=faceted_tag_ids,
             search_query=search_query,
         )
+        # Zero denotes an unknown price; keep these models after priced ones.
         if sort == "price_asc":
-            statement = statement.order_by(Product.price.asc(), Product.id.asc())
+            statement = statement.order_by(
+                case((Product.price > 0, 0), else_=1),
+                Product.price.asc(),
+                Product.id.asc(),
+            )
         elif sort == "price_desc":
-            statement = statement.order_by(Product.price.desc(), Product.id.desc())
+            statement = statement.order_by(
+                case((Product.price > 0, 0), else_=1),
+                Product.price.desc(),
+                Product.id.desc(),
+            )
         elif sort == "area_asc":
             statement = statement.order_by(
                 ProductDAO.area_expr(session).asc(),

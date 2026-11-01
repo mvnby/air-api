@@ -274,6 +274,48 @@ async def test_public_catalog_search_count_matches_filtered_items(async_client: 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["/api/v1/catalog", "/api/v1/products"])
+@pytest.mark.parametrize("sort", ["price_asc", "price_desc"])
+async def test_catalog_price_sort_keeps_unpriced_models_last_before_pagination(
+    async_client: AsyncClient, db, endpoint, sort
+):
+    marker = "CatalogPriceOrder"
+    products = [
+        Product(
+            title=f"{marker} {name}",
+            slug=f"catalog-price-order-{name}",
+            price=price,
+            is_published=published,
+        )
+        for name, price, published in [
+            ("request", 0, True),
+            ("premium", 4200, True),
+            ("budget-first", 1600, True),
+            ("budget-second", 1600, True),
+            ("hidden", 900, False),
+        ]
+    ]
+    db.add_all(products)
+    await db.commit()
+    expected = (
+        [products[2], products[3], products[1], products[0]]
+        if sort == "price_asc"
+        else [products[1], products[3], products[2], products[0]]
+    )
+    actual = []
+    for page in (1, 2):
+        response = await async_client.get(
+            endpoint,
+            params={"q": marker, "sort": sort, "page": page, "limit": 2},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["meta"] == {"total": 4, "page": page, "limit": 2, "pages": 2}
+        actual.extend(item["slug"] for item in payload["items"])
+    assert actual == [product.slug for product in expected]
+
+
+@pytest.mark.asyncio
 async def test_catalog_default_sort_uses_recommendation_score(async_client: AsyncClient, db):
     now = datetime.now()
     apartment = Product(
