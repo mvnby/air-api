@@ -37,7 +37,7 @@
 | Клиенты, канбан/таблица заказов и входящие | [Аудит и доработка рабочих страниц](manager-working-pages-usability.md) |
 | Карточка клиента, контакты и распознавание реквизитов | [Рабочая область клиента](customer-workspace.md) |
 | Входящие: прочтение, разбор, автоархив тендеров и условия документов | [Согласованный контракт и макет](incoming-triage-workspace.md) |
-| Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
+| Генерация документов и шаблоны | [Архитектура](document-module-architecture.md), [план перехода по открытым договорам](open-contract-document-rollout.md), [DOCX-шаблоны](native-document-template-bundles.md), [плейсхолдеры](document-placeholders.md) |
 | ТН-2 и ТТН-1 | [Исследование форм и подготовленные макеты](waybill-template-research.md) |
 | Ремонт и акты дефекта | [Сценарии ремонта](repair-workflow-v1.md), [акт дефекта V3](bot-defect-act-v3.md) |
 | Медиа и приватные вложения | [R2/S3](media-storage-r2.md), [вложения сервиса](service-attachments.md) |
