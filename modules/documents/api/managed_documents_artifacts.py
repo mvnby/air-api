@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from modules.documents.domain.consumer_terms import CUSTOMER_EQUIPMENT_WORK_ACTS
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -672,7 +673,15 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         )
     )
     statement_values = ((document.render_snapshot or {}).get("values") or {})
+    scoped_products = None
+    if document.doc_type in CUSTOMER_EQUIPMENT_WORK_ACTS:
+        saved_ids = (document.scope_meta or {}).get("product_line_ids") or []
+        rows = ((document.render_snapshot or {}).get("table_rows") or {}).get("lines") or []
+        # Older work acts included all goods without recording which line IDs they used.
+        if saved_ids or not any(row.get("line.kind") == "product" for row in rows):
+            scoped_products = saved_ids
     return ManagedDocumentItem(
+        scope_product_line_ids=scoped_products,
         repair_defect=(
             (document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("repair_defect")
             if document.doc_type == "repair_defect_act" else None

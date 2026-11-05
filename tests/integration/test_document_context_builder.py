@@ -436,6 +436,7 @@ async def test_b2c_context_is_self_contained_and_snapshots_consumer_terms(
             legal_entity_id=issuer.id,
             document_type=document_type,
             issue_date=date(2026, 8, 31),
+            scope_product_line_ids=(),
             consumer_terms=ConsumerDocumentTerms(
                 equipment_brand="Midea",
                 equipment_model="Breeze X",

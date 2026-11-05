@@ -120,7 +120,7 @@ watch(() => props.proposalTotalCents, (_total, oldTotal) => {
 
     <div v-if="terms.installation_two_stages" class="mt-4 grid gap-3 sm:grid-cols-2">
       <p class="sm:col-span-2 text-xs leading-5 text-brand-900/75 dark:text-brand-200/75" data-testid="installation-two-stages-description">
-        Сумма выбранного предложения: <MoneyAmount :value="proposalTotalCents === null ? null : proposalTotalCents / 100" :formatted-value="formatBynAmount(proposalTotalCents)" />. Состав работ и суммы этапов попадут в договор.
+        Сумма заказ-акта: <MoneyAmount :value="proposalTotalCents === null ? null : proposalTotalCents / 100" :formatted-value="formatBynAmount(proposalTotalCents)" />. Состав работ и суммы этапов попадут в договор.
       </p>
       <div class="sm:col-span-2">
         <span class="text-xs font-semibold text-brand-950/80 dark:text-brand-100/80">Первый этап</span>

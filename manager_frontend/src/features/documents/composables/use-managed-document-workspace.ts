@@ -47,6 +47,7 @@ import {
   type TransportTerms,
 } from '../model/transport-terms';
 import { newRepairDefectForm, repairDefectPayload } from '../model/repair-defect';
+import { isCustomerEquipmentWorkAct } from '../model/consumer-document-terms';
 import { hasInitialDocumentForm } from '../model/native-document-options';
 import { openNativeDocumentPreview } from '../integrations/native-document-preview';
 
@@ -58,7 +59,8 @@ type ManagedWorkspaceInput = {
     'scope_customer_branch_id' | 'scope_title' | 'scope_address' | 'scope_service_line_ids' | 'scope_service_line_quantities'>;
   workflowType: () => string | null | undefined;
   proposalId: () => number | null;
-  proposalTotalCents: () => number | null;
+  proposalTotalCents: (type: string) => number | null;
+  selectedMaterialIds: () => number[] | null;
   notify: (message: string, type?: 'success' | 'error') => void;
   refresh: () => void;
 };
@@ -330,7 +332,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
     return installationTermsError(
       consumerTerms.value,
-      input.proposalTotalCents(),
+      input.proposalTotalCents(documentType.value),
     );
   });
 
@@ -578,6 +580,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const draftPayload = computed(() => ({
     ...(documentType.value === 'act' ? input.actScope?.() : {}),
+    scope_product_line_ids: isCustomerEquipmentWorkAct(documentType.value) ? input.selectedMaterialIds() ?? undefined : undefined,
     legal_entity_id: selectedLegalEntityId.value,
     repair_defect: documentType.value === 'repair_defect_act' ? repairDefectPayload(repairDefect.value) : undefined,
     receipt_note: documentType.value === 'retail_receipt' ? receiptNote.value.trim() || null : undefined,

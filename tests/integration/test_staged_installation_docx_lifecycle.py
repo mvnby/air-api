@@ -197,9 +197,9 @@ async def test_customer_equipment_stages_freeze_custom_terms_without_registering
         selection=DocumentContextSelection(
             order_id=order_id, legal_entity_id=issuer.id,
             document_type="b2c_customer_equipment_installation_act", issue_date=date(2026, 10, 28),
-            proposal_id=proposal.id,
+            proposal_id=proposal.id, scope_product_line_ids=(),
             consumer_terms=ConsumerDocumentTerms(installation_two_stages=True, installation_unit_count=3,
-                installation_remaining_amount="400.00",
+                installation_remaining_amount="150.00",
                 installation_first_stage_works="Подготовка трех трасс и наружные блоки.",
                 installation_second_stage_works="Три внутренних блока и пусконаладка.",
                 installation_second_stage_due="После ремонта и согласования даты выезда."),
@@ -208,8 +208,8 @@ async def test_customer_equipment_stages_freeze_custom_terms_without_registering
     parameters = await ManagedDocumentDraftMutationService.get(db, tenant_scope=scope, document_id=draft.id)
     terms = parameters["consumer_terms"]
     assert terms["installation_unit_count"] == 3
-    assert terms["installation_first_stage_amount"] == "2740.00"
-    assert terms["installation_remaining_amount"] == "400.00"
+    assert terms["installation_first_stage_amount"] == "250.00"
+    assert terms["installation_remaining_amount"] == "150.00"
     issued = await ManagedDocumentService.issue(db, tenant_scope=scope, document_id=draft.id,
         template_storage=template_storage, artifact_storage=artifact_storage, pdf_converter=FakePdfConverter())
     artifact = next(item for item in issued.artifacts if item.kind == "rendered_docx")
@@ -217,7 +217,7 @@ async def test_customer_equipment_stages_freeze_custom_terms_without_registering
     assert "Первый: Подготовка трех трасс и наружные блоки." in text
     assert "Второй: Три внутренних блока и пусконаладка." in text
     assert "После ремонта и согласования даты выезда." in text
-    assert "Остаток: 400.00" in text
+    assert "Остаток: 150.00" in text
     assert "{{" not in text
     await db.refresh(order)
     assert (order.status, order.total_payments, order.balance_due, order.is_paid) == finances

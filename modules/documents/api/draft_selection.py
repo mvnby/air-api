@@ -32,7 +32,7 @@ def selection_from_payload(order_id: int, payload: ManagedDocumentDraftPayload) 
         scope_address=payload.scope_address,
         scope_service_line_ids=tuple(payload.scope_service_line_ids),
         scope_service_line_quantities=payload.scope_service_line_quantities,
-        scope_product_line_ids=tuple(payload.scope_product_line_ids),
+        scope_product_line_ids=(tuple(payload.scope_product_line_ids) if "scope_product_line_ids" in payload.model_fields_set else None),
         business_role=payload.business_role,
         document_role_type=payload.document_role_type,
         consumer_terms=(

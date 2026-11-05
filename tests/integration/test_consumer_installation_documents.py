@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 from io import BytesIO
 
@@ -90,3 +91,31 @@ async def test_staged_draft_cannot_silently_use_old_single_stage_template(db, tm
                 ),
             ),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["b2c_customer_equipment_installation_act", "b2c_maintenance_repair_act"])
+async def test_customer_work_acts_require_explicit_materials_from_selected_proposal(db, kind):
+    order, issuer, proposal, alternative = await _seed_order(db)
+    issuer.requisites = {**issuer.requisites, "offer_url": "https://example.test/offer",
+                         "offer_version": "1", "offer_published_on": "01.06.2026"}
+    await db.commit()
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    form = DocumentContextSelection(order_id=order.id, legal_entity_id=issuer.id, document_type=kind,
+                                    issue_date=date(2026, 11, 6), proposal_id=proposal.id)
+    own_line = await db.scalar(select(OrderProductLink).where(OrderProductLink.proposal_id == proposal.id))
+    other_line = await db.scalar(select(OrderProductLink).where(OrderProductLink.proposal_id == alternative.id))
+    async def build(selection):
+        return await DocumentContextBuilder.build(db, tenant_scope=scope, selection=selection)
+    with pytest.raises(DocumentContextError, match="состав акта"):
+        await build(form)
+    work = await build(replace(form, scope_product_line_ids=()))
+    assert [row["line.kind"] for row in work["table_rows"]["lines"]] == ["service"]
+    assert work["values"]["totals.amount"] == "400.00"
+    with pytest.raises(DocumentContextError, match="не из текущего предложения"):
+        await build(replace(form, scope_product_line_ids=(other_line.id,)))
+    parts = await build(replace(form, scope_product_line_ids=(own_line.id,)))
+    assert [row["line.kind"] for row in parts["table_rows"]["lines"]] == ["product", "service"]
+    assert parts["values"]["totals.amount"] == "1400.00"
+    with pytest.raises(DocumentContextError, match="Добавьте работы"):
+        await build(replace(form, proposal_id=alternative.id, scope_product_line_ids=(other_line.id,)))

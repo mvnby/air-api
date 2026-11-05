@@ -59,7 +59,7 @@ export const calculateInstallationTwoStages = (
   rawRemainingAmount?: string | null,
 ): InstallationTwoStagesCalculation => {
   if (proposalTotalCents === null || proposalTotalCents <= 0) {
-    return { firstStageCents: null, remainingCents: null, error: 'Не удалось определить сумму выбранного предложения' };
+    return { firstStageCents: null, remainingCents: null, error: 'Не удалось определить сумму заказ-акта' };
   }
   const firstStageCents = moneyToCents(rawFirstStageAmount);
   if (firstStageCents === null) {
@@ -69,11 +69,11 @@ export const calculateInstallationTwoStages = (
     return {
       firstStageCents,
       remainingCents: null,
-      error: 'Первый этап должен быть больше 0 и меньше полной суммы предложения',
+      error: 'Первый этап должен быть больше 0 и меньше полной суммы заказ-акта',
     };
   }
   if (rawRemainingAmount != null && moneyToCents(rawRemainingAmount) !== proposalTotalCents - firstStageCents) {
-    return { firstStageCents, remainingCents: null, error: 'Суммы этапов должны совпадать с полной стоимостью предложения' };
+    return { firstStageCents, remainingCents: null, error: 'Суммы этапов должны совпадать с полной стоимостью заказ-акта' };
   }
   return {
     firstStageCents,

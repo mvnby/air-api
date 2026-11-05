@@ -27,6 +27,9 @@ export type ManagedDocumentDraftPayload = {
     scope_address?: (string | null);
     scope_service_line_ids?: Array<number>;
     scope_service_line_quantities?: Record<string, number>;
+    /**
+     * Order product line IDs from the selected proposal. For a customer-owned equipment installation or maintenance/repair act with product lines, explicitly pass [] for work only or the supplied materials' IDs.
+     */
     scope_product_line_ids?: Array<number>;
     business_role?: (string | null);
     replaces_document_id?: (number | null);

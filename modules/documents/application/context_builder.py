@@ -50,6 +50,7 @@ from .consumer_context import (
     ConsumerDocumentContextError,
     build_consumer_document_context,
 )
+from modules.documents.domain.consumer_terms import CUSTOMER_EQUIPMENT_WORK_ACTS
 from .commercial_rows import line_rows
 from .errors import ManagedDocumentConflictError
 from .open_contract_basis import resolve_native_basis
@@ -82,7 +83,7 @@ class DocumentContextSelection:
     scope_address: str | None = None
     scope_service_line_ids: tuple[int, ...] = ()
     scope_service_line_quantities: Mapping[int, int] | None = None
-    scope_product_line_ids: tuple[int, ...] = ()
+    scope_product_line_ids: tuple[int, ...] | None = None
     business_role: str | None = None
     document_role_type: str | None = None
     consumer_terms: ConsumerDocumentTerms | None = None
@@ -589,11 +590,16 @@ class DocumentContextBuilder:
         document_type: str,
         service_ids: Iterable[int],
         service_quantities: Mapping[int, int],
-        product_ids: Iterable[int],
+        product_ids: Iterable[int] | None,
     ) -> tuple[list[OrderProductLink], list[tuple[OrderServiceLink, int]]]:
         requested_service_ids = {int(value) for value in service_ids}
-        requested_product_ids = {int(value) for value in product_ids}
-        if document_type == "act" and not requested_product_ids:
+        if document_type in CUSTOMER_EQUIPMENT_WORK_ACTS:
+            if not any(int(item.quantity or 0) > 0 for item in service_links):
+                raise DocumentContextError("Добавьте работы в выбранное предложение")
+            if product_links and product_ids is None:
+                raise DocumentContextError("Укажите состав акта: только работы или работы с выбранными материалами")
+        requested_product_ids = {int(value) for value in product_ids or ()}
+        if (document_type == "act" or document_type in CUSTOMER_EQUIPMENT_WORK_ACTS) and not requested_product_ids:
             selected_products: list[OrderProductLink] = []
         else:
             selected_products = list(product_links)

@@ -282,7 +282,7 @@ class ManagedDocumentService:
                 "service_line_quantities": dict(
                     selection.scope_service_line_quantities or {}
                 ),
-                "product_line_ids": list(selection.scope_product_line_ids),
+                "product_line_ids": list(selection.scope_product_line_ids or ()),
             },
             doc_type=str(selection.document_type).strip().lower(),
             business_role=snapshot["meta"].get("business_role"),

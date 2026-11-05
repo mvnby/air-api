@@ -1,3 +1,7 @@
+export const isCustomerEquipmentWorkAct = (type: string) => (
+  type === 'b2c_customer_equipment_installation_act' || type === 'b2c_maintenance_repair_act'
+);
+
 export type ConsumerDocumentTerms = {
   equipment_brand: string | null;
   equipment_model: string | null;

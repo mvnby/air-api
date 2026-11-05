@@ -12,7 +12,7 @@ const defaults = { equipment_brand: 'Midea', equipment_model: 'MSAG-09HRN1', equ
 const baseOrder = {
   id: 42, status: 'negotiation', created_at: NOW, total_amount: 3140, total_cost: 2000, margin: 1140, is_paid: false,
   customer: { id: 11, type: 'individual', name: 'Покупатель' }, documents: [], product_lines: [], service_lines: [],
-  proposals: [{ id: 7, order_id: 42, name: 'Основное', is_selected: true, is_archived: false, product_lines: [{ line_total: 3140 }] }],
+  proposals: [{ id: 7, order_id: 42, name: 'Основное', is_selected: true, is_archived: false, product_lines: [{ id: 21, product_title: 'Комплект материалов', quantity: 1, price: 200, line_total: 200 }], service_lines: [{ id: 22, service_title: 'Монтаж', quantity: 1, price: 2940, line_total: 2940 }] }],
   needs_attention: false, awaiting_measurement: false, client_thinking: false, ready_for_execution: false,
 } as ManagerOrderDetailResponse;
 const issuedSupplyInstallationDocument = {
@@ -87,6 +87,12 @@ describe('consumer installation documents', () => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
     await flushPromises();
+    if (documentType === 'b2c_customer_equipment_installation_act') {
+      expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+      await wrapper.get('[data-testid="consumer-work-only"]').setValue(true);
+      expect(wrapper.get('[data-testid="consumer-act-total"]').text().replace(/\s/g, '')).toContain('2940');
+      await wrapper.get('[data-testid="consumer-material-21"]').setValue(true);
+    }
     await wrapper.get('[data-testid="installation-two-stages-toggle"]').trigger('click');
     expect(wrapper.get<HTMLInputElement>('[data-testid="installation-second-stage-amount"]').element.value).toBe('100.00');
     await wrapper.get('[data-testid="installation-unit-count"]').setValue('3');
@@ -134,9 +140,22 @@ describe('consumer installation documents', () => {
     await wrapper.get('[data-testid="installation-first-stage-amount"]').setValue('3000');
     await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
     await flushPromises();
+    if (documentType !== 'b2c_route_laying_act') await wrapper.get('[data-testid="consumer-work-only"]').setValue(true);
     await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({ document_type: documentType, consumer_terms: expect.objectContaining({ installation_two_stages: false, installation_first_stage_amount: null }) }));
+  });
+
+  it.each([
+    { saved: [21], expected: true }, { saved: [88], expected: false }, { saved: null, expected: false },
+  ])('reviews saved materials when replacing a customer work act ($saved)', async ({ saved, expected }) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
+      ...issuedSupplyInstallationDocument, doc_type: 'b2c_maintenance_repair_act', scope_product_line_ids: saved,
+    }] });
+    const wrapper = await mountConsumerWorkspace();
+    await prepareReplacementFromDocumentList(wrapper);
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-material-21"]').element.checked).toBe(expected);
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled') === undefined).toBe(expected);
   });
 
   it('serializes exact two-stage amounts, the default first-stage outdoor unit, and clears them with the direct toggle', async () => {

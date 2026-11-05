@@ -63506,7 +63506,8 @@
             },
             "type": "array",
             "maxItems": 500,
-            "title": "Scope Product Line Ids"
+            "title": "Scope Product Line Ids",
+            "description": "Order product line IDs from the selected proposal. For a customer-owned equipment installation or maintenance/repair act with product lines, explicitly pass [] for work only or the supplied materials' IDs."
           },
           "business_role": {
             "anyOf": [
@@ -63628,6 +63629,20 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "scope_product_line_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Product Line Ids"
+          },
           "repair_defect": {
             "anyOf": [
               {
