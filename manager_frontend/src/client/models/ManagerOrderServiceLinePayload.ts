@@ -8,6 +8,7 @@ export type ManagerOrderServiceLinePayload = {
     service_id?: (number | null);
     title: string;
     description?: (string | null);
+    unit?: (string | null);
     quantity: number;
     price: number;
     cost?: (number | null);

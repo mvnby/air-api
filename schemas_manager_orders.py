@@ -178,6 +178,7 @@ class OrderServiceLineResponse(BaseModel):
     service_id: Optional[int] = None
     service_title: str
     description: Optional[str] = None
+    unit: Optional[str] = None
     installation_display_lines: List[InstallationDisplayLineResponse] = Field(default_factory=list)
     service_category: Optional[str] = None
     quantity: int
@@ -618,6 +619,7 @@ class ManagerOrderServiceLinePayload(BaseModel):
     service_id: Optional[int] = None
     title: str
     description: Optional[str] = Field(default=None, max_length=10000)
+    unit: Optional[str] = Field(default=None, max_length=100)
     quantity: int
     price: float
     cost: Optional[float] = None

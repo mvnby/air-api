@@ -11,11 +11,13 @@ from sqlmodel import select
 
 from core.command_actor import CommandActor
 from core.config import settings
-from models import Customer, Order
+from models import Customer, Order, OrderProposal
 from schemas_connector_mcp import (
     ConnectorContext,
     CustomerSearchResult,
     CustomerSummary,
+    OrderDetail,
+    OrderProposalSummary,
     OrderSearchResult,
     OrderSummary,
 )
@@ -148,8 +150,15 @@ class ConnectorQueryService:
     @classmethod
     async def get_order(
         cls, session: AsyncSession, actor: CommandActor, *, order_id: int
-    ) -> OrderSummary:
+    ) -> OrderDetail:
         row = (await session.execute(cls._orders_statement(actor).where(Order.id == order_id))).first()
         if row is None:
             raise HTTPException(404, "Order not found")
-        return cls._order(row[0], row[1])
+        proposals = (await session.execute(
+            select(OrderProposal.id, OrderProposal.name, OrderProposal.status,
+                   OrderProposal.is_selected, OrderProposal.is_archived)
+            .where(OrderProposal.order_id == order_id)
+            .order_by(OrderProposal.sort_order, OrderProposal.id)
+        )).mappings().all()
+        return OrderDetail(**cls._order(row[0], row[1]).model_dump(),
+                           proposals=[OrderProposalSummary(**item) for item in proposals])

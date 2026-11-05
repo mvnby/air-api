@@ -178,6 +178,7 @@ class OrderProposalCommandService:
                             service_id=link.service_id,
                             title=link.title,
                             description=service_line_description(link, presentations.get(link.id)),
+                            unit=link.unit,
                             quantity=link.quantity,
                             price=link.price,
                             cost=link.cost,

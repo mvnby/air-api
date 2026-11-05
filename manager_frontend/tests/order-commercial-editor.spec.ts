@@ -59,6 +59,13 @@ describe('useOrderCommercialEditor', () => {
       { title: 'Сборка лесов', quantity: 2, price: 150, description: 'По согласованию' },
     ] });
 
+  it('keeps the service unit when loading and saving an edited description', () => {
+    const editor = createEditor();
+    editor.loadLines([], [{ id: 10, service_id: null, service_title: 'Ремонт', description: 'Компрессор', unit: 'компл.', quantity: 1, price: 1030, line_total: 1030 }]);
+    editor.serviceLines.value[0]!.description = 'Замена компрессора';
+    expect(editor.buildLinesPayload(17).services[0]).toMatchObject({ unit: 'компл.', description: 'Замена компрессора' });
+  });
+
   it('adds an arbitrary manual service without equipment or an estimate', () => {
     const editor = createEditor();
     editor.addServiceLine();

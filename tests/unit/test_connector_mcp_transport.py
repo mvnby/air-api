@@ -289,3 +289,23 @@ async def test_maximum_escaped_maintenance_fields_fit_the_finite_transport(mcp_c
     accepted = await client.post('/api/connector/mcp', content=body, headers={'Content-Type': 'application/json'})
     assert accepted.status_code == 200 and not accepted.json()['result']['isError']
     assert calls == ['create_maintenance_finding']
+
+
+@pytest.mark.asyncio
+async def test_service_order_scopes_are_separate_and_qualifying_requires_incoming_write(mcp_client):
+    client, access, checks, _ = mcp_client
+    access["token-one"].update({"kitlane:catalog:write", "kitlane:maintenance:write"})
+    create = {"customer_id": 1, "workflow_type": "repair", "idempotency_key": "create-service-scope-test"}
+    prepare = {"order_id": 1, "proposal_id": 1, "expected_version": "1" * 64, "issue_date": "2026-11-05",
+               "idempotency_key": "contract-service-scope-test"}
+    async def denied(name, args, scope):
+        response = await _rpc(client, "tools/call", {"name": name, "arguments": args})
+        result = response.json()["result"]
+        assert result["structuredContent"]["error"]["code"] == "insufficient_scope", result
+        assert ("token-one", scope) == checks[-1]
+    await denied("create_service_order", create, "kitlane:orders:write")
+    await denied("prepare_service_order_contract", prepare, "kitlane:contracts:drafts:write")
+    access["token-one"].add("kitlane:orders:write")
+    access["token-one"].remove("kitlane:incoming:write")
+    await denied("prepare_service_order_contract", prepare, "kitlane:contracts:drafts:write")
+    await denied("create_service_order", {**create, "incoming_id": 1, "expected_incoming_version": 1}, "kitlane:incoming:write")

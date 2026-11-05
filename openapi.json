@@ -78488,6 +78488,18 @@
             ],
             "title": "Description"
           },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
           "quantity": {
             "type": "integer",
             "title": "Quantity"
@@ -90551,6 +90563,17 @@
               }
             ],
             "title": "Description"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
           },
           "installation_display_lines": {
             "items": {

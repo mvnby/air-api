@@ -204,6 +204,21 @@ const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promi
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('highlights the contract from the Manager link among the saved documents', async () => {
+    const previousUrl = window.location.href;
+    window.history.replaceState(null, '', '/manager/orders/42?proposalId=7&section=documents&documentId=77');
+    try {
+      vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+        items: [revision(76, 'draft'), revision(77, 'draft')],
+      });
+      const wrapper = await mountWorkspace();
+      expect(wrapper.get('[data-testid="current-document-77"]').attributes('tabindex')).toBe('-1');
+      expect(wrapper.get('[data-testid="current-document-76"]').attributes('tabindex')).toBeUndefined();
+    } finally {
+      window.history.replaceState(null, '', previousUrl);
+    }
+  });
+
   it('opens only the saved draft template and gates both shortcuts by template-management access', async () => {
     const draft = { ...revision(77, 'draft'), document_template_id: 19, template_version_id: 22, legal_entity_id: 6 };
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({

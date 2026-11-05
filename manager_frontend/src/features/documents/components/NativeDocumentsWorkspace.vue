@@ -7,6 +7,7 @@ import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue'
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
 import { managerSession } from '../../../services/manager-session';
+import { readOrderPage } from '../../../services/order-navigation';
 import { navigateManager, openManagerChild } from '../../../services/manager-navigation-history';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
@@ -128,6 +129,19 @@ const contractFileActions = useDocumentFileActions({
 });
 const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
 const documentGroups = computed(() => groupDocumentVersions(workspace.documents.value));
+const linkedDocumentId = computed(() => {
+  const location = new URL(window.location.href);
+  if (readOrderPage(location.href)?.orderId !== props.order.id || location.searchParams.get('section') !== 'documents') return null;
+  const ids = location.searchParams.getAll('documentId');
+  return ids.length === 1 && /^[1-9]\d*$/.test(ids[0]!) ? Number(ids[0]) : null;
+});
+const linkedCard = ref<HTMLElement | null>(null);
+watch(linkedCard, card => {
+  if (card) {
+    card.focus({ preventScroll: true });
+    card.scrollIntoView?.({ block: 'center' });
+  }
+}, { flush: 'post' });
 const documentTypes = computed(() => documentAudience.value === 'business'
   ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES);
 const documentTypeIcon = (type: string) => ({
@@ -443,7 +457,10 @@ defineExpose({
 
       <h4 v-if="documentGroups.current.length" class="mt-5 text-sm font-bold text-slate-800 dark:text-white">{{ draftCount ? 'Проверьте черновик и выпустите' : 'Готовые документы' }}</h4>
       <div class="mt-3 space-y-3">
-        <article v-for="{ document, previousVersions } in documentGroups.current" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700" :data-testid="`current-document-${document.id}`">
+        <article v-for="{ document, previousVersions } in documentGroups.current" :key="document.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700" :data-testid="`current-document-${document.id}`"
+          :ref="el => { if (document.id === linkedDocumentId) linkedCard = el as HTMLElement | null }"
+          :class="{ 'ring-2 ring-brand-500': document.id === linkedDocumentId }"
+          :tabindex="document.id === linkedDocumentId ? -1 : undefined">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">

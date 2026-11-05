@@ -9,6 +9,7 @@ export type OrderServiceLineResponse = {
     service_id?: (number | null);
     service_title: string;
     description?: (string | null);
+    unit?: (string | null);
     installation_display_lines?: Array<InstallationDisplayLineResponse>;
     service_category?: (string | null);
     quantity: number;

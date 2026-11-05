@@ -250,7 +250,7 @@ async def _replace_service_lines(
         if incoming is None or incoming.service_id != link.service_id or incoming.title != link.title \
            or incoming.quantity != link.quantity or exact_money(incoming.price) != exact_money(link.price) \
            or exact_money(incoming.cost if incoming.cost is not None else link.cost) != exact_money(link.cost) \
-           or description_changed:
+           or description_changed or ("unit" in incoming.model_fields_set and incoming.unit != link.unit):
             detached_revisions.add(link.installation_estimate_revision_id)
     for link in attached:
         if link.installation_estimate_revision_id not in detached_revisions:
@@ -273,6 +273,8 @@ async def _replace_service_lines(
         link.title = line.title
         if "description" in line.model_fields_set:
             link.description = line.description
+        if "unit" in line.model_fields_set:
+            link.unit = line.unit
         link.quantity = line.quantity
         link.price = writable_service_money(line.price)
         link.cost = (

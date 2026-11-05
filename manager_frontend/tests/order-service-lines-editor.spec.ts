@@ -115,6 +115,15 @@ describe('OrderServiceLinesEditor compact rows', () => {
     expect(lines[1]!.description).toBe('Монтаж лесов; трасса до 5 метров');
   });
 
+  it('shows and edits the service unit', async () => {
+    const lines: ServiceLine[] = [{ service_id: null, title: 'Ремонт', unit: 'компл.', quantity: 1, price: 1030, cost: 0 }];
+    const wrapper = mountEditor(lines, { compact: true });
+    expect(wrapper.text()).toContain('компл.');
+    await wrapper.setProps({ editingIndex: 0 });
+    await wrapper.get('[data-testid="service-unit"]').setValue('усл.');
+    expect(lines[0]!.unit).toBe('усл.');
+  });
+
   it('shows compact cost only when requested and permitted', async () => {
     const wrapper = mountEditor([
       { service_id: null, title: 'Монтаж', quantity: 1, price: 600, cost: 250 },

@@ -83,6 +83,18 @@ class OrderSummary(BaseModel):
     link: str
 
 
+class OrderProposalSummary(BaseModel):
+    id: int
+    name: str
+    status: str
+    is_selected: bool
+    is_archived: bool
+
+
+class OrderDetail(OrderSummary):
+    proposals: list[OrderProposalSummary]
+
+
 class OrderSearchResult(BaseModel):
     items: list[OrderSummary]
     ambiguous: bool

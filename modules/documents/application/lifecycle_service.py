@@ -375,6 +375,24 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "У черновика отсутствует снимок или версия шаблона"
             )
+        # MCP service-order drafts freeze commercial lines. Never issue one
+        # silently after Manager has changed its source proposal.
+        connector_version = (document.render_snapshot.get("meta") or {}).get(
+            "connector_proposal_version"
+        )
+        if connector_version is not None:
+            from services.order_proposal_version import proposal_version
+
+            await session.execute(
+                select(Order.id).where(Order.id == document.order_id).with_for_update()
+            )
+            current_version = await proposal_version(
+                session, document.order_id, document.proposal_id
+            )
+            if connector_version != current_version:
+                raise ManagedDocumentConflictError(
+                    "Предложение изменилось после подготовки документа. Создайте новый черновик по актуальным строкам."
+                )
         # Validate the frozen customer and term before reserving an official number.
         await prepare_framework_registration(session, document, tenant_scope)
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:

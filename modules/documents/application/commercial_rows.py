@@ -34,6 +34,7 @@ def line_rows(
                 len(rows) + 1,
                 title=service_line_document_title(item, installation_descriptions),
                 kind="service",
+                unit=getattr(item, "unit", None) or "шт.",
                 quantity=quantity,
                 unit_price=unit_price,
             )
@@ -48,13 +49,14 @@ def line_row(
     kind: str,
     quantity: int,
     unit_price: Decimal,
+    unit: str = "шт.",
 ) -> dict[str, str]:
     amount = unit_price * quantity
     return {
         "line.number": str(index),
         "line.title": title,
         "line.kind": kind,
-        "line.unit": "шт.",
+        "line.unit": unit,
         "line.quantity": str(quantity),
         "line.unit_price": money(unit_price),
         "line.amount": money(amount),
