@@ -1,14 +1,16 @@
 import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional, List
-from sqlalchemy import and_, func, or_, text
+from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from models import Customer, CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
+from models.document import DocumentLegalEntity, DocumentNumberReservation
 from models.tenancy import TenantScope
+from modules.documents.application.contract_act_numbers import allocate_contract_act_number
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES
 from services.documents.factory import DocumentFactory
@@ -1100,7 +1102,14 @@ class DocumentService:
         effective_doc_date = contract_date or datetime.now()
         if effective_doc_date.tzinfo is not None:
             effective_doc_date = effective_doc_date.replace(tzinfo=None)
-        doc_number = await DocumentService._get_next_number(session, doc_type, base_date=effective_doc_date)
+        contract_act_number = None
+        if doc_type == "act" and base_customer_contract is not None:
+            contract_act_number = await allocate_contract_act_number(
+                session, contract_id=base_customer_contract.id,
+            )
+        doc_number = await DocumentService._get_next_number(
+            session, doc_type, base_date=effective_doc_date, tenant_id=order.tenant_id if doc_type == "act" else None,
+        )
 
         # 3. Формируем название документа
         doc_name = DOC_NAMES.get(doc_type, doc_type.upper())
@@ -1139,11 +1148,10 @@ class DocumentService:
             base_customer_contract=base_customer_contract,
         )
         if doc_type == "act":
-            act_number = await DocumentService._get_act_number_for_document_basis(
+            act_number = contract_act_number or await DocumentService._get_act_number_for_document_basis(
                 session,
                 strategy.order,
                 base_document=base_document,
-                base_customer_contract=base_customer_contract,
             )
             replacements["{{act_number}}"] = str(act_number)
             replacements["{{act_sequence_number}}"] = str(act_number)
@@ -1238,6 +1246,7 @@ class DocumentService:
                 scope_title=document_scope.get("title"),
                 scope_address=document_scope.get("address"),
                 scope_meta=document_scope or None,
+                contract_act_number=contract_act_number,
                 doc_type=doc_type,
                 number=doc_number,
                 date=effective_doc_date,
@@ -1302,7 +1311,9 @@ class DocumentService:
         return selected_id
 
     @staticmethod
-    async def _get_next_number(session: AsyncSession, doc_type: str, base_date: Optional[datetime] = None) -> str:
+    async def _get_next_number(
+        session: AsyncSession, doc_type: str, base_date: Optional[datetime] = None, *, tenant_id: int | None = None,
+    ) -> str:
         """
         Генерирует следующий номер документа.
         Формат: Д-2024-001 (для договоров), КП-2024-001 (для КП), и т.д.
@@ -1334,6 +1345,22 @@ class DocumentService:
             except (ValueError, IndexError):
                 continue
 
+        if doc_type == "act" and tenant_id is not None:
+            # A reserved native issue already owns its annual CRM number, even
+            # while DOCX/PDF generation is still in progress.
+            native_floor = await session.scalar(
+                select(func.max(DocumentNumberReservation.number_value))
+                .join(DocumentLegalEntity, DocumentLegalEntity.id == DocumentNumberReservation.legal_entity_id)
+                .where(
+                    DocumentLegalEntity.is_default.is_(True),
+                    DocumentNumberReservation.tenant_id == tenant_id,
+                    DocumentNumberReservation.document_type == doc_type,
+                    DocumentNumberReservation.series == f"{prefix}-",
+                    DocumentNumberReservation.period_key == str(current_year),
+                )
+            )
+            next_num = max(next_num, (native_floor or 0) + 1)
+
         return f"{prefix}-{current_year}-{next_num:03d}"
 
     @staticmethod
@@ -1342,28 +1369,11 @@ class DocumentService:
         order: Optional[Order],
         *,
         base_document: Optional[OrderDocument] = None,
-        base_customer_contract: Optional[CustomerContract] = None,
     ) -> int:
         if base_document and base_document.id is not None:
             query = select(func.count(OrderDocument.id)).where(
                 OrderDocument.doc_type == "act",
                 OrderDocument.base_document_id == base_document.id,
-            )
-        elif base_customer_contract and base_customer_contract.id is not None:
-            query = (
-                select(func.count(OrderDocument.id))
-                .join(Order, OrderDocument.order_id == Order.id)
-                .where(
-                    OrderDocument.doc_type == "act",
-                    or_(
-                        OrderDocument.base_customer_contract_id == base_customer_contract.id,
-                        and_(
-                            OrderDocument.base_customer_contract_id.is_(None),
-                            OrderDocument.base_document_id.is_(None),
-                            Order.customer_contract_id == base_customer_contract.id,
-                        ),
-                    ),
-                )
             )
         elif order and order.customer_contract_id:
             query = (

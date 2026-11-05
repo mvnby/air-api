@@ -691,6 +691,17 @@ class Order(SQLModel, table=True):
 class OrderDocument(SQLModel, table=True):
     __tablename__ = "order_document"
     __table_args__ = (
+        CheckConstraint(
+            "contract_act_number IS NULL OR (contract_act_number > 0 "
+            "AND base_customer_contract_id IS NOT NULL AND doc_type = 'act')",
+            name="ck_order_document_contract_act_number",
+        ),
+        Index(
+            "uq_order_document_contract_act_number", "base_customer_contract_id",
+            "contract_act_number", unique=True,
+            postgresql_where=text("contract_act_number IS NOT NULL"),
+            sqlite_where=text("contract_act_number IS NOT NULL"),
+        ),
         Index("uq_order_document_id_tenant", "id", "tenant_id", unique=True),
         Index(
             "uq_order_document_id_tenant_legal_entity",
@@ -785,6 +796,7 @@ class OrderDocument(SQLModel, table=True):
     base_document_id: Optional[int] = Field(
         default=None, foreign_key="order_document.id", index=True
     )
+    contract_act_number: Optional[int] = Field(default=None)
     base_customer_contract_id: Optional[int] = Field(
         default=None, foreign_key="customer_contract.id", index=True
     )

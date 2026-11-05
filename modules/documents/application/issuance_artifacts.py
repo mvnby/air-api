@@ -38,7 +38,7 @@ def assign_official_identity(
             "document.official_number": official_number,
             "document.official_full_number": reservation.number_text,
             "document.issued_on": issued_on.strftime("%d.%m.%Y"),
-            "document.act_sequence_number": str(reservation.number_value),
+            "document.act_sequence_number": str(document.contract_act_number or reservation.number_value),
         }
     )
     document.official_series = policy.series
@@ -55,6 +55,7 @@ async def render_and_store_issued_artifacts(
     document_id: int,
     document_type: str,
     official_full_number: str,
+    contract_act_number: int | None,
     template,
     version,
     snapshot: dict,
@@ -67,14 +68,8 @@ async def render_and_store_issued_artifacts(
 ) -> tuple[StoredDocumentArtifact, StoredDocumentArtifact]:
     """Render final DOCX/PDF bytes and persist them through immutable storage."""
 
-    if editable_source is not None:
-        rendered_content = finalize_editable_draft(
-            source=editable_source,
-            placeholder_schema=version.placeholder_schema or {},
-            official_values=official_values,
-            required_placeholder_counts=required_placeholder_counts,
-        )
-    else:
+    source = editable_source
+    if source is None:
         source = await template_storage.read_persisted(
             tenant_id=tenant_id,
             template_id=int(template.id),
@@ -83,6 +78,28 @@ async def render_and_store_issued_artifacts(
             filename=str(version.source_filename or "template.docx"),
             checksum_sha256=version.checksum_sha256,
         )
+    if contract_act_number is not None and (
+        "document.act_sequence_number" not in NativeDocxRenderer().discover_placeholders(source)
+    ):
+        # Existing single-number forms use official_full_number for the printed
+        # heading. Keep both identities available to forms explicitly using them.
+        printed_number = str(contract_act_number)
+        official_values = {
+            **official_values,
+            "document.official_full_number": printed_number,
+            "document.official_number": printed_number,
+            "document.official_series": "",
+        }
+        snapshot = {**snapshot, "values": official_values}
+
+    if editable_source is not None:
+        rendered_content = finalize_editable_draft(
+            source=source,
+            placeholder_schema=version.placeholder_schema or {},
+            official_values=official_values,
+            required_placeholder_counts=required_placeholder_counts,
+        )
+    else:
         render_template, render_context = build_render_inputs(
             template=template,
             version=version,

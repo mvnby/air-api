@@ -62,6 +62,12 @@ class DocumentNumberingRepository:
             raise ValueError("Minimum width must be positive")
 
         dialect_name = cls._dialect_name(session)
+        if dialect_name == "postgresql" and legacy_document_type == "act":
+            # Google issuance and native issuance share the annual CRM namespace.
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
+                {"lock_key": f"order_document_number:{normalized_scope.series}{normalized_scope.period_key}-"},
+            )
         await cls._lock_allocation_scope(session, normalized_scope, dialect_name)
         if dialect_name == "postgresql":
             await session.execute(

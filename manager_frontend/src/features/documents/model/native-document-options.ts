@@ -69,5 +69,8 @@ export const officialDocumentTitle = (document: ManagedDocumentItem) => {
     legacyNumber && legacyNumber !== document.internal_reference && !legacyNumber.startsWith('doc_')
       ? legacyNumber : ''
   )).trim();
+  if (document.doc_type === 'act' && document.contract_act_number) {
+    return `Акт №${document.contract_act_number}${number ? ` · учётный № ${number}` : ''}`;
+  }
   return number ? `${kind} № ${number}` : `${kind} · номер ещё не присвоен`;
 };

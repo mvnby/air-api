@@ -4,13 +4,14 @@ from urllib.parse import quote
 
 from pydantic import ValidationError
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
+from modules.documents.application.contract_act_numbers import ContractActNumberConfirmationRequired
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
     ManagedDocumentError,
@@ -279,6 +280,8 @@ async def delete_managed_document_draft(
 async def issue_managed_document(
     document_id: int,
     participant_statement_confirmed: bool = False,
+    confirmed_previous_act_number: int | None = Query(default=None, ge=0, le=999_999_999),
+    expected_previous_act_id: int | None = Query(default=None, gt=0),
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> ManagedDocumentItem:
@@ -287,6 +290,10 @@ async def issue_managed_document(
     immutable DOCX/PDF artifacts. Participant statements require explicit factual
     confirmation of the current text using participant_statement_confirmed=true;
     the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+    The first act continuing an unverified open-contract series returns 409
+    contract_act_number_confirmation_required with previous_act. Inspect that
+    original and repeat with confirmed_previous_act_number and expected_previous_act_id.
+    Drafts reserve neither number. Retries reuse the same CRM and printed numbers.
     Saved external edits must be synchronized and their remote
     revision verified first. Missing document returns 404, state/edit conflicts 409 and
     generation failure 503. A failed render retains its reservation; retry the same document
@@ -335,7 +342,17 @@ async def issue_managed_document(
             verified_remote_revision=verified_remote_revision,
             participant_statement_confirmed=participant_statement_confirmed,
             participant_statement_confirmed_by=auth.username,
+            confirmed_previous_act_number=confirmed_previous_act_number,
+            confirmed_previous_act_by=auth.username,
+            expected_previous_act_id=expected_previous_act_id,
         )
+    except ContractActNumberConfirmationRequired as exc:
+        error = _document_error(
+            409, ISSUE_MANAGER_MANAGED_DOCUMENT, "contract_act_number_confirmation_required", exc
+        )
+        error.detail["previous_act"] = exc.previous_act
+        error.detail["minimum_previous_number"] = exc.minimum
+        raise error from exc
     except ManagedDocumentNotFoundError as exc:
         raise _document_error(
             404, ISSUE_MANAGER_MANAGED_DOCUMENT, "managed_document_not_found", exc
@@ -643,6 +660,7 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         official_period_key=document.official_period_key,
         official_number=document.official_number,
         official_full_number=official_full_number,
+        contract_act_number=document.contract_act_number,
         official_date=document.official_date,
         issue_city=str(
             ((document.render_snapshot or {}).get("values") or {}).get(

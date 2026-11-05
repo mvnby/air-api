@@ -8,12 +8,15 @@ import {
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
+  type ManagedDocumentDraftPayload,
   type DocumentCustomerReadiness,
   type NativeDocumentTemplateItem,
   type NativeTemplateVersionItem,
 } from '../../../client';
 import { getApiErrorMessage } from '../../../utils/api-errors';
+import { toLocalDateTimeInput } from '../../../utils/datetime';
 import { confirmDialog } from '../../../services/ui-feedback';
+import { previousContractAct, type ContractActConfirmation, type PreviousContractAct } from '../model/contract-act-number';
 import {
   createDefaultConsumerDocumentTerms,
   isConsumerDocumentType,
@@ -47,6 +50,8 @@ import { openNativeDocumentPreview } from '../integrations/native-document-previ
 type ManagedWorkspaceInput = {
   orderId: () => number;
   customerContext?: () => unknown;
+  actScope?: () => Pick<ManagedDocumentDraftPayload,
+    'scope_customer_branch_id' | 'scope_title' | 'scope_address' | 'scope_service_line_ids' | 'scope_service_line_quantities'>;
   workflowType: () => string | null | undefined;
   proposalId: () => number | null;
   proposalTotalCents: () => number | null;
@@ -80,7 +85,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const documentType = ref('offer');
   const businessRole = ref<'payment_request' | 'offer'>('payment_request');
   const documentRoleType = ref<DocumentRoleType | null>(null);
-  const issueDate = ref(new Date().toISOString().slice(0, 10));
+  const issueDate = ref(toLocalDateTimeInput(new Date().toISOString()).slice(0, 10));
   const issueCity = ref('');
   const replacesDocumentId = ref<number | null>(null);
   const baseDocumentId = ref<number | null>(null);
@@ -90,10 +95,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
   const participantStatement = ref({ procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' });
+  const contractActPrompt = ref<{ documentId: number; previous: PreviousContractAct } | null>(null);
   const participantStatementConfirmations = ref<Record<number, boolean>>({});
   watch(() => input.orderId(), () => {
     participantStatement.value = { procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' };
     participantStatementConfirmations.value = {};
+    contractActPrompt.value = null;
   }, { flush: 'sync' });
   const consumerDefaultsLoading = ref(false);
   const consumerDefaultsLoaded = ref(false);
@@ -460,8 +467,6 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     replacesDocumentId.value = null;
     documentRoleType.value = ['contract', 'offer', 'invoice'].includes(documentType.value)
       ? suggestedDocumentRole() : null;
-    baseDocumentId.value = null;
-    baseCustomerContractId.value = null;
     if (loadedWorkspaceOrderId !== input.orderId()) {
       loadedWorkspaceOrderId = input.orderId();
       resetConsumerTerms();
@@ -558,6 +563,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
   const draftPayload = computed(() => ({
+    ...(documentType.value === 'act' ? input.actScope?.() : {}),
     legal_entity_id: selectedLegalEntityId.value,
     participant_statement: documentType.value === 'participant_statement'
       ? { ...participantStatement.value } : undefined,
@@ -670,7 +676,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
-  const issue = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
+  const issue = async (document: ManagedDocumentItem, action = beginIssueAction(document), confirmation?: ContractActConfirmation) => {
     if (!action.canIssue() || issueBlockedReason.value) return;
     if (document.doc_type === 'participant_statement' && !participantStatementConfirmations.value[document.id]) {
       input.notify('Подтвердите проверку текста и фактов заявления перед выпуском.', 'error');
@@ -678,17 +684,30 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
     busy.value = true;
     try {
-      const request = document.doc_type === 'participant_statement'
-        ? ManagerDocumentSystemService.issueManagerManagedDocument(document.id, true)
-        : ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      let request;
+      if (confirmation && document.doc_type === 'act') {
+        request = ManagerDocumentSystemService.issueManagerManagedDocument(
+          document.id, false, confirmation.previousNumber, confirmation.previousActId,
+        );
+      } else if (document.doc_type === 'participant_statement') {
+        request = ManagerDocumentSystemService.issueManagerManagedDocument(document.id, true);
+      } else {
+        request = ManagerDocumentSystemService.issueManagerManagedDocument(document.id);
+      }
       await awaitMutation(request, action.isCurrent);
       if (!action.isCurrent()) return;
       await loadDocuments();
       if (!action.isCurrent()) return;
       input.refresh();
+      if (contractActPrompt.value?.documentId === document.id) contractActPrompt.value = null;
       input.notify('Документу присвоен официальный номер, DOCX и PDF сохранены.');
     } catch (error) {
       if (!action.isCurrent()) return;
+      const previous = document.doc_type === 'act' ? previousContractAct(error) : null;
+      if (previous) {
+        contractActPrompt.value = { documentId: document.id, previous };
+        return;
+      }
       input.notify(`Выпуск не завершён: ${getApiErrorMessage(error)}`, 'error');
       await loadDocuments();
     } finally {
@@ -814,6 +833,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   return {
     actTerms,
+    contractActPrompt,
     baseCustomerContractId,
     baseDocumentId,
     businessRole,

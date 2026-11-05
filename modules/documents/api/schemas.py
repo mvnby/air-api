@@ -490,6 +490,7 @@ class ManagedDocumentItem(BaseModel):
     official_period_key: str | None = None
     official_number: str | None = None
     official_full_number: str | None = None
+    contract_act_number: int | None = None
     official_date: date | None = None
     issue_city: str | None = None
     display_number: str

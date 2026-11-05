@@ -18514,7 +18514,7 @@
           "manager-document-system"
         ],
         "summary": "Issue Managed Document",
-        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Participant statements require explicit factual\nconfirmation of the current text using participant_statement_confirmed=true;\nthe issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.\nSaved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Participant statements require explicit factual\nconfirmation of the current text using participant_statement_confirmed=true;\nthe issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.\nThe first act continuing an unverified open-contract series returns 409\ncontract_act_number_confirmation_required with previous_act. Inspect that\noriginal and repeat with confirmed_previous_act_number and expected_previous_act_id.\nDrafts reserve neither number. Retries reuse the same CRM and printed numbers.\nSaved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "issue_manager_managed_document",
         "security": [
           {
@@ -18539,6 +18539,41 @@
               "type": "boolean",
               "default": false,
               "title": "Participant Statement Confirmed"
+            }
+          },
+          {
+            "name": "confirmed_previous_act_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 999999999,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confirmed Previous Act Number"
+            }
+          },
+          {
+            "name": "expected_previous_act_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Previous Act Id"
             }
           }
         ],
@@ -63651,6 +63686,17 @@
             ],
             "title": "Official Full Number"
           },
+          "contract_act_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Act Number"
+          },
           "official_date": {
             "anyOf": [
               {
@@ -68441,9 +68487,15 @@
             "title": "Template Id"
           },
           "document_role_type": {
-            "type": "string",
-            "title": "Document Role Type",
-            "default": "seller_buyer"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Role Type"
           },
           "edit_url": {
             "anyOf": [

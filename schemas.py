@@ -1656,7 +1656,7 @@ class ManagerCustomerContractItemResponse(BaseModel):
     valid_until: datetime
     status: str
     template_id: Optional[str] = None
-    document_role_type: str = "seller_buyer"
+    document_role_type: Optional[str] = None
     edit_url: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

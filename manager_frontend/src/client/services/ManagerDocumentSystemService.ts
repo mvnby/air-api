@@ -1265,6 +1265,10 @@ export class ManagerDocumentSystemService {
      * immutable DOCX/PDF artifacts. Participant statements require explicit factual
      * confirmation of the current text using participant_statement_confirmed=true;
      * the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+     * The first act continuing an unverified open-contract series returns 409
+     * contract_act_number_confirmation_required with previous_act. Inspect that
+     * original and repeat with confirmed_previous_act_number and expected_previous_act_id.
+     * Drafts reserve neither number. Retries reuse the same CRM and printed numbers.
      * Saved external edits must be synchronized and their remote
      * revision verified first. Missing document returns 404, state/edit conflicts 409 and
      * generation failure 503. A failed render retains its reservation; retry the same document
@@ -1276,12 +1280,16 @@ export class ManagerDocumentSystemService {
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param documentId
      * @param participantStatementConfirmed
+     * @param confirmedPreviousActNumber
+     * @param expectedPreviousActId
      * @returns ManagedDocumentItem Successful Response
      * @throws ApiError
      */
     public static issueManagerManagedDocument(
         documentId: number,
         participantStatementConfirmed: boolean = false,
+        confirmedPreviousActNumber?: (number | null),
+        expectedPreviousActId?: (number | null),
     ): CancelablePromise<ManagedDocumentItem> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -1291,6 +1299,8 @@ export class ManagerDocumentSystemService {
             },
             query: {
                 'participant_statement_confirmed': participantStatementConfirmed,
+                'confirmed_previous_act_number': confirmedPreviousActNumber,
+                'expected_previous_act_id': expectedPreviousActId,
             },
             errors: {
                 422: `Validation Error`,

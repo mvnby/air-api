@@ -54,7 +54,7 @@ class CustomerContractService:
             "valid_until": contract.valid_until,
             "status": contract.status,
             "template_id": contract.template_id,
-            "document_role_type": DocumentRoleService.normalize_role_type(contract.document_role_type),
+            "document_role_type": contract.document_role_type,
             "edit_url": contract.google_edit_url,
             "created_at": contract.created_at,
             "updated_at": contract.updated_at,
@@ -71,7 +71,7 @@ class CustomerContractService:
             "valid_from": contract.valid_from,
             "valid_until": contract.valid_until,
             "status": contract.status,
-            "document_role_type": DocumentRoleService.normalize_role_type(contract.document_role_type),
+            "document_role_type": contract.document_role_type,
             "edit_url": contract.google_edit_url,
         }
 

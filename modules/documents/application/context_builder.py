@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from models import (
+    CustomerBranch,
     CustomerContract,
     DocumentLegalEntity,
     DocumentTemplate,
@@ -48,6 +49,7 @@ from .consumer_context import (
     build_consumer_document_context,
 )
 from .commercial_rows import line_rows
+from .open_contract_basis import covers_issue_date
 from .party_roles import resolve_party_roles
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 from modules.documents.domain.roles import PARTY_ROLE_DOCUMENT_TYPES, ROLE_FORMS
@@ -169,6 +171,7 @@ class DocumentContextBuilder:
             session,
             order=order,
             document_type=document_type,
+            issue_date=selection.issue_date,
             base_document_id=selection.base_document_id,
             base_customer_contract_id=selection.base_customer_contract_id,
         )
@@ -287,15 +290,19 @@ class DocumentContextBuilder:
             "city", ""
         )
         branch = order.customer_branch
+        address = order.delivery_address or getattr(branch, "delivery_address", "")
+        if selection.scope_customer_branch_id is not None:
+            branch = await session.get(CustomerBranch, selection.scope_customer_branch_id)
+            if branch is None or branch.customer_id != order.customer_id:
+                raise DocumentContextError("Объект не найден у клиента заказа")
+            address = branch.delivery_address
         scope_title = (
             str(selection.scope_title or "").strip()
             or str(getattr(branch, "name", "") or "").strip()
         )
         scope_address = (
             str(selection.scope_address or "").strip()
-            or str(
-                order.delivery_address or getattr(branch, "delivery_address", "") or ""
-            ).strip()
+            or str(address or "").strip()
         )
         basis_type, basis_number, basis_date = cls._basis_values(
             base_document,
@@ -589,6 +596,7 @@ class DocumentContextBuilder:
         *,
         order: Order,
         document_type: str,
+        issue_date: date,
         base_document_id: int | None,
         base_customer_contract_id: int | None,
     ) -> tuple[OrderDocument | None, CustomerContract | None]:
@@ -619,8 +627,10 @@ class DocumentContextBuilder:
             ):
                 if base_customer_contract_id or document_type != "invoice":
                     raise DocumentContextError("Договор клиента не найден")
-            else:
+            elif covers_issue_date(contract, issue_date):
                 return None, contract
+            elif base_customer_contract_id or document_type != "invoice":
+                raise DocumentContextError("Дата документа выходит за срок открытого договора")
 
         result = await session.execute(
             select(OrderDocument)
