@@ -51,7 +51,7 @@ def build_installation_context(
     if first != first.quantize(Decimal("0.01")):
         raise ValueError("Укажите сумму первого этапа с точностью до копеек")
     if remaining is not None and (not remaining.is_finite() or remaining != total - first):
-        raise ValueError("Суммы этапов должны совпадать с общей стоимостью выбранного предложения")
+        raise ValueError("Суммы этапов должны совпадать с суммой заказ-акта")
     first_works = (
         "Установка наружного блока, штробление и прокладка коммуникаций."
         if terms.installation_outdoor_unit_in_first_stage

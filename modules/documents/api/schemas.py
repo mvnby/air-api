@@ -316,7 +316,10 @@ class ManagedDocumentDraftPayload(BaseModel):
     scope_address: str | None = Field(default=None, max_length=1000)
     scope_service_line_ids: list[int] = Field(default_factory=list, max_length=500)
     scope_service_line_quantities: dict[int, int] = Field(default_factory=dict)
-    scope_product_line_ids: list[int] = Field(default_factory=list, max_length=500)
+    scope_product_line_ids: list[int] = Field(default_factory=list, max_length=500, description=(
+        "Order product line IDs from the selected proposal. For a customer-owned equipment installation or "
+        "maintenance/repair act with product lines, explicitly pass [] for work only or the supplied materials' IDs."
+    ))
     business_role: str | None = Field(default=None, pattern="^(payment_request|offer)$")
     replaces_document_id: int | None = Field(default=None, gt=0)
     consumer_terms: "ConsumerDocumentTermsPayload | None" = None
@@ -484,6 +487,7 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 
 
 class ManagedDocumentItem(BaseModel):
+    scope_product_line_ids: list[int] | None = None
     repair_defect: RepairDefect | None = None
     receipt_note: str | None = None
     warranty_equipment_id: int | None = None

@@ -35,6 +35,8 @@ import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
 import { useGoogleDocumentEditor } from '../composables/use-google-document-editor';
 import type { GoogleDocumentEditTarget } from '../integrations/google-document-editor-api';
 import { isConsumerDocumentType } from '../model/consumer-document-terms';
+import ConsumerWorkComposition from './ConsumerWorkComposition.vue';
+import { isCustomerEquipmentWorkAct } from '../model/consumer-document-terms';
 import { proposalLineTotalCents } from '../model/installation-two-stages';
 import { isBusinessTermsDocumentType } from '../model/business-document-terms';
 import { contractScenarioForWorkflow, withContractScenario, type ContractScenario } from '../model/business-document-terms';
@@ -78,7 +80,19 @@ const proposalId = computed(() => {
     || null;
 });
 const activeProposal = computed(() => props.order.proposals?.find((item) => item.id === proposalId.value) || null);
-const activeProposalTotalCents = computed(() => proposalLineTotalCents(activeProposal.value));
+const materialIds = ref<number[] | null>(null);
+const proposalProducts = computed(() => activeProposal.value?.product_lines ?? (props.order.product_lines || [])
+  .filter(line => proposalId.value === null || line.proposal_id === proposalId.value));
+const proposalServices = computed(() => activeProposal.value?.service_lines ?? (props.order.service_lines || [])
+  .filter(line => proposalId.value === null || line.proposal_id === proposalId.value));
+const compositionTotalCents = (type: string) => {
+  const workAct = isCustomerEquipmentWorkAct(type);
+  if (workAct && proposalProducts.value.length && materialIds.value === null) return null;
+  return proposalLineTotalCents({
+    product_lines: workAct ? proposalProducts.value.filter(line => materialIds.value?.includes(line.id)) : proposalProducts.value,
+    service_lines: proposalServices.value,
+  });
+};
 const access = computed(() => getOrderDocumentAccess(props.order.status));
 const contractSource = ref<'ours' | 'customer'>('ours');
 const orderDocuments = ref<ManagerOrderDocumentItem[]>([]);
@@ -97,10 +111,15 @@ const workspace = useManagedDocumentWorkspace({
   orderId: () => props.order.id,
   workflowType: () => props.workflowType || props.order.workflow_type,
   proposalId: () => proposalId.value,
-  proposalTotalCents: () => activeProposalTotalCents.value,
+  proposalTotalCents: compositionTotalCents,
+  selectedMaterialIds: () => proposalProducts.value.length ? materialIds.value : [],
   notify: (message, type = 'success') => emit('toast', { message, type }),
   refresh: () => emit('refresh'),
 });
+watch([
+  () => props.order.id, () => props.order.customer?.id, proposalId, workspace.documentType, workspace.replacesDocumentId,
+  () => proposalProducts.value.map(line => line.id).sort((left, right) => left - right).join(','),
+], () => { materialIds.value = null; }, { flush: 'sync' });
 const facsimileSaved = async () => {
   facsimileTarget.value = null;
   await workspace.loadDocuments();
@@ -202,6 +221,10 @@ const issuerProfileUrl = computed(() => {
   return `/manager/customers/profile?${params}`;
 });
 const selectionError = computed(() => {
+  if (isCustomerEquipmentWorkAct(workspace.documentType.value)) {
+    if (!proposalServices.value.some(line => line.quantity > 0)) return 'Добавьте работы в выбранное предложение';
+    if (proposalProducts.value.length && materialIds.value === null) return 'Выберите состав заказ-акта';
+  }
   if (workspace.documentType.value === 'repair_defect_act') return repairDefectFormError(workspace.repairDefect.value);
   if (workspace.documentType.value === 'retail_receipt') {
     if (props.order.customer?.type !== 'individual') return 'Для товарного чека выберите покупателя-физлицо';
@@ -292,6 +315,11 @@ const openSettings = () => {
 };
 const prepareReplacement = (document: Parameters<typeof workspace.prepareReplacement>[0]) => {
   workspace.prepareReplacement(document);
+  if (isCustomerEquipmentWorkAct(document.doc_type)) {
+    const saved = document.scope_product_line_ids;
+    materialIds.value = saved && document.proposal_id === proposalId.value
+      && saved.every(id => proposalProducts.value.some(line => line.id === id)) ? [...saved] : null;
+  }
   selectedBasisValue.value = document.base_document_id
     ? `document:${document.base_document_id}`
     : document.base_customer_contract_id
@@ -713,11 +741,13 @@ defineExpose({
             <label class="native-field"><span>Текст заявления о соответствии</span><textarea v-model="workspace.participantStatement.value.declaration_text" class="native-input participant-statement-text" rows="8" maxlength="20000" data-testid="participant-statement-text" placeholder="Введите подтверждаемые сведения согласно требованиям закупки" /></label>
             <p class="text-xs text-slate-500">Участник и подписант берутся из выбранного нашего юрлица или ИП. Дата — в реквизитах выше. После создания черновика проверьте предпросмотр; текст можно отредактировать до выпуска.</p>
           </div>
+          <ConsumerWorkComposition v-if="isCustomerEquipmentWorkAct(workspace.documentType.value)" v-model="materialIds"
+            :services="proposalServices" :products="proposalProducts" :total="compositionTotalCents(workspace.documentType.value)" />
           <ConsumerDocumentTermsPanel
             v-if="isConsumerDocument"
             :document-type="workspace.documentType.value"
             :terms="workspace.consumerTerms.value"
-            :proposal-total-cents="activeProposalTotalCents"
+            :proposal-total-cents="compositionTotalCents(workspace.documentType.value)"
             @update-terms="workspace.updateConsumerTerms"
           />
           <B2BContractTermsPanel

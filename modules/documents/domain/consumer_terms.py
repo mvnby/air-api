@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 
 DEFAULT_GOODS_WARRANTY_MONTHS = 36
+CUSTOMER_EQUIPMENT_WORK_ACTS = frozenset({
+    "b2c_customer_equipment_installation_act", "b2c_maintenance_repair_act",
+})
 STAGED_INSTALLATION_DOCUMENT_TYPES = frozenset({
     "b2c_supply_installation_act",
     "b2c_customer_equipment_installation_act",

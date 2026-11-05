@@ -7,6 +7,7 @@ import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem'
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 export type ManagedDocumentItem = {
+    scope_product_line_ids?: (Array<number> | null);
     repair_defect?: (RepairDefect | null);
     receipt_note?: (string | null);
     warranty_equipment_id?: (number | null);
