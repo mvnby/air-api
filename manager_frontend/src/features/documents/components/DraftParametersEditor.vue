@@ -6,7 +6,7 @@ import { confirmDialog } from '../../../services/ui-feedback';
 import { createDefaultBusinessDocumentTerms, type BusinessDocumentTerms } from '../model/business-document-terms';
 import { createDefaultConsumerDocumentTerms, type ConsumerDocumentTerms } from '../model/consumer-document-terms';
 import { createDefaultActTerms, type ActTerms } from '../model/act-terms';
-import { createDefaultTransportTerms, type TransportTerms } from '../model/transport-terms';
+import { createDefaultTransportTerms, transportTermsError, type TransportTerms } from '../model/transport-terms';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
@@ -43,6 +43,7 @@ const changes = computed(() => {
   return result;
 });
 const rebuilds = computed(() => Object.keys(changes.value).some((name) => name !== 'issue_date'));
+const transportError = computed(() => form.value?.transport_terms ? transportTermsError(form.value.transport_terms) : '');
 const defectError = computed(() => form.value?.repair_defect ? repairDefectFormError(form.value.repair_defect) : '');
 const stageError = computed(() => form.value?.consumer_terms?.installation_two_stages
   ? installationTermsError(form.value.consumer_terms, Math.round(Number(form.value.total_amount) * 100)) : '');
@@ -65,7 +66,7 @@ const load = async () => {
       } : null,
       consumer_terms: response.consumer_terms ? { ...createDefaultConsumerDocumentTerms(), ...response.consumer_terms } : null,
       act_terms: response.act_terms ? { ...createDefaultActTerms(), ...response.act_terms, claims_status: response.act_terms.claims_status as ActTerms['claims_status'] } : null,
-      transport_terms: response.transport_terms ? { ...createDefaultTransportTerms(), ...response.transport_terms } : null,
+      transport_terms: props.document.doc_type === 'ttn1' ? { ...createDefaultTransportTerms(), ...response.transport_terms } : null,
     };
     form.value = loaded;
     baseline.value = structuredClone(loaded);
@@ -78,7 +79,7 @@ const load = async () => {
 void load();
 
 const save = async () => {
-  if (!form.value || saving.value || props.disabled || stageError.value || defectError.value || !Object.keys(changes.value).length) return;
+  if (!form.value || saving.value || props.disabled || stageError.value || defectError.value || transportError.value || !Object.keys(changes.value).length) return;
   const rebuilt = rebuilds.value;
   const reset = rebuilt && form.value.has_editable_copy;
   const payload = { ...changes.value, expected_revision: form.value.revision, reset_editable_copy: reset } as ManagedDocumentDraftParameterUpdate;
@@ -123,7 +124,7 @@ const save = async () => {
       <ConsumerDocumentTermsPanel v-if="form.consumer_terms" :document-type="document.doc_type" :terms="form.consumer_terms" :proposal-total-cents="Math.round(Number(form.total_amount) * 100)" @update-terms="form.consumer_terms = $event" />
       <RepairDefectFields v-if="form.repair_defect" :terms="form.repair_defect" @update-terms="form.repair_defect = $event" />
       <ActTermsPanel v-if="form.act_terms" :terms="form.act_terms" @update-terms="form.act_terms = $event" />
-      <TransportTermsPanel v-if="form.transport_terms" :document-type="document.doc_type" :terms="form.transport_terms" @update-terms="form.transport_terms = $event" />
+      <TransportTermsPanel v-if="form.transport_terms" expanded :terms="form.transport_terms" @update-terms="form.transport_terms = $event" />
       <div v-if="form.participant_statement" class="mt-3 space-y-3">
         <label class="native-field"><span>Процедура: номер / ссылка</span><input v-model="form.participant_statement.procedure_reference" class="native-input" maxlength="1000" /></label>
         <label class="native-field"><span>Лот</span><input v-model="form.participant_statement.lot" class="native-input" maxlength="500" /></label>
@@ -131,10 +132,11 @@ const save = async () => {
         <label class="native-field"><span>Текст заявления</span><textarea v-model="form.participant_statement.declaration_text" class="native-input" rows="6" maxlength="20000" /></label>
       </div>
     </fieldset>
+    <p v-if="transportError" class="mt-3 text-sm text-amber-700">{{ transportError }}</p>
     <p v-if="defectError" class="mt-3 text-sm text-amber-700">{{ defectError }}</p>
     <p v-if="error" class="mt-3 text-sm text-rose-700" role="alert">{{ error }}</p>
     <div class="mt-4 flex flex-wrap gap-2">
-      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || Boolean(stageError || defectError) || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
+      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || Boolean(stageError || defectError || transportError) || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
       <button class="native-action" type="button" :disabled="saving" @click="emit('close')">Отмена</button>
     </div>
   </form>

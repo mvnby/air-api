@@ -103870,6 +103870,75 @@
         ],
         "title": "TenderWorkflowResponse"
       },
+      "TransportOperation": {
+        "properties": {
+          "performer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performer"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "arrived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrived At"
+          },
+          "departed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departed At"
+          },
+          "downtime_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downtime Minutes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TransportOperation",
+        "description": "Local civil times as recorded on the paper consignment note."
+      },
       "TransportTermsPayload": {
         "properties": {
           "car_model": {
@@ -103919,6 +103988,74 @@
               }
             ],
             "title": "Carrier"
+          },
+          "trip_sheet_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Sheet Number"
+          },
+          "freight_payer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freight Payer"
+          },
+          "loading_point": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loading Point"
+          },
+          "unloading_point": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unloading Point"
+          },
+          "loading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unloading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransportOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

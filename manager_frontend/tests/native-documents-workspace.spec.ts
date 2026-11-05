@@ -221,6 +221,55 @@ describe('NativeDocumentsWorkspace', () => {
     }
   });
 
+  it('waits for the selected issuer template, distinguishes network failures and inactive versions, then allows another version', async () => {
+    const service = ManagerDocumentSystemService;
+    const pending = deferred<Awaited<ReturnType<typeof service.listManagerNativeDocumentTemplates>>>();
+    const template = (id: number) => ({ id, tenant_id: 1, legal_entity_id: 5, name: `ТТН ${id}`, doc_type: 'ttn1',
+      is_default: id === 501, is_active: true, sort_order: id, created_at: NOW });
+    vi.mocked(service.listManagerNativeDocumentTemplates).mockImplementation(async (_issuer, type) =>
+      type === 'ttn1' ? pending.promise : { items: [] });
+    vi.mocked(service.listManagerNativeTemplateVersions).mockImplementation(async id => {
+      if (id === 501) throw new Error('сеть');
+      return { items: [{ id: 1, template_id: id, version: 1, status: id === 502 ? 'archived' : 'active', renderer: 'docx', checksum_sha256: '', placeholder_schema: {}, created_at: NOW }] };
+    });
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-ttn1"]').trigger('click');
+    const notice = () => wrapper.get('[data-testid="waybill-template-status"]');
+    expect(notice().text()).toContain('Загружаем шаблон ТТН-1');
+    pending.resolve({ items: [501, 502, 503].map(template) }); await flushPromises();
+    expect(notice().text()).toContain('Повторить загрузку');
+    expect(wrapper.find('[data-testid="transport-terms-panel"]').exists()).toBe(false);
+    const select = wrapper.get('[data-testid="native-document-template"]');
+    await select.setValue(502); await flushPromises();
+    expect(notice().text()).toContain('нет активной версии DOCX');
+    expect(notice().text()).toContain('другой шаблон');
+    await select.setValue(503); await flushPromises();
+    expect(wrapper.find('[data-testid="waybill-template-status"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="transport-terms-panel"]').attributes('open')).toBeUndefined();
+    await wrapper.get('[data-testid="native-document-type-tn2"]').trigger('click'); await flushPromises();
+    expect(notice().text()).toContain('нужно подключить шаблон ТН-2');
+    expect(notice().text()).toContain('владелец или администратор');
+    expect(wrapper.find('[data-testid="native-document-basis"]').exists()).toBe(false);
+    managerSession.auth.value = { capabilities: ['documents.manage'] } as never;
+    await flushPromises();
+    expect(notice().find('button').text()).toBe('Юрлица и шаблоны');
+  });
+
+  it('prepares a corrected TN-2 without carrying transport details into its payload', async () => {
+    const original = { ...revision(91, 'issued', null, 'tn2'), official_number: 91, base_customer_contract_id: 91 };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [original] });
+    const wrapper = await mountWorkspace();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    await wrapper.findAll('button').find(button => button.text() === 'Создать исправленную редакцию')!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="transport-terms-panel"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click'); await flushPromises();
+    const [, payload] = vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mock.lastCall!;
+    expect(payload.document_type).toBe('tn2');
+    expect(payload.replaces_document_id).toBe(91);
+    expect(payload).not.toHaveProperty('transport_terms');
+  });
+
   it.each(['individual', 'company'])('creates a repair act for a %s using only the confirmed conclusion', async (type) => {
     vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockResolvedValue({ items: [] });
     const wrapper = await mountWorkspace(undefined, {

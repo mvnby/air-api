@@ -79,6 +79,18 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     ),
     PlaceholderDescriptor("transport.driver_name", "ФИО водителя", "Транспорт"),
     PlaceholderDescriptor("transport.carrier", "Перевозчик", "Транспорт"),
+    PlaceholderDescriptor("transport.trip_sheet_number", "Номер путевого листа", "Транспорт"),
+    PlaceholderDescriptor("transport.freight_payer", "Заказчик автоперевозки (плательщик)", "Транспорт"),
+    PlaceholderDescriptor("transport.loading_point", "Пункт погрузки", "Транспорт"),
+    PlaceholderDescriptor("transport.unloading_point", "Пункт разгрузки", "Транспорт"),
+    *(
+        PlaceholderDescriptor(f"transport.{stage}.{key}", f"{label} · {stage_label}", "Транспорт")
+        for stage, stage_label in (("loading", "погрузка"), ("unloading", "разгрузка"))
+        for key, label in (
+            ("performer", "Исполнитель"), ("method", "Способ"), ("arrived_at", "Дата и время прибытия"),
+            ("departed_at", "Дата и время убытия"), ("downtime", "Время простоя (ч:мин)"),
+        )
+    ),
     PlaceholderDescriptor("basis.type", "Тип документа-основания", "Основание"),
     PlaceholderDescriptor("basis.number", "Номер документа-основания", "Основание"),
     PlaceholderDescriptor("basis.date", "Дата документа-основания", "Основание"),

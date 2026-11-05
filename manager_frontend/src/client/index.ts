@@ -990,6 +990,7 @@ export type { TenderWorkflowIdentity } from './models/TenderWorkflowIdentity';
 export type { TenderWorkflowLinkPayload } from './models/TenderWorkflowLinkPayload';
 export type { TenderWorkflowPayload } from './models/TenderWorkflowPayload';
 export type { TenderWorkflowResponse } from './models/TenderWorkflowResponse';
+export type { TransportOperation } from './models/TransportOperation';
 export type { TransportTermsPayload } from './models/TransportTermsPayload';
 export type { TypedInstallationProfile_Input } from './models/TypedInstallationProfile_Input';
 export type { TypedInstallationProfile_Output } from './models/TypedInstallationProfile_Output';
