@@ -109,8 +109,8 @@ async def edit_service_order_proposal(session, ctx, data):
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     proposal = _proposal(order, data.proposal_id)
-    if order.workflow_type not in {"repair", "service_work"}:
-        raise HTTPException(409, "Only service and repair orders are supported")
+    if order.workflow_type not in {"repair", "service_work", "maintenance"}:
+        raise HTTPException(409, "Choose a repair, maintenance or service order")
     if OrderService._status_value(order.status) != "negotiation":
         raise HTTPException(409, "Service editing requires an order in negotiation")
     if await proposal_version(session, order.id, proposal.id) != data.expected_version:

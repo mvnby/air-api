@@ -109,8 +109,8 @@ async def prepare_service_order_contract(session, ctx, data, *, template_storage
         raise HTTPException(404, "Order not found") from exc
     if OrderService._status_value(order.status) != "negotiation":
         raise ManagedDocumentConflictError("Document drafts require an order in negotiation")
-    if order.workflow_type not in {"repair", "service_work"}:
-        raise HTTPException(409, "Choose an order with repair or service workflow in Manager")
+    if order.workflow_type not in {"repair", "service_work", "maintenance"}:
+        raise HTTPException(409, "Choose a repair, maintenance or service order in Manager")
     customer = (
         await TenantEntityAccessService.get_customer(session, order.customer_id, tenant_scope=scope)
         if order.customer_id
@@ -133,7 +133,7 @@ async def prepare_service_order_contract(session, ctx, data, *, template_storage
             "Proposal changed; read its current version before preparing the draft"
         )
     issuer = await _issuer(session, scope, data.legal_entity_id)
-    scenario = "repair" if order.workflow_type == "repair" else "installation"
+    scenario = "installation" if order.workflow_type == "service_work" else order.workflow_type
     terms = (
         BusinessDocumentTerms(
             contract_scenario=scenario,

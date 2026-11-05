@@ -25,7 +25,10 @@ from services.lead_service import LeadVersionConflict
 
 async def setup(db):
     user = StaffUser(
-        display_name="Service manager", username="service-creator", primary_role="admin", roles=["admin"]
+        display_name="Service manager",
+        username="service-creator",
+        primary_role="admin",
+        roles=["admin"],
     )
     customer = Customer(tenant_id=1, name="Existing repair customer", phone="")
     db.add_all([user, customer])
@@ -48,7 +51,9 @@ async def count(db, model):
 
 
 @pytest.mark.asyncio
-async def test_service_order_creates_negotiation_existing_customer_and_editable_proposal(db):
+async def test_service_order_creates_negotiation_existing_customer_and_editable_proposal(
+    db,
+):
     actor, data, _ = await setup(db)
     result = await create_service_order(db, actor, data)
     order = await db.get(Order, result.order_id)
@@ -84,7 +89,9 @@ async def test_service_order_qualifies_incoming_preserving_source_and_contact(db
 
 
 @pytest.mark.asyncio
-async def test_service_order_stale_incoming_and_existing_conversion_do_not_duplicate(db):
+async def test_service_order_stale_incoming_and_existing_conversion_do_not_duplicate(
+    db,
+):
     actor, data, _ = await setup(db)
     lead = Lead(tenant_id=1, storefront_id=1, request_text="Repair", phone="", version=2)
     db.add(lead)
@@ -167,6 +174,14 @@ async def test_service_order_outer_receipt_failure_rolls_back_order_and_proposal
         {"workflow_type": "repair", "service_type": "install_only"},
         {"incoming_id": 1},
         {"expected_incoming_version": 1},
+        {"incoming_order_id": 1},
+        {"expected_incoming_order_revision": 0},
+        {
+            "incoming_id": 1,
+            "expected_incoming_version": 1,
+            "incoming_order_id": 2,
+            "expected_incoming_order_revision": 0,
+        },
         {"customer_id": 0},
         {"tenant_id": 2},
     ],
@@ -183,3 +198,171 @@ def test_service_order_input_rejects_unsafe_or_inconsistent_creation(changes):
                 **changes,
             }
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_customer", [False, True])
+@pytest.mark.parametrize("workflow", ["repair", "maintenance"])
+async def test_existing_incoming_order_promotes_same_id_without_replacing_history(db, has_customer, workflow):
+    from models.leads_inbox import InboxEvent
+
+    actor, data, _ = await setup(db)
+    incoming = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status="new_lead",
+        workflow_revision=4,
+        customer_id=data.customer_id if has_customer else None,
+        responsible_staff_user_id=actor.staff_user_id,
+        comment="Original tender request",
+        lead_source="email",
+        source_fingerprint="original-message",
+        title="Source tender",
+        technical_meta={
+            "incoming_intake": {"original_text": "Verbatim intake"},
+            "tender": {"external_id": "test-tender"},
+        },
+    )
+    db.add(incoming)
+    await db.flush()
+    proposal = OrderProposal(order_id=incoming.id, name="Reviewed draft", status="draft", is_selected=True)
+    db.add(proposal)
+    await db.flush()
+    line = OrderServiceLink(
+        order_id=incoming.id,
+        proposal_id=proposal.id,
+        title="Existing service",
+        price=10,
+    )
+    history = InboxEvent(
+        entity_kind="order",
+        entity_id=incoming.id,
+        order_id=incoming.id,
+        tenant_id=1,
+        storefront_id=1,
+        kind="note",
+        actor=actor.username,
+        note="Original history",
+    )
+    db.add_all([line, history])
+    await db.commit()
+    data = data.model_copy(
+        update={
+            "incoming_order_id": incoming.id,
+            "expected_incoming_order_revision": 4,
+            "workflow_type": workflow,
+            "request_text": None,
+        }
+    )
+    result = await create_service_order(db, actor, data)
+    await db.refresh(incoming)
+    await db.refresh(line)
+    assert result.order_id == incoming.id and result.proposal_id == proposal.id
+    assert result.incoming_order_id == incoming.id and result.incoming_order_revision == 5
+    assert incoming.status == "negotiation" and incoming.workflow_type == workflow
+    assert incoming.customer_id == data.customer_id
+    assert incoming.responsible_staff_user_id == actor.staff_user_id
+    assert incoming.comment == "Original tender request"
+    assert incoming.lead_source == "email" and incoming.source_fingerprint == "original-message"
+    assert incoming.technical_meta["incoming_intake"] == {"original_text": "Verbatim intake"}
+    assert incoming.technical_meta["tender"] == {"external_id": "test-tender"}
+    assert incoming.installation_date is None and incoming.measurement_date is None
+    assert line.title == "Existing service" and line.price == 10
+    assert (await db.get(InboxEvent, history.id)).note == "Original history"
+    customer = await db.get(Customer, data.customer_id)
+    assert customer.name == "Existing repair customer" and customer.phone == ""
+    assert await count(db, Customer) == await count(db, Order) == await count(db, OrderProposal) == 1
+    assert await count(db, OrderServiceLink) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "revision",
+        "customer",
+        "branch",
+        "status",
+        "archived",
+        "sent",
+        "foreign_storefront",
+    ],
+)
+async def test_existing_incoming_order_rejects_unsafe_promotion_atomically(db, reason):
+    from datetime import datetime, timezone
+    from models.leads_inbox import InboxTriageState
+
+    actor, data, _ = await setup(db)
+    other = Customer(tenant_id=1, name="Another customer", phone="")
+    db.add(other)
+    await db.flush()
+    branch = CustomerBranch(customer_id=data.customer_id, delivery_address="First site")
+    db.add(branch)
+    await db.flush()
+    incoming = Order(
+        tenant_id=1,
+        storefront_id=1,
+        status="new_lead",
+        workflow_revision=4,
+        customer_id=other.id if reason == "customer" else data.customer_id,
+        customer_branch_id=branch.id if reason == "branch" else None,
+        comment="Original",
+        responsible_staff_user_id=actor.staff_user_id,
+    )
+    if reason == "status":
+        incoming.status = "negotiation"
+    if reason == "foreign_storefront":
+        db.add(Storefront(id=3, tenant_id=1, slug="other", display_name="Other"))
+        await db.flush()
+        incoming.storefront_id = 3
+    db.add(incoming)
+    await db.flush()
+    if reason == "sent":
+        db.add(OrderProposal(order_id=incoming.id, name="Sent", status="sent", is_selected=True))
+    if reason == "archived":
+        db.add(
+            InboxTriageState(
+                entity_kind="order",
+                entity_id=incoming.id,
+                order_id=incoming.id,
+                tenant_id=1,
+                storefront_id=1,
+                archived_at=datetime.now(timezone.utc),
+            )
+        )
+    if reason == "branch":
+        other_branch = CustomerBranch(customer_id=data.customer_id, delivery_address="Second site")
+        db.add(other_branch)
+        await db.flush()
+        data.customer_branch_id = other_branch.id
+    await db.commit()
+    original_status = incoming.status
+    data = data.model_copy(
+        update={
+            "incoming_order_id": incoming.id,
+            "expected_incoming_order_revision": 3 if reason == "revision" else 4,
+        }
+    )
+    with pytest.raises((HTTPException, ValueError)):
+        await create_service_order(db, actor, data)
+    await db.refresh(incoming)
+    assert incoming.status == original_status and incoming.workflow_revision == 4
+    assert incoming.comment == "Original"
+    assert await count(db, Order) == 1
+    assert await count(db, OrderProposal) == (1 if reason == "sent" else 0)
+
+
+@pytest.mark.asyncio
+async def test_existing_incoming_order_creates_empty_proposal_and_preserves_missing_responsible(
+    db,
+):
+    actor, data, _ = await setup(db)
+    incoming = Order(tenant_id=1, storefront_id=1, status="new_lead", comment="Intake")
+    db.add(incoming)
+    await db.commit()
+    data = data.model_copy(update={"incoming_order_id": incoming.id, "expected_incoming_order_revision": 0})
+    result = await create_service_order(db, actor, data)
+    await db.refresh(incoming)
+    assert result.order_id == incoming.id and incoming.responsible_staff_user_id is None
+    assert result.proposal_status == "draft" and await count(db, OrderProposal) == 1
+    assert await count(db, OrderServiceLink) == await count(db, OrderProductLink) == 0

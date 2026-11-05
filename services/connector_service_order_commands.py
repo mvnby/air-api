@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from schemas_connector_service_order_create import ConnectorServiceOrderResult
 from schemas_connector_service_order_document import ServiceOrderContractReadInput
 from services.authenticated_command_service import AuthenticatedCommandService
+from services.connector_query_service import ConnectorQueryService
 from services.connector_service_order_create import create_service_order, validate_service_order_create_access
 from services.connector_service_order_document import get_service_order_contract, prepare_service_order_contract
 from services.connector_service_order_lines import edit_service_order_proposal, get_service_order_proposal
@@ -17,6 +18,8 @@ class _SavedResource(BaseModel):
 
 
 async def execute_service_order_tool(session, actor, name, inputs):
+    if name == "get_service_order_intake":
+        return await ConnectorQueryService.service_order_intake(session, actor, inputs.order_id)
     if name == "get_service_order_proposal":
         return await get_service_order_proposal(session, actor, inputs)
     if name == "get_service_order_contract":

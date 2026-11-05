@@ -131,7 +131,7 @@ class ConnectorMCPApplication:
                     if requests_task:
                         required_scope = TASK_SCOPE
                         await ConnectorAuthService.resolve_actor(session, token, TASK_SCOPE)
-                if name == "create_service_order" and arguments.get("incoming_id") is not None:
+                if name == "create_service_order" and any(arguments.get(key) is not None for key in ("incoming_id", "incoming_order_id")):
                     required_scope = INCOMING_SCOPE
                     await ConnectorAuthService.resolve_actor(session, token, INCOMING_SCOPE)
                 if name == "send_mail_draft":

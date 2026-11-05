@@ -309,3 +309,4 @@ async def test_service_order_scopes_are_separate_and_qualifying_requires_incomin
     access["token-one"].remove("kitlane:incoming:write")
     await denied("prepare_service_order_contract", prepare, "kitlane:contracts:drafts:write")
     await denied("create_service_order", {**create, "incoming_id": 1, "expected_incoming_version": 1}, "kitlane:incoming:write")
+    await denied("create_service_order", {**create, "incoming_order_id": 1, "expected_incoming_order_revision": 0}, "kitlane:incoming:write")

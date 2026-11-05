@@ -277,3 +277,80 @@ async def test_service_order_ids_are_scoped_to_storefront_and_proposal_parent(db
                     assert "Private proposal" not in str(rejected)
         assert (await db.execute(select(func.count(OrderServiceLink.id)))).scalar_one() == 0
         assert (await db.execute(select(func.count(OrderDocument.id)))).scalar_one() == 0
+
+
+@pytest.mark.asyncio
+async def test_manager_inbox_order_qualifies_in_place_and_keeps_tender_estimate_separate(
+    db_engine, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "SERVICE_ATTACHMENT_STORAGE_PROVIDER", "local")
+    monkeypatch.setattr(settings, "SERVICE_ATTACHMENT_LOCAL_DIR", str(tmp_path / "private-documents"))
+    async with AsyncSession(db_engine, expire_on_commit=False) as db:
+        _, seed, _, _, _ = await _seed(db, tmp_path)
+        incoming = Order(
+            tenant_id=1,
+            storefront_id=1,
+            status="new_lead",
+            lead_source="belzakupki",
+            title="Техническое обслуживание кондиционеров",
+            comment="Оценочная стоимость: 33 816 BYN",
+            technical_meta={"belzakupki": {"tender": {"customer_name": "ООО Клиент"}}},
+        )
+        db.add(incoming)
+        await db.commit()
+        token, _, _, _ = await grant(
+            db, scopes="kitlane:read kitlane:orders:write kitlane:incoming:write kitlane:contracts:drafts:write"
+        )
+        async with client_for(db, token) as client:
+            details = success(await call(client, "get_service_order_intake", {"order_id": incoming.id}))
+            assert (
+                details["eligible"]
+                and details["requester_name"] == "ООО Клиент"
+                and "33 816" in details["source_text"]
+            )
+            created = await retry_concurrently(
+                client,
+                "create_service_order",
+                {
+                    "customer_id": seed.customer_id,
+                    "workflow_type": "maintenance",
+                    "incoming_order_id": incoming.id,
+                    "expected_incoming_order_revision": details["workflow_revision"],
+                    "idempotency_key": "tender-order-pilot-key",
+                },
+            )
+            assert created["order_id"] == incoming.id and created["status"] == "negotiation"
+            target = {key: created[key] for key in ("order_id", "proposal_id")}
+            initial = success(await call(client, "get_service_order_proposal", target))
+            assert initial["lines"] == [] and Decimal(initial["total"]) == 0
+            edited = success(
+                await call(
+                    client,
+                    "edit_service_order_proposal",
+                    {
+                        **target,
+                        "action": "add",
+                        "expected_version": initial["version"],
+                        "line": {"title": incoming.title, "unit": "усл.", "quantity": 1, "price": "990.75"},
+                        "idempotency_key": "pilot-offer-confirmed-price",
+                    },
+                )
+            )["result"]
+            draft = success(
+                await call(
+                    client,
+                    "prepare_service_order_contract",
+                    {
+                        **target,
+                        "expected_version": edited["version"],
+                        "issue_date": "2026-11-05",
+                        "idempotency_key": "pilot-verified-contract",
+                    },
+                )
+            )["result"]
+            assert draft["status"] == "draft" and Decimal(draft["total_byn"]) == Decimal("990.75")
+            await db.refresh(incoming)
+            assert (
+                incoming.customer_id == seed.customer_id
+                and incoming.comment == "Оценочная стоимость: 33 816 BYN"
+            )

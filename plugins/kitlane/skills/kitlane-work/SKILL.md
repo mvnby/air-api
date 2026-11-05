@@ -10,11 +10,22 @@ ask for an actor or tenant ID as a tool argument.
 For an explicit request to arrange a service or repair deal, use the order
 workflow. Search the existing customer, use a single verified match directly,
 and ask only if the customer or intended proposal is ambiguous. Use the known
-order if the conversation concerns an existing one. `get_order` lists its
-proposal IDs. Otherwise call `create_service_order` with the verified customer,
-workflow and source text. To qualify an incoming, read `get_incoming` and pass
-its lead_id as incoming_id together with expected_incoming_version. Keep the
-returned order_id and proposal_id for all subsequent steps.
+order if the conversation concerns an existing negotiation. `get_order` lists
+its proposal IDs. Choose the entry point from the saved record:
+
+- For a new deal, call `create_service_order` with the verified customer,
+  workflow and source text.
+- For an intake saved by `create_incoming`, read `get_incoming` and pass its
+  lead_id as incoming_id together with expected_incoming_version.
+- A Manager inbox record with `get_order` status `new_lead` is itself an order.
+  Read `get_service_order_intake` for the requester, source and workflow revision.
+  Match the actual legal name and use incoming_order_id with
+  expected_incoming_order_revision to promote that same order in place.
+
+Use workflow_type=maintenance for ordinary maintenance services. Use a tender
+budget as an offer price only when explicitly instructed, and describe a
+provisional price as such. Keep the returned order_id and proposal_id across
+the following steps.
 
 Read `get_service_order_proposal`, then use `edit_service_order_proposal` with
 its current version and the user's quantity, unit and price. Describe agreed

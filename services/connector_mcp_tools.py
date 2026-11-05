@@ -13,7 +13,7 @@ from schemas_connector_mcp import (
     ConnectorWriteResult, CustomerIdInput, CustomerSearchResult,
     CustomerSummary, EmptyInput, IncomingCreateInput, IncomingIdInput,
     IncomingListInput, IncomingUpdateInput, OrderIdInput, OrderSearchResult,
-    OrderDetail, SearchInput, TaskCreateInput, TaskIdInput, TaskListInput,
+    IncomingOrderContext, OrderDetail, SearchInput, TaskCreateInput, TaskIdInput, TaskListInput,
     TaskStatusInput, TaskUpdateInput,
 )
 from schemas_incoming import IncomingListResponse, IncomingResponse
@@ -134,8 +134,11 @@ _CATALOG_TOOLS = (
     ConnectorTool("prepare_catalog_document", "On an explicit user request, prepare a native commercial offer or payment invoice DRAFT for a confirmed company/entrepreneur customer and existing negotiation order. Creates one separate unselected proposal from selected catalog product IDs and quantities. All lines are one intended purchase, not competing alternatives; confirm the choice before an invoice. Expected prices guard price changes; authoritative prices are resolved server-side. Does not issue, sign, send, schedule, charge or replace existing documents. Reuse identical key/payload after timeout.", CatalogDocumentInput, ConnectorWriteResult[CatalogDocumentResult], CATALOG_SCOPE),
 )
 _SERVICE_ORDER_TOOLS = (
+    ConnectorTool("get_service_order_intake",
+        "Read an order-type Manager inbox record by ID, including its current workflow revision, requester and source text. Use for get_order status new_lead. Treat tender budgets as estimates, not agreed prices.",
+        OrderIdInput, IncomingOrderContext, ORDER_SCOPE, read_only=True),
     ConnectorTool("create_service_order",
-        "Create a negotiation order and editable proposal for one verified existing customer, directly or by qualifying an existing incoming request with its current version (also requires incoming-write). Preserve the original request. Reuse the same key and payload after a timeout.",
+        "Create a negotiation order and editable proposal for one verified existing customer, directly or by qualifying an incoming (also requires incoming-write). For a lead use incoming_id and its version. For a Manager inbox order use incoming_order_id and its workflow revision from get_service_order_intake, preserving the same order ID. Preserve the original request. Reuse the same key and payload after a timeout.",
         ServiceOrderCreateInput, ConnectorWriteResult[ConnectorServiceOrderResult], ORDER_SCOPE),
     ConnectorTool("get_service_order_proposal",
         "Read current service and product lines, server total, currency and version for one specific order proposal. Use this version for the next edit or contract.",

@@ -10,9 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.command_actor import CommandActor
 from core.config import settings
 from models import CustomerBranch, OrderStatus
-from schemas_connector_service_order_create import ConnectorServiceOrderResult, ServiceOrderCreateInput
+from schemas_connector_service_order_create import (
+    ConnectorServiceOrderResult,
+    ServiceOrderCreateInput,
+)
 from schemas_manager_leads import LeadQualifyPayload
-from schemas_manager_orders import ManagerOrderCreatePayload
+from schemas_manager_orders import ManagerOrderCreatePayload, ManagerOrderUpdatePayload
 from services.command_transaction import command_transaction
 from services.lead_command_service import LeadCommandService
 from services.lead_service import LeadVersionConflict
@@ -21,6 +24,7 @@ from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_responsibility_service import OrderResponsibilityService
 from services.order_scenarios import resolve_scenario
 from services.order_service import OrderService
+from services.order_update.command import OrderUpdateCommandService
 from services.tenant_entity_access_service import TenantEntityAccessService as Access
 
 
@@ -40,6 +44,9 @@ async def validate_service_order_create_access(session, ctx, data):
     if data.incoming_id is not None:
         if await Access.get_lead(session, data.incoming_id, tenant_scope=scope) is None:
             raise HTTPException(404, "Incoming request not found")
+    if data.incoming_order_id is not None:
+        if await Access.get_order(session, data.incoming_order_id, tenant_scope=scope) is None:
+            raise HTTPException(404, "Incoming order not found")
 
 
 async def create_service_order(
@@ -52,7 +59,54 @@ async def create_service_order(
         await validate_service_order_create_access(session, ctx, data)
         workflow, service = resolve_scenario(workflow_type=data.workflow_type, service_type=data.service_type)
         incoming_version = None
-        if data.incoming_id is None:
+        if data.incoming_order_id is not None:
+            incoming = await Access.get_order(
+                session,
+                data.incoming_order_id,
+                tenant_scope=scope,
+                for_update=True,
+                populate_existing=True,
+            )
+            if incoming is None:
+                raise HTTPException(404, "Incoming order not found")
+            if incoming.workflow_revision != data.expected_incoming_order_revision:
+                raise HTTPException(409, "Incoming order has changed; reload its current revision")
+            if incoming.status != OrderStatus.NEW_LEAD or incoming.linked_order_id is not None:
+                raise HTTPException(409, "Only an unlinked incoming order can be qualified")
+            if incoming.customer_id is not None and incoming.customer_id != data.customer_id:
+                raise HTTPException(409, "Incoming order already belongs to another customer")
+            if (
+                data.customer_branch_id is not None
+                and incoming.customer_branch_id is not None
+                and data.customer_branch_id != incoming.customer_branch_id
+            ):
+                raise HTTPException(409, "Incoming order already belongs to another customer branch")
+            changes = dict(
+                status="negotiation",
+                customer_id=data.customer_id,
+                workflow_type=workflow,
+                service_type=service,
+            )
+            if data.customer_branch_id is not None:
+                changes["customer_branch_id"] = data.customer_branch_id
+            if data.address is not None:
+                changes["customer_delivery_address"] = data.address
+            if data.title is not None:
+                changes["title"] = data.title
+            if data.request_text and data.request_text.strip() != (incoming.comment or "").strip():
+                changes["comment"] = (
+                    f"{incoming.comment}\n\n{data.request_text}" if incoming.comment else data.request_text
+                )
+            # Manager links the verified customer before qualification. Omit
+            # customer requisites, commercial arrays, dates and assignments.
+            created = await OrderUpdateCommandService.update_order_for_manager(
+                session,
+                int(incoming.id),
+                ManagerOrderUpdatePayload(**changes),
+                tenant_scope=scope,
+            )
+            order_id = int(created["id"])
+        elif data.incoming_id is None:
             created = await OrderCreateCommandService.create_manager_order(
                 session,
                 ManagerOrderCreatePayload(
@@ -71,14 +125,21 @@ async def create_service_order(
             order_id = int(created["id"])
         else:
             lead = await Access.get_lead(
-                session, data.incoming_id, tenant_scope=scope, for_update=True, populate_existing=True
+                session,
+                data.incoming_id,
+                tenant_scope=scope,
+                for_update=True,
+                populate_existing=True,
             )
             if lead is None:
                 raise HTTPException(404, "Incoming request not found")
             if lead.version != data.expected_incoming_version:
                 raise LeadVersionConflict("Incoming request has changed; reload its current version")
             if lead.converted_order_id is not None:
-                raise HTTPException(409, f"Incoming request already linked to order {lead.converted_order_id}")
+                raise HTTPException(
+                    409,
+                    f"Incoming request already linked to order {lead.converted_order_id}",
+                )
             # Preserve the source verbatim on Lead and in the order comment. An
             # explicit additional instruction may supplement that source.
             comment = lead.request_text or ""
@@ -122,6 +183,8 @@ async def create_service_order(
             service_type=service,
             incoming_id=data.incoming_id,
             incoming_version=incoming_version,
+            incoming_order_id=data.incoming_order_id,
+            incoming_order_revision=int(order.workflow_revision) if data.incoming_order_id is not None else None,
             manager_url=url,
             proposal_manager_url=f"{url}&proposalId={proposal.id}",
         )

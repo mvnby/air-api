@@ -10,10 +10,12 @@ from services.order_scenarios import resolve_scenario
 
 class ServiceOrderCreateInput(WriteInput):
     customer_id: int = Field(gt=0)
-    workflow_type: Literal["repair", "service_work"]
-    service_type: Literal["repair", "install_only", "pre_install", "dismantling"] | None = None
+    workflow_type: Literal["repair", "service_work", "maintenance"]
+    service_type: Literal["repair", "install_only", "pre_install", "dismantling", "maintenance"] | None = None
     incoming_id: int | None = Field(default=None, gt=0)
     expected_incoming_version: int | None = Field(default=None, ge=1)
+    incoming_order_id: int | None = Field(default=None, gt=0)
+    expected_incoming_order_revision: int | None = Field(default=None, ge=0)
     request_text: str | None = Field(default=None, max_length=20000)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     customer_branch_id: int | None = Field(default=None, gt=0)
@@ -22,6 +24,10 @@ class ServiceOrderCreateInput(WriteInput):
     @model_validator(mode="after")
     def validate_creation(self):
         resolve_scenario(workflow_type=self.workflow_type, service_type=self.service_type)
+        if self.incoming_id is not None and self.incoming_order_id is not None:
+            raise ValueError("Choose incoming_id or incoming_order_id, not both")
+        if (self.incoming_order_id is None) != (self.expected_incoming_order_revision is None):
+            raise ValueError("incoming_order_id and expected_incoming_order_revision are required together")
         if self.incoming_id is not None and self.expected_incoming_version is None:
             raise ValueError("expected_incoming_version is required for qualification")
         if self.incoming_id is None and self.expected_incoming_version is not None:
@@ -39,5 +45,7 @@ class ConnectorServiceOrderResult(BaseModel):
     service_type: str | None
     incoming_id: int | None
     incoming_version: int | None
+    incoming_order_id: int | None = None
+    incoming_order_revision: int | None = None
     manager_url: str
     proposal_manager_url: str
