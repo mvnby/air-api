@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ManagerCustomerContractUpdatePayload = {
+    legal_entity_id?: (number | null);
     number?: (string | null);
     template_id?: (string | null);
     document_role_type?: (string | null);

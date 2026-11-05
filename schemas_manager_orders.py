@@ -66,6 +66,7 @@ class OrderCustomerBranchBrief(BaseModel):
 
 
 class OrderCustomerContractBrief(BaseModel):
+    legal_entity_id: Optional[int] = None
     id: int
     customer_id: int
     number: str

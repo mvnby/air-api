@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { navigateManager, returnToManager } from '../services/manager-navigation-history';
+import { orderPageUrl } from '../services/order-navigation';
 import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ArrowLeft, Archive, Plus } from 'lucide-vue-next';
 import { api } from '../api';
@@ -23,7 +24,8 @@ const CustomerReconciliationPanel = defineAsyncComponent(() => import('../compon
 const EnvelopePrintDialog = defineAsyncComponent(() => import('../components/envelopes/EnvelopePrintDialog.vue'));
 const params = new URLSearchParams(window.location.search);
 const customerId = Number(params.get('customerId'));
-const initialTab = params.get('openContract') === '1' ? 'documents' : 'contacts';
+const editContractId = Number(params.get('editContractId')) || undefined;
+const initialTab = params.get('openContract') === '1' || params.get('section') === 'documents' ? 'documents' : 'contacts';
 type Tab = 'contacts' | 'documents' | 'reconciliation' | 'equipment';
 const activeTab = ref<Tab>(initialTab);
 const visited = reactive(new Set<Tab>([initialTab]));
@@ -33,6 +35,13 @@ const loading = ref(true);
 const error = ref('');
 const showIntake = ref(false);
 const showCreateOrder = ref(false);
+const openDocumentsAfterCreate = ref(false);
+const orderListParams = new URLSearchParams({ customerId: String(customerId), segment: 'all' });
+for (const key of ['company', 'site']) {
+  const value = params.get(key);
+  if (value) orderListParams.set(key, value);
+}
+const customerOrdersUrl = `/manager/orders/kanban?${orderListParams}`;
 const showEnvelope = ref(false);
 const archiving = ref(false);
 const contactsDirty = ref(false);
@@ -52,8 +61,12 @@ async function refreshContacts() { await load(); if (customer.value) dispatchCus
 function chooseTab(tab: Tab) { visited.add(tab); activeTab.value = tab; }
 const navigate = navigateManager;
 function back() { const target = params.get('returnTo'); returnToManager(target?.startsWith('/manager/') ? target : '/manager/customers'); }
-function openOrders() { navigate(`/manager/orders/kanban?customerId=${customerId}&segment=all`); }
-function createdOrder(orderId: number) { showCreateOrder.value = false; navigate(`/manager/orders/kanban?orderId=${orderId}`); }
+function openOrders() { navigate(customerOrdersUrl); }
+function createOrder(forContract = false) { openDocumentsAfterCreate.value = forContract; showCreateOrder.value = true; }
+function createdOrder(orderId: number) {
+  showCreateOrder.value = false;
+  navigate(orderPageUrl(orderId, customerOrdersUrl, null, openDocumentsAfterCreate.value ? 'documents' : undefined));
+}
 function recognized(value: ManagerCatalogCustomerItemResponse) { showIntake.value = false; updated(value); savedContacts.value = null; contactsRevision.value++; }
 function openEnvelope() {
   if (dirty.value) { notify('Сначала сохраните или отмените изменения в карточке', 'info'); return; }
@@ -84,11 +97,11 @@ onUnmounted(() => { alive = false; unregisterGuard(); window.removeEventListener
     <div v-else-if="error && !customer" class="workspace-state" role="alert">{{ error }} <button type="button" class="text-brand-600" @click="load">Повторить</button></div>
     <template v-if="customer">
       <p v-if="error" class="workspace-state" role="alert">{{ error }} <button type="button" @click="load">Повторить</button></p>
-      <header class="customer-header"><div class="customer-heading"><h1>{{ customer.name || customer.full_legal_name || `Клиент #${customer.id}` }}</h1><div class="customer-meta"><span>{{ customerPartyLabel(normalizeCustomerPartyType(customer.type)) }}</span><span v-if="customer.inn">УНП {{ customer.inn }}</span><button type="button" @click="openOrders">Заказы: {{ customer.order_count }} ↗</button><span v-if="customer.is_archived" class="archive-badge">Архив</span></div></div><div class="customer-tools"><button type="button" class="btn-mini-outline" @click="openEnvelope">Печать конверта</button><button type="button" class="btn-mini-outline" @click="openIntake">Из реквизитов</button><button type="button" class="btn-mini" @click="showCreateOrder = true"><Plus :size="15" />Заказ</button><button class="archive-action" type="button" :disabled="archiving" :aria-label="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" :title="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" @click="archive"><Archive :size="16" /></button></div></header>
+      <header class="customer-header"><div class="customer-heading"><h1>{{ customer.name || customer.full_legal_name || `Клиент #${customer.id}` }}</h1><div class="customer-meta"><span>{{ customerPartyLabel(normalizeCustomerPartyType(customer.type)) }}</span><span v-if="customer.inn">УНП {{ customer.inn }}</span><button type="button" @click="openOrders">Заказы: {{ customer.order_count }} ↗</button><span v-if="customer.is_archived" class="archive-badge">Архив</span></div></div><div class="customer-tools"><button type="button" class="btn-mini-outline" @click="openEnvelope">Печать конверта</button><button type="button" class="btn-mini-outline" @click="openIntake">Из реквизитов</button><button type="button" class="btn-mini" @click="createOrder()"><Plus :size="15" />Заказ</button><button class="archive-action" type="button" :disabled="archiving" :aria-label="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" :title="customer.is_archived ? 'Вернуть из архива' : 'Архивировать клиента'" @click="archive"><Archive :size="16" /></button></div></header>
       <CustomerCompletenessPanel :customer="customer" :contacts="savedContacts" />
       <nav class="customer-tabs" aria-label="Разделы клиента"><button v-for="tab in tabItems" :key="tab.id" type="button" :class="{ active: activeTab === tab.id }" :aria-current="activeTab === tab.id ? 'page' : undefined" @click="chooseTab(tab.id)">{{ tab.label }}</button></nav>
       <div v-if="visited.has('contacts')" v-show="activeTab === 'contacts'" class="contacts-layout"><CustomerContactsPanel :key="`${customer.id}-${contactsRevision}`" :customer="customer" :edit-initially="params.get('editContact') === '1'" @updated="refreshContacts" @loaded="savedContacts = $event" @dirty="contactsDirty = $event" /><CustomerDetailsPanel :customer="customer" @updated="updated" @dirty="detailsDirty = $event" /></div>
-      <div v-if="visited.has('documents')" v-show="activeTab === 'documents'" class="space-y-3"><CustomerContractsPanel v-if="customer.type !== 'individual'" :customer-id="customer.id" /><CustomerDocumentsPanel :customer-id="customer.id" /></div>
+      <div v-if="visited.has('documents')" v-show="activeTab === 'documents'" class="space-y-3"><CustomerContractsPanel v-if="customer.type !== 'individual'" :customer-id="customer.id" :order-count="customer.order_count" :orders-url="customerOrdersUrl" :edit-contract-id="editContractId" @open-orders="openOrders" @create-order="createOrder(true)" /><CustomerDocumentsPanel :customer-id="customer.id" /></div>
       <CustomerReconciliationPanel v-if="visited.has('reconciliation')" v-show="activeTab === 'reconciliation'" :customer-id="customer.id" />
       <CustomerEquipmentPanel v-if="visited.has('equipment')" v-show="activeTab === 'equipment'" :customer="customer" />
       <CustomerIntakeDialog v-if="showIntake" :customer="customer" @close="showIntake = false" @created="recognized" @open-existing="navigate(`/manager/customers/profile?customerId=${$event}`)" />

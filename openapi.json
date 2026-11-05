@@ -29412,7 +29412,7 @@
           "manager-contracts"
         ],
         "summary": "Patch Manager Customer Contract",
-        "description": "Patch supplied metadata of an open contract belonging to the current-tenant customer.\nNumber/date/expiry/document-role changes also attempt placeholder replacement in its\nGoogle file; this is not immutable native document versioning. Missing customer/contract\nreturns 404; empty number or unsupported status returns 400. No expected_version\nprecondition is provided.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Patch supplied metadata of an open contract belonging to the current-tenant customer.\nConfirming an active tenant issuer and the party roles updates only the CRM register.\nNumber/date/expiry changes also attempt placeholder replacement in its Google file; this is not immutable native document versioning. Missing customer/contract\nreturns 404; empty number or unsupported status returns 400. No expected_version\nprecondition is provided.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "patch_manager_customer_contract",
         "security": [
           {
@@ -29477,7 +29477,7 @@
           "manager-contracts"
         ],
         "summary": "Delete Manager Customer Contract",
-        "description": "Delete an open-contract record of the current-tenant customer, clear orders\u2019 references\nto it and attempt Google file deletion. Provider cleanup is best effort, so success does\nnot prove the remote file was removed. Missing customer/contract returns 404, including\na repeat after deletion. Archiving is the alternative when the record should remain.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Delete an unused open contract belonging to the current-tenant customer. Orders or\ndocuments referencing it return 409 before provider cleanup. Archive a used contract\nto retain its history. Google file removal is best effort after the database commit.\nMissing customer/contract returns 404, including a repeat after deletion.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_customer_contract",
         "security": [
           {
@@ -68494,6 +68494,53 @@
       },
       "ManagerCustomerContractItemResponse": {
         "properties": {
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "google",
+              "crm"
+            ],
+            "title": "Source Kind",
+            "default": "google"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "default": false
+          },
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Order Id"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -68601,6 +68648,18 @@
       },
       "ManagerCustomerContractUpdatePayload": {
         "properties": {
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          },
           "number": {
             "anyOf": [
               {
@@ -89433,6 +89492,17 @@
       },
       "OrderCustomerContractBrief": {
         "properties": {
+          "legal_entity_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Id"
+          },
           "id": {
             "type": "integer",
             "title": "Id"

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type OrderCustomerContractBrief = {
+    legal_entity_id?: (number | null);
     id: number;
     customer_id: number;
     number: string;

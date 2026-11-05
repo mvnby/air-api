@@ -23,7 +23,7 @@ from schemas import (
     ManagerCustomerContractListResponse,
     ManagerCustomerContractUpdatePayload,
 )
-from services.customer_contract_service import CustomerContractService
+from services.customer_contract_service import ContractHistoryConflict, CustomerContractService
 
 
 router = APIRouter(prefix="/api/manager/customers", tags=["manager-contracts"])
@@ -175,8 +175,8 @@ async def patch_manager_customer_contract(
 ):
     """
     Patch supplied metadata of an open contract belonging to the current-tenant customer.
-    Number/date/expiry/document-role changes also attempt placeholder replacement in its
-    Google file; this is not immutable native document versioning. Missing customer/contract
+    Confirming an active tenant issuer and the party roles updates only the CRM register.
+    Number/date/expiry changes also attempt placeholder replacement in its Google file; this is not immutable native document versioning. Missing customer/contract
     returns 404; empty number or unsupported status returns 400. No expected_version
     precondition is provided.
 
@@ -254,20 +254,23 @@ async def delete_manager_customer_contract(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Delete an open-contract record of the current-tenant customer, clear orders’ references
-    to it and attempt Google file deletion. Provider cleanup is best effort, so success does
-    not prove the remote file was removed. Missing customer/contract returns 404, including
-    a repeat after deletion. Archiving is the alternative when the record should remain.
+    Delete an unused open contract belonging to the current-tenant customer. Orders or
+    documents referencing it return 409 before provider cleanup. Archive a used contract
+    to retain its history. Google file removal is best effort after the database commit.
+    Missing customer/contract returns 404, including a repeat after deletion.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    ok = await CustomerContractService.delete_for_customer(
-        session,
-        customer_id=customer_id,
-        contract_id=contract_id,
-        tenant_scope=tenant_scope,
-    )
+    try:
+        ok = await CustomerContractService.delete_for_customer(
+            session, customer_id=customer_id, contract_id=contract_id, tenant_scope=tenant_scope,
+        )
+    except ContractHistoryConflict as exc:
+        raise manager_http_error(
+            status_code=409, endpoint=DELETE_MANAGER_CUSTOMER_CONTRACT,
+            error_code="customer_contract_in_use", message=str(exc),
+        ) from exc
     if ok is None:
         raise manager_http_error(
             status_code=404,

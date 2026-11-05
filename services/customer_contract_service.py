@@ -1,22 +1,63 @@
+import asyncio
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import text, update
+from sqlalchemy import String, cast, exists, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import Customer, CustomerContract, GlobalConfig, Order
+from models import Customer, CustomerContract, DocumentLegalEntity, GlobalConfig, Order, OrderDocument
 from models.tenancy import TenantScope
 from modules.documents.domain.customer_signing import customer_signing_text
 from modules.documents.domain.party import customer_document_entity_type
 from services.document_role_service import DocumentRoleService
 from services.google_service import get_google_service
+from services.customer_reconciliation_legacy_review import LEGACY_META_KEY
 from services.customer_party import is_business_customer_type
 from services.tenant_scope_service import tenant_scope_clause
 
 
 OPEN_SERVICE_CONTRACT_TEMPLATE_ID = "1x-pL1j9g-NzLSpPTLVYXSsmutGExPgfDqzi2VLq9thI"
+
+
+class ContractHistoryConflict(ValueError):
+    pass
+
+
+def contract_has_history():
+    confirmed_id = OrderDocument.scope_meta[LEGACY_META_KEY]["contract_id"].as_string()
+    confirmed_reference = (
+        select(OrderDocument.id).join(Order, Order.id == OrderDocument.order_id)
+        .where(Order.customer_id == CustomerContract.customer_id,
+               cast(confirmed_id, String) == cast(CustomerContract.id, String))
+        .correlate(CustomerContract).exists()
+    )
+    return or_(
+        CustomerContract.last_act_number.is_not(None),
+        exists().where(Order.customer_contract_id == CustomerContract.id),
+        exists().where(OrderDocument.base_customer_contract_id == CustomerContract.id),
+        confirmed_reference,
+    )
+
+
+def _register_items(customer_id: int, tenant_scope: TenantScope):
+    visible_order_id = (
+        select(OrderDocument.order_id)
+        .join(Order, Order.id == OrderDocument.order_id)
+        .where(
+            OrderDocument.id == CustomerContract.source_document_id,
+            OrderDocument.tenant_id == tenant_scope.tenant_id,
+            Order.tenant_id == tenant_scope.tenant_id,
+            Order.storefront_id == tenant_scope.storefront_id,
+            Order.customer_id == customer_id,
+        )
+        .correlate(CustomerContract).scalar_subquery()
+    )
+    return select(CustomerContract, contract_has_history(), visible_order_id).where(
+        CustomerContract.customer_id == customer_id
+    )
 
 
 class CustomerContractService:
@@ -45,7 +86,7 @@ class CustomerContractService:
         return value.strftime("%d.%m.%Y") if value else "-"
 
     @staticmethod
-    def _to_item(contract: CustomerContract) -> Dict[str, Any]:
+    def _to_item(contract: CustomerContract, *, can_delete: bool = False, source_order_id: int | None = None) -> Dict[str, Any]:
         return {
             "id": int(contract.id or 0),
             "customer_id": int(contract.customer_id),
@@ -54,6 +95,11 @@ class CustomerContractService:
             "valid_until": contract.valid_until,
             "status": contract.status,
             "template_id": contract.template_id,
+            "legal_entity_id": contract.legal_entity_id,
+            "source_kind": "crm" if contract.source_document_id else "google",
+            "source_document_id": contract.source_document_id if source_order_id is not None else None,
+            "source_order_id": source_order_id,
+            "can_delete": can_delete and contract.source_document_id is None,
             "document_role_type": contract.document_role_type,
             "edit_url": contract.google_edit_url,
             "created_at": contract.created_at,
@@ -67,6 +113,7 @@ class CustomerContractService:
         return {
             "id": int(contract.id or 0),
             "customer_id": int(contract.customer_id),
+            "legal_entity_id": contract.legal_entity_id,
             "number": contract.number,
             "valid_from": contract.valid_from,
             "valid_until": contract.valid_until,
@@ -141,11 +188,13 @@ class CustomerContractService:
             return None
 
         result = await session.execute(
-            select(CustomerContract)
-            .where(CustomerContract.customer_id == customer_id)
+            _register_items(customer_id, tenant_scope)
             .order_by(CustomerContract.status.asc(), CustomerContract.valid_until.desc(), CustomerContract.id.desc())
         )
-        return {"items": [CustomerContractService._to_item(contract) for contract in result.scalars().all()]}
+        return {"items": [
+            CustomerContractService._to_item(contract, can_delete=not used, source_order_id=source_order_id)
+            for contract, used, source_order_id in result.all()
+        ]}
 
     @staticmethod
     async def _get_next_number(session: AsyncSession, contract_date: datetime) -> str:
@@ -156,19 +205,13 @@ class CustomerContractService:
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
                 {"lock_key": f"customer_contract_number:ОД-{year}-"},
             )
-        result = await session.execute(
-            select(CustomerContract)
-            .where(CustomerContract.number.contains(str(year)))
-            .order_by(CustomerContract.id.desc())
-        )
-        last = result.scalars().first()
-        next_num = 1
-        if last:
-            try:
-                next_num = int(str(last.number).split("-")[-1]) + 1
-            except (TypeError, ValueError, IndexError):
-                next_num = 1
-        return f"ОД-{year}-{next_num:03d}"
+        prefix = f"ОД-{year}-"
+        numbers = await session.scalars(select(CustomerContract.number).where(
+            CustomerContract.number.startswith(prefix)
+        ))
+        suffixes = (number[len(prefix):] for number in numbers)
+        last = max((int(value) for value in suffixes if value.isascii() and value.isdigit()), default=0)
+        return f"{prefix}{last + 1:03d}"
 
     @staticmethod
     async def _get_template_role_type(session: AsyncSession, template_id: Optional[str]) -> str:
@@ -271,7 +314,7 @@ class CustomerContractService:
         session.add(contract)
         await session.commit()
         await session.refresh(contract)
-        return CustomerContractService._to_item(contract)
+        return CustomerContractService._to_item(contract, can_delete=True)
 
     @staticmethod
     async def upload_for_customer(
@@ -344,7 +387,7 @@ class CustomerContractService:
             session.add(contract)
             await session.commit()
             await session.refresh(contract)
-            return CustomerContractService._to_item(contract)
+            return CustomerContractService._to_item(contract, can_delete=True)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -365,9 +408,35 @@ class CustomerContractService:
         )
         if customer is None:
             return None
-        contract = await session.get(CustomerContract, contract_id)
-        if not contract or int(contract.customer_id) != int(customer_id):
+        contract = await session.scalar(
+            select(CustomerContract)
+            .where(CustomerContract.id == contract_id, CustomerContract.customer_id == customer_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if contract is None:
             return None
+
+        if contract.source_document_id is not None and payload != {"status": "archived"}:
+            raise ValueError("Реквизиты договора CRM зафиксированы при выпуске. Для исправления выпустите замену.")
+        if "legal_entity_id" in payload:
+            issuer = await session.scalar(select(DocumentLegalEntity).where(
+                DocumentLegalEntity.id == payload["legal_entity_id"],
+                DocumentLegalEntity.tenant_id == tenant_scope.tenant_id,
+                DocumentLegalEntity.status == "active",
+            ))
+            if issuer is None:
+                raise ValueError("Выберите действующего исполнителя из этого аккаунта")
+            if not DocumentRoleService.nullable_role_type(payload.get("document_role_type")):
+                raise ValueError("Сверьте с оригиналом и укажите названия сторон")
+            conflicting_issue = await session.scalar(select(exists().where(
+                OrderDocument.base_customer_contract_id == contract_id,
+                OrderDocument.legal_entity_id != issuer.id,
+                OrderDocument.status.in_(("issued", "sent", "signed", "replaced")),
+            )))
+            if conflicting_issue:
+                raise ValueError("По договору уже выпущены документы другого исполнителя. Сверьте историю договора.")
+            contract.legal_entity_id = issuer.id
 
         if "number" in payload and payload.get("number") is not None:
             number = str(payload.get("number") or "").strip()
@@ -378,7 +447,7 @@ class CustomerContractService:
             template_id = str(payload.get("template_id") or "").strip()
             contract.template_id = template_id or None
         if "document_role_type" in payload:
-            contract.document_role_type = DocumentRoleService.normalize_role_type(payload.get("document_role_type"))
+            contract.document_role_type = DocumentRoleService.nullable_role_type(payload.get("document_role_type"))
         if "contract_date" in payload and payload.get("contract_date") is not None:
             contract.valid_from = CustomerContractService._normalize_naive_datetime(payload.get("contract_date"))
         if "valid_until" in payload and payload.get("valid_until") is not None:
@@ -389,7 +458,7 @@ class CustomerContractService:
                 raise ValueError("Некорректный статус договора")
             contract.status = status
 
-        if contract.google_file_id and any(field in payload for field in {"number", "contract_date", "valid_until", "document_role_type"}):
+        if contract.google_file_id and any(field in payload for field in {"number", "contract_date", "valid_until"}):
             if customer:
                 get_google_service().replace_placeholders(
                     contract.google_file_id,
@@ -397,9 +466,13 @@ class CustomerContractService:
                 )
 
         session.add(contract)
+        await session.flush()
+        current, used, source_order_id = (await session.execute(
+            _register_items(customer_id, tenant_scope).where(CustomerContract.id == contract_id)
+        )).one()
+        item = CustomerContractService._to_item(current, can_delete=not used, source_order_id=source_order_id)
         await session.commit()
-        await session.refresh(contract)
-        return CustomerContractService._to_item(contract)
+        return item
 
     @staticmethod
     async def archive_for_customer(
@@ -433,21 +506,27 @@ class CustomerContractService:
         )
         if customer is None:
             return None
-        contract = await session.get(CustomerContract, contract_id)
-        if not contract or int(contract.customer_id) != int(customer_id):
-            return None
-
-        if contract.google_file_id:
-            try:
-                get_google_service().delete_file(contract.google_file_id)
-            except Exception as exc:
-                print(f"Error deleting customer contract file from Drive: {exc}")
-
-        await session.execute(
-            update(Order)
-            .where(Order.customer_contract_id == contract_id)
-            .values(customer_contract_id=None)
+        contract = await session.scalar(
+            select(CustomerContract)
+            .where(CustomerContract.id == contract_id, CustomerContract.customer_id == customer_id)
+            .with_for_update()
         )
+        if contract is None:
+            return None
+        if contract.source_document_id is not None:
+            raise ContractHistoryConflict("Договор выпущен в CRM. Для завершения использования архивируйте его.")
+        used = await session.scalar(
+            select(contract_has_history()).select_from(CustomerContract).where(CustomerContract.id == contract_id)
+        )
+        if used:
+            raise ContractHistoryConflict("По договору есть заказ или документ. Архивируйте договор.")
+        file_id = contract.google_file_id
         await session.delete(contract)
         await session.commit()
+        if file_id:
+            # Drive cleanup follows a successful DB commit; a failed delete keeps the original.
+            try:
+                await asyncio.to_thread(lambda: get_google_service().delete_file(file_id))
+            except Exception:
+                logging.getLogger(__name__).exception("Drive cleanup failed for removed customer contract %s", contract_id)
         return True

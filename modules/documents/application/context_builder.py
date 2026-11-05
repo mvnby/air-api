@@ -21,6 +21,7 @@ from models import (
     OrderServiceLink,
 )
 from models.tenancy import TenantScope
+from services.customer_party import is_business_customer_type
 from modules.documents.domain.party import (
     SELF,
     customer_document_entity_type,
@@ -49,7 +50,8 @@ from .consumer_context import (
     build_consumer_document_context,
 )
 from .commercial_rows import line_rows
-from .open_contract_basis import covers_issue_date
+from .errors import ManagedDocumentConflictError
+from .open_contract_basis import resolve_native_basis
 from .party_roles import resolve_party_roles
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 from modules.documents.domain.roles import PARTY_ROLE_DOCUMENT_TYPES, ROLE_FORMS
@@ -95,7 +97,6 @@ class DocumentContextBuilder:
 
     SNAPSHOT_VERSION = 5
     NATIVE_TYPES = SUPPORTED_NATIVE_DOCUMENT_TYPES
-    BASE_TYPES = frozenset({"offer", "invoice", "contract"})
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
 
     @classmethod
@@ -147,6 +148,12 @@ class DocumentContextBuilder:
         )
         if order is None:
             raise DocumentContextError("Заказ не найден")
+        if (document_type == "contract" and selection.business_terms
+                and selection.business_terms.contract_scenario == "framework"):
+            if order.customer is None or not is_business_customer_type(order.customer.type):
+                raise DocumentContextError("Для рамочного договора выберите организацию или ИП")
+            if selection.business_terms.valid_until and selection.business_terms.valid_until < selection.issue_date:
+                raise DocumentContextError("Срок рамочного договора заканчивается до даты выпуска")
         legal_entity = await session.get(DocumentLegalEntity, selection.legal_entity_id)
         if (
             legal_entity is None
@@ -167,14 +174,15 @@ class DocumentContextBuilder:
             service_quantities=selection.scope_service_line_quantities or {},
             product_ids=selection.scope_product_line_ids,
         )
-        base_document, base_contract = await cls._resolve_basis(
-            session,
-            order=order,
-            document_type=document_type,
-            issue_date=selection.issue_date,
-            base_document_id=selection.base_document_id,
-            base_customer_contract_id=selection.base_customer_contract_id,
-        )
+        try:
+            base_document, base_contract = await resolve_native_basis(
+                session, order=order, document_type=document_type,
+                issuer_id=selection.legal_entity_id, issue_date=selection.issue_date,
+                base_document_id=selection.base_document_id,
+                base_customer_contract_id=selection.base_customer_contract_id,
+            )
+        except ManagedDocumentConflictError as exc:
+            raise DocumentContextError(str(exc)) from exc
         if (
             document_type in cls.CLOSING_TYPES
             and base_document is None
@@ -448,6 +456,7 @@ class DocumentContextBuilder:
             "meta": {
                 "tenant_id": tenant_scope.tenant_id,
                 "order_id": int(order.id),
+                "customer_id": order.customer_id,
                 "legal_entity_id": int(legal_entity.id),
                 "document_type": document_type,
                 "proposal_id": proposal_id,
@@ -589,76 +598,6 @@ class DocumentContextBuilder:
             ]
         return selected_products, selected_services
 
-    @classmethod
-    async def _resolve_basis(
-        cls,
-        session: AsyncSession,
-        *,
-        order: Order,
-        document_type: str,
-        issue_date: date,
-        base_document_id: int | None,
-        base_customer_contract_id: int | None,
-    ) -> tuple[OrderDocument | None, CustomerContract | None]:
-        if document_type not in cls.CLOSING_TYPES | {"invoice"}:
-            return None, None
-        if base_document_id:
-            document = await session.get(OrderDocument, base_document_id)
-            if (
-                document is None
-                or document.order_id != order.id
-                or document.tenant_id not in {None, order.tenant_id}
-                or document.doc_type not in cls.BASE_TYPES
-                or document.status not in {None, "issued", "sent", "signed"}
-            ):
-                raise DocumentContextError("Документ-основание не найден в заказе")
-            if document.doc_type == "invoice" and document.business_role != "offer":
-                raise DocumentContextError(
-                    "Обычный счет на оплату не является основанием акта"
-                )
-            return document, None
-        requested_contract_id = base_customer_contract_id or order.customer_contract_id
-        if requested_contract_id:
-            contract = await session.get(CustomerContract, requested_contract_id)
-            if (
-                contract is None
-                or contract.customer_id != order.customer_id
-                or contract.status != "active"
-            ):
-                if base_customer_contract_id or document_type != "invoice":
-                    raise DocumentContextError("Договор клиента не найден")
-            elif covers_issue_date(contract, issue_date):
-                return None, contract
-            elif base_customer_contract_id or document_type != "invoice":
-                raise DocumentContextError("Дата документа выходит за срок открытого договора")
-
-        result = await session.execute(
-            select(OrderDocument)
-            .where(
-                OrderDocument.order_id == order.id,
-                OrderDocument.doc_type.in_(("contract", "invoice", "offer")),
-                OrderDocument.status.in_(("issued", "sent", "signed"))
-                | OrderDocument.status.is_(None),
-            )
-            .order_by(OrderDocument.created_at.desc(), OrderDocument.id.desc())
-        )
-        candidates = list(result.scalars().all())
-        contract = next(
-            (item for item in candidates if item.doc_type == "contract"), None
-        )
-        if contract:
-            return contract, None
-        offer_invoice = next(
-            (
-                item
-                for item in candidates
-                if item.doc_type == "offer"
-                or (item.doc_type == "invoice" and item.business_role == "offer")
-            ),
-            None,
-        )
-        return offer_invoice, None
-
     @staticmethod
     def _basis_values(
         document: OrderDocument | None,
@@ -674,7 +613,9 @@ class DocumentContextBuilder:
             return "", "", ""
         labels = {"contract": "Договор", "invoice": "Счет-оферта", "offer": "Оферта"}
         if document.official_number:
-            number = f"{document.official_series or ''}{document.official_number}"
+            number = ((document.render_snapshot or {}).get("values") or {}).get(
+                "document.official_full_number"
+            ) or f"{document.official_series or ''}{document.official_number}"
         else:
             number = document.number
         raw_date = document.official_date or document.date

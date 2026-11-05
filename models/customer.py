@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -109,10 +110,22 @@ class CustomerContract(SQLModel, table=True):
     __tablename__ = "customer_contract"
     __table_args__ = (
         CheckConstraint("last_act_number >= 0", name="ck_customer_contract_last_act_number"),
+        CheckConstraint("source_document_id IS NULL OR legal_entity_id IS NOT NULL",
+                        name="ck_customer_contract_source_issuer"),
+        UniqueConstraint("source_document_id", name="uq_customer_contract_source_document"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="customer.id", index=True)
+
+    legal_entity_id: Optional[int] = Field(default=None, sa_column=Column(
+        Integer, ForeignKey("document_legal_entity.id", name="fk_customer_contract_issuer"),
+        nullable=True, index=True,
+    ))
+    source_document_id: Optional[int] = Field(default=None, sa_column=Column(
+        Integer, ForeignKey("order_document.id", name="fk_customer_contract_source_document",
+                            use_alter=True, ondelete="RESTRICT"), nullable=True,
+    ))
 
     number: str = Field(index=True)
     last_act_number: Optional[int] = Field(default=None)

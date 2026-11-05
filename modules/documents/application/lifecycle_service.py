@@ -53,12 +53,15 @@ from .errors import (
     ManagedDocumentGenerationError,
     ManagedDocumentNotFoundError,
 )
+from .framework_contracts import (
+    archive_framework_contract, prepare_framework_registration, register_issued_framework,
+)
 from .number_policies import DocumentNumberPolicyService
 from .issuance_artifacts import (
     assign_official_identity,
     render_and_store_issued_artifacts,
 )
-from .open_contract_basis import validate_act_basis_for_issue
+from .open_contract_basis import validate_saved_basis_for_issue
 from .replacement_guard import lock_replacement_target
 from .template_selection import (
     load_document_template_version,
@@ -372,9 +375,11 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "У черновика отсутствует снимок или версия шаблона"
             )
+        # Validate the frozen customer and term before reserving an official number.
+        await prepare_framework_registration(session, document, tenant_scope)
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
-        await validate_act_basis_for_issue(session, document=document, scope=tenant_scope)
+        await validate_saved_basis_for_issue(session, document=document, scope=tenant_scope)
         readiness = await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
@@ -555,6 +560,7 @@ class ManagedDocumentService:
             session.add(artifact_row(stored_docx))
         if "pdf" not in existing_kinds:
             session.add(artifact_row(stored_pdf))
+        await register_issued_framework(session, document, tenant_scope)
         state = transition_document(
             cls._lifecycle_state(document),
             DocumentStatus.ISSUED,
@@ -587,6 +593,7 @@ class ManagedDocumentService:
                     "Заменяемый документ изменил статус во время выпуска"
                 ) from exc
             cls._apply_lifecycle(original, replacement_state)
+            await archive_framework_contract(session, original)
             session.add(original)
         session.add(document)
         await cls._commit(session, "Не удалось завершить выпуск документа")
@@ -621,6 +628,7 @@ class ManagedDocumentService:
             void_reason=reason,
         )
         cls._apply_lifecycle(document, state)
+        await archive_framework_contract(session, document)
         await DocumentNumberingRepository.mark_void(
             session,
             tenant_id=tenant_scope.tenant_id,
@@ -674,7 +682,7 @@ class ManagedDocumentService:
             .options(selectinload(OrderDocument.document_template))
         )
         if for_update:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         document = (await session.execute(statement)).scalar_one_or_none()
         if document is not None and for_update and document.doc_type in {"maintenance_defect_act", "participant_statement"}:
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)

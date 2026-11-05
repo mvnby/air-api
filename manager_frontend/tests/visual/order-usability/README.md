@@ -174,3 +174,12 @@ The synthetic order covers selection of an unbound customer contract, explicit
 party labels, branch and partial work quantities, and first-issue confirmation
 of the previous printed number. The browser checks the resulting act and its
 separate accounting number at 320, 390 and 1440 px. The default port is 5228.
+
+## Customer contract register
+
+Run `node manager_frontend/tests/visual/order-usability/customer-contracts.cjs`
+with the same Playwright variables and Manager build. The synthetic customer
+covers native and Google source links, editing the parties of a legacy contract,
+and hiding deletion for contracts with history. The check exercises 320, 390
+and 1440 px widths, including touch target sizes at phone widths. Its default
+port is 5232.
