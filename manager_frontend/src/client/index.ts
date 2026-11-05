@@ -885,6 +885,7 @@ export type { PublicStorefrontContextResponse } from './models/PublicStorefrontC
 export type { PublicWriteIdempotencyErrorResponse } from './models/PublicWriteIdempotencyErrorResponse';
 export type { PublicWriteRequestErrorResponse } from './models/PublicWriteRequestErrorResponse';
 export type { RegistrationCertificateItem } from './models/RegistrationCertificateItem';
+export type { RepairDefect } from './models/RepairDefect';
 export type { RepairDiagnosticLeadResponse } from './models/RepairDiagnosticLeadResponse';
 export type { ResolveMaintenanceObservation } from './models/ResolveMaintenanceObservation';
 export type { SeriesAccessoriesUpdate } from './models/SeriesAccessoriesUpdate';

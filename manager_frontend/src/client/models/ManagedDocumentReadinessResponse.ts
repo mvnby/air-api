@@ -7,7 +7,7 @@ export type ManagedDocumentReadinessResponse = {
     checked: boolean;
     missing_fields?: Array<DocumentCustomerMissingField>;
     can_issue: boolean;
-    template_id: number;
-    template_version_id: number;
+    template_id: (number | null);
+    template_version_id: (number | null);
 };
 

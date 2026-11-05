@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { ManagerService, type ManagerCustomerDocumentItem } from '../../client';
+import { documentTypeName } from '../../features/documents/model/native-document-options';
 import { getApiErrorMessage } from '../../utils/api-errors';
 const props = defineProps<{ customerId: number }>();
 const items = ref<ManagerCustomerDocumentItem[]>([]);
 const loading = ref(true);
 const error = ref('');
 const names: Record<string,string> = { act: 'Акт', service_act: 'Акт оказанных услуг', maintenance_service_act: 'Акт обслуживания', contract: 'Договор', invoice: 'Счёт', tn2: 'Накладная', ttn1: 'ТТН', retail_receipt: 'Товарный чек', reconciliation: 'Акт сверки' };
-const identityLabel = (doc: ManagerCustomerDocumentItem) => `${names[doc.doc_type] || doc.doc_type} ${doc.identity_source === 'unverified_legacy' ? '· внутр. №' : '№'} ${doc.number}`;
+const identityLabel = (doc: ManagerCustomerDocumentItem) => `${names[doc.doc_type] || documentTypeName(doc.doc_type)} ${doc.identity_source === 'unverified_legacy' ? '· внутр. №' : '№'} ${doc.number}`;
 async function load() { loading.value = true; error.value = ''; try { items.value = (await ManagerService.getManagerCustomerDocs(props.customerId)).items; } catch(e) { error.value = getApiErrorMessage(e); } finally { loading.value = false; } }
 onMounted(load);
 </script>

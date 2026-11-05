@@ -49,7 +49,9 @@ async def check_managed_document_readiness(
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
     """Read the selected native version and scoped order facts without creating a draft
-    or reserving a number. Reports only applicable placeholders surviving the frozen
+    or reserving a number. A first-use repair defect act checks the built-in form in
+    memory and returns null template/version IDs until the first draft installs it.
+    Reports only applicable placeholders surviving the frozen
     party conditions. Creating a draft and issuing it repeat server-side checks;
     this response is advisory and does not authorize issuance. Returns 404 for
     scoped dependencies, 409 for incompatible context, 400 for invalid facts and

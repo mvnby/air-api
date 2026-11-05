@@ -19,6 +19,7 @@ def selection_from_payload(order_id: int, payload: ManagedDocumentDraftPayload) 
         legal_entity_id=payload.legal_entity_id,
         issue_date=payload.issue_date,
         issue_city=payload.issue_city,
+        repair_defect=payload.repair_defect,
         participant_statement=(ParticipantStatement(**payload.participant_statement.model_dump())
             if payload.participant_statement is not None else None),
         proposal_id=payload.proposal_id,

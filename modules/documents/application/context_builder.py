@@ -38,6 +38,7 @@ from modules.documents.domain import (
     TransportTerms,
     WAYBILL_DOCUMENT_TYPES,
 )
+from modules.documents.domain.repair_defect import RepairDefect
 from modules.documents.domain.participant_statement import ParticipantStatement
 from .business_context import (
     BusinessDocumentContextError,
@@ -90,6 +91,7 @@ class DocumentContextSelection:
     transport_terms: TransportTerms | None = None
     maintenance_preparation_id: int | None = None
     participant_statement: ParticipantStatement | None = None
+    repair_defect: RepairDefect | None = None
 
 
 class DocumentContextBuilder:
@@ -138,6 +140,8 @@ class DocumentContextBuilder:
             )
         if document_type == "maintenance_defect_act" and selection.maintenance_preparation_id is None:
             raise DocumentContextError("Подготовьте дефектный акт через выбранные замечания ТО")
+        if (document_type == "repair_defect_act") != (selection.repair_defect is not None):
+            raise DocumentContextError("Заключение требуется только для дефектного акта ремонта")
         if (document_type == "participant_statement") != (selection.participant_statement is not None):
             raise DocumentContextError("Реквизиты заявления участника обязательны только для заявления")
         business_role = cls._business_role(document_type, selection.business_role)
@@ -148,6 +152,8 @@ class DocumentContextBuilder:
         )
         if order is None:
             raise DocumentContextError("Заказ не найден")
+        if document_type == "repair_defect_act" and (order.workflow_type != "repair" or order.customer_id is None):
+            raise DocumentContextError("Для дефектного акта нужен заказ на ремонт с выбранным клиентом")
         if (document_type == "contract" and selection.business_terms
                 and selection.business_terms.contract_scenario == "framework"):
             if order.customer is None or not is_business_customer_type(order.customer.type):
@@ -481,6 +487,18 @@ class DocumentContextBuilder:
             "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
 
+        if selection.repair_defect is not None:
+            # An order quote or sold part is not an expert's repair estimate.
+            snapshot["table_rows"] = {}
+            snapshot["values"] = {
+                key: value for key, value in values.items()
+                if key.startswith(("document.", "seller.", "customer.", "order."))
+            }
+            snapshot["conditions"] = {
+                key: value for key, value in conditions.items() if key.startswith(("seller.", "customer.", "order."))
+            }
+            snapshot["meta"]["draft_parameters"] = {"repair_defect": json_terms(selection.repair_defect)}
+            selection.repair_defect.update_snapshot(snapshot)
         if document_type == "participant_statement":
             try:
                 snapshot["values"].update(selection.participant_statement.values())

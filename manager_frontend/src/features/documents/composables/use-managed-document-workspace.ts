@@ -8,6 +8,7 @@ import {
   type DocumentLegalEntityItem,
   type DocumentPdfRuntimeStatus,
   type ManagedDocumentItem,
+  type ManagerOrderDetailResponse,
   type ManagedDocumentDraftPayload,
   type DocumentCustomerReadiness,
   type NativeDocumentTemplateItem,
@@ -45,11 +46,13 @@ import {
   serializeTransportTerms,
   type TransportTerms,
 } from '../model/transport-terms';
+import { newRepairDefectForm, repairDefectPayload } from '../model/repair-defect';
 import { openNativeDocumentPreview } from '../integrations/native-document-preview';
 
 type ManagedWorkspaceInput = {
   orderId: () => number;
   customerContext?: () => unknown;
+  repairOrder?: () => ManagerOrderDetailResponse;
   actScope?: () => Pick<ManagedDocumentDraftPayload,
     'scope_customer_branch_id' | 'scope_title' | 'scope_address' | 'scope_service_line_ids' | 'scope_service_line_quantities'>;
   workflowType: () => string | null | undefined;
@@ -94,9 +97,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const businessTerms = ref<BusinessDocumentTerms>(createDefaultBusinessDocumentTerms());
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
+  const repairDefect = ref(newRepairDefectForm(input.repairOrder?.()));
   const participantStatement = ref({ procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' });
   const contractActPrompt = ref<{ documentId: number; previous: PreviousContractAct } | null>(null);
   const participantStatementConfirmations = ref<Record<number, boolean>>({});
+  watch([() => input.orderId(), () => input.repairOrder?.().customer?.id], () => {
+    repairDefect.value = newRepairDefectForm(input.repairOrder?.());
+  }, { flush: 'sync' });
   watch(() => input.orderId(), () => {
     participantStatement.value = { procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' };
     participantStatementConfirmations.value = {};
@@ -353,6 +360,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       }
       if (!selectedTemplateId.value) return '';
     }
+    if (documentType.value === 'repair_defect_act' && !selectedTemplateId.value) return '';
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
     if (['act', 'tn2', 'ttn1'].includes(documentType.value) && !baseDocumentId.value && !baseCustomerContractId.value) {
@@ -565,6 +573,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const draftPayload = computed(() => ({
     ...(documentType.value === 'act' ? input.actScope?.() : {}),
     legal_entity_id: selectedLegalEntityId.value,
+    repair_defect: documentType.value === 'repair_defect_act' ? repairDefectPayload(repairDefect.value) : undefined,
     participant_statement: documentType.value === 'participant_statement'
       ? { ...participantStatement.value } : undefined,
     document_type: documentType.value,
@@ -614,7 +623,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
-      if (['contract', 'invoice', 'act'].includes(payload.document_type)) {
+      if (['contract', 'invoice', 'act', 'repair_defect_act'].includes(payload.document_type)) {
         const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
         if (!isCurrent()) return;
         if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
@@ -639,6 +648,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetBusinessTerms();
       resetActTerms();
       resetTransportTerms();
+      if (documentType.value === 'repair_defect_act') {
+        repairDefect.value = newRepairDefectForm(input.repairOrder?.());
+        void loadTemplates();
+      }
       if (documentType.value === 'participant_statement') {
         participantStatement.value.declaration_text = '';
         void loadTemplates();
@@ -656,7 +669,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
     if (!action.canIssue()) return false;
-    if (document.status !== 'draft' || !['contract', 'invoice', 'act'].includes(document.doc_type)) return true;
+    if (document.status !== 'draft' || !['contract', 'invoice', 'act', 'repair_defect_act'].includes(document.doc_type)) return true;
     busy.value = true;
     try {
       const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
@@ -758,6 +771,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
   };
 
+  const cancelReplacement = () => {
+    if (!replacesDocumentId.value) return;
+    replacesDocumentId.value = null;
+    repairDefect.value = newRepairDefectForm(input.repairOrder?.());
+  };
+
   const prepareReplacement = (document: ManagedDocumentItem) => {
     const preservesConsumerTerms = (
       isConsumerDocumentType(documentType.value)
@@ -769,6 +788,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     resetTransportTerms();
     if (document.doc_type === 'participant_statement' && document.participant_statement) {
       participantStatement.value = { ...document.participant_statement };
+    }
+    if (document.doc_type === 'repair_defect_act') {
+      repairDefect.value = document.repair_defect ? { ...document.repair_defect } : newRepairDefectForm();
     }
     preferredTemplateId = document.document_template_id || null;
     documentType.value = document.doc_type;
@@ -865,6 +887,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     activeTemplateVersionId: computed(() => templateVersions.value.find((item) => item.status === 'active')?.id || null),
     pdfRuntime,
     prepareReplacement,
+    cancelReplacement,
     replacesDocumentId,
     requestVoid,
     resetConsumerTerms,
@@ -876,6 +899,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     selectedTemplateId,
     participantStatement,
     participantStatementConfirmations,
+    repairDefect,
     templates,
     templatesLoading,
     transportTerms,

@@ -10,12 +10,15 @@ import { createDefaultTransportTerms, type TransportTerms } from '../model/trans
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
+import RepairDefectFields from './RepairDefectFields.vue';
+import { repairDefectFormError, repairDefectPayload, type RepairDefectForm } from '../model/repair-defect';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import { installationTermsError, serializeInstallationTerms } from '../model/installation-two-stages';
 
 const props = defineProps<{ document: ManagedDocumentItem; disabled?: boolean }>();
 const emit = defineEmits<{ close: []; saved: [rebuilt: boolean]; toast: [message: string, type: 'success' | 'error'] }>();
-type Form = Omit<ManagedDocumentDraftParameters, 'business_terms' | 'consumer_terms' | 'act_terms' | 'transport_terms'> & {
+type Form = Omit<ManagedDocumentDraftParameters, 'business_terms' | 'consumer_terms' | 'act_terms' | 'transport_terms' | 'repair_defect'> & {
+  repair_defect?: RepairDefectForm | null;
   business_terms: BusinessDocumentTerms | null;
   consumer_terms: ConsumerDocumentTerms | null;
   act_terms: ActTerms | null;
@@ -28,7 +31,7 @@ const saving = ref(false);
 const error = ref('');
 let active = true;
 onBeforeUnmount(() => { active = false; });
-const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement'] as const;
+const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement', 'repair_defect'] as const;
 const changes = computed(() => {
   const result: Record<string, unknown> = {};
   if (!form.value || !baseline.value) return result;
@@ -39,6 +42,7 @@ const changes = computed(() => {
   return result;
 });
 const rebuilds = computed(() => Object.keys(changes.value).some((name) => name !== 'issue_date'));
+const defectError = computed(() => form.value?.repair_defect ? repairDefectFormError(form.value.repair_defect) : '');
 const stageError = computed(() => form.value?.consumer_terms?.installation_two_stages
   ? installationTermsError(form.value.consumer_terms, Math.round(Number(form.value.total_amount) * 100)) : '');
 
@@ -49,6 +53,7 @@ const load = async () => {
     const business = response.business_terms;
     const loaded: Form = {
       ...response,
+      issue_city: response.issue_city?.trim() || null,
       business_terms: business ? {
         ...createDefaultBusinessDocumentTerms(), ...business,
         contract_scenario: business.contract_scenario as BusinessDocumentTerms['contract_scenario'],
@@ -72,10 +77,11 @@ const load = async () => {
 void load();
 
 const save = async () => {
-  if (!form.value || saving.value || props.disabled || stageError.value || !Object.keys(changes.value).length) return;
+  if (!form.value || saving.value || props.disabled || stageError.value || defectError.value || !Object.keys(changes.value).length) return;
   const rebuilt = rebuilds.value;
   const reset = rebuilt && form.value.has_editable_copy;
   const payload = { ...changes.value, expected_revision: form.value.revision, reset_editable_copy: reset } as ManagedDocumentDraftParameterUpdate;
+  if (payload.repair_defect && form.value.repair_defect) payload.repair_defect = repairDefectPayload(form.value.repair_defect);
   if (payload.consumer_terms && form.value.consumer_terms) payload.consumer_terms = serializeInstallationTerms(form.value.consumer_terms);
   saving.value = true;
   error.value = '';
@@ -110,6 +116,7 @@ const save = async () => {
       </div>
       <B2BContractTermsPanel v-if="form.business_terms" :document-type="document.doc_type" :terms="form.business_terms" :order-conditions="form.order_conditions" @update-terms="form.business_terms = $event" />
       <ConsumerDocumentTermsPanel v-if="form.consumer_terms" :document-type="document.doc_type" :terms="form.consumer_terms" :proposal-total-cents="Math.round(Number(form.total_amount) * 100)" @update-terms="form.consumer_terms = $event" />
+      <RepairDefectFields v-if="form.repair_defect" :terms="form.repair_defect" @update-terms="form.repair_defect = $event" />
       <ActTermsPanel v-if="form.act_terms" :terms="form.act_terms" @update-terms="form.act_terms = $event" />
       <TransportTermsPanel v-if="form.transport_terms" :document-type="document.doc_type" :terms="form.transport_terms" @update-terms="form.transport_terms = $event" />
       <div v-if="form.participant_statement" class="mt-3 space-y-3">
@@ -119,9 +126,10 @@ const save = async () => {
         <label class="native-field"><span>Текст заявления</span><textarea v-model="form.participant_statement.declaration_text" class="native-input" rows="6" maxlength="20000" /></label>
       </div>
     </fieldset>
+    <p v-if="defectError" class="mt-3 text-sm text-amber-700">{{ defectError }}</p>
     <p v-if="error" class="mt-3 text-sm text-rose-700" role="alert">{{ error }}</p>
     <div class="mt-4 flex flex-wrap gap-2">
-      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || Boolean(stageError) || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
+      <button v-if="form" class="native-action-primary" type="submit" data-testid="save-draft-parameters" :disabled="saving || disabled || Boolean(stageError || defectError) || !Object.keys(changes).length">{{ saving ? 'Сохраняем…' : 'Сохранить параметры' }}</button>
       <button class="native-action" type="button" :disabled="saving" @click="emit('close')">Отмена</button>
     </div>
   </form>

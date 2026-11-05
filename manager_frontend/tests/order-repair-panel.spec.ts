@@ -130,6 +130,10 @@ describe('OrderRepairPanel', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
+    await wrapper.get('[data-testid="open-repair-client-act"]').trigger('click');
+    expect(wrapper.emitted('open-repair-act')).toHaveLength(1);
+    await wrapper.setProps({ order: { ...order, status: 'closed' } });
+    expect(wrapper.find('[data-testid="open-repair-client-act"]').exists()).toBe(false);
     expect(repairMeta).toEqual(beforeMount);
     expect(repairMeta.fault_type).toBeNull();
     expect((wrapper.get('[data-testid="repair-defect-type"]').element as HTMLSelectElement).value).toBe('');
@@ -291,7 +295,7 @@ describe('OrderRepairPanel', () => {
     }));
     expect(wrapper.emitted('reload')).toEqual([[order.id]]);
     expect(wrapper.emitted('toast')).toContainEqual([{
-      message: 'Черновик дефектного акта заполнен и сохранен',
+      message: 'Технические данные сохранены в заказе',
       type: 'success',
     }]);
   });

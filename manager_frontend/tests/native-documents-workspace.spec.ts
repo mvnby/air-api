@@ -4,6 +4,7 @@ import {
   ManagerDocumentSystemService,
   ManagerDocsService,
   ManagerContractsService,
+  ManagerEquipmentLinksService,
   ManagerService,
   CancelablePromise,
   OpenAPI,
@@ -217,6 +218,94 @@ describe('NativeDocumentsWorkspace', () => {
     } finally {
       window.history.replaceState(null, '', previousUrl);
     }
+  });
+
+  it.each(['individual', 'company'])('creates a repair act for a %s using only the confirmed conclusion', async (type) => {
+    vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace(undefined, {
+      ...baseOrder, workflow_type: 'repair', customer: { ...baseOrder.customer!, type },
+      repair_meta: {
+        equipment_model: 'A-09', equipment_serial_number: 'SN-01',
+        confirmed_facts: ['Утечка в соединении'], diagnostic_notes: 'Внутренние замеры',
+        repair_recommendation: 'Герметизировать соединение', repair_status: 'completed',
+      },
+    });
+    const field = (id: string) => wrapper.get<HTMLInputElement>(`[data-testid="repair-${id}"]`);
+    expect(wrapper.get('[data-testid="native-document-type-repair_defect_act"]').attributes('aria-pressed')).toBe('true');
+    expect(field('equipment').element.value).toBe('A-09 S/N SN-01');
+    expect(field('finding').element.value).toBe('');
+    await wrapper.findAll('button').find(button => button.text() === 'Подставить результат диагностики из заказа')!.trigger('click');
+    expect(field('finding').element.value).toBe('Утечка в соединении');
+    expect(field('verdict').element.value).toBe('');
+    expect(field('cost').element.value).toBe('');
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+    expect(create.attributes('disabled')).toBeDefined();
+    await field('verdict').setValue('repairable');
+    await wrapper.findAll('button').find(button => button.text() === 'Подставить рекомендацию из заказа')!.trigger('click');
+    await field('cost').setValue('240 BYN');
+    await field('term').setValue('3 рабочих дня');
+    await field('verdict').setValue('needs_diagnostics');
+    expect(field('cost').element.value).toBe('');
+    expect(field('term').element.value).toBe('');
+    await field('recommendation').setValue('Уточнить место утечки');
+    await create.trigger('click'); await flushPromises();
+    const payload = {
+      document_type: 'repair_defect_act',
+      repair_defect: { equipment: 'A-09 S/N SN-01', finding: 'Утечка в соединении', recommendation: 'Уточнить место утечки',
+        verdict: 'needs_diagnostics', cost: null, term: null, restriction: null },
+    };
+    expect(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).toHaveBeenCalledWith(42, expect.objectContaining(payload));
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining(payload));
+  });
+
+  it('takes replacement terms from the issued act and clears them when the replacement is cancelled', async () => {
+    const terms = { equipment: 'Старый блок', finding: 'Повторный выход из строя', verdict: 'uneconomical' as const,
+      recommendation: 'Заменить оборудование', cost: null, term: null };
+    const original = { ...revision(60, 'issued', null, 'repair_defect_act'), repair_defect: terms };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [original] });
+    const wrapper = await mountWorkspace(undefined, {
+      ...baseOrder, workflow_type: 'repair', repair_meta: { equipment_model: 'Блок из текущего заказа' },
+    });
+    const scroll = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    await wrapper.findAll('button').find(button => button.text() === 'Создать исправленную редакцию')!.trigger('click');
+    const field = (id: string) => wrapper.get<HTMLInputElement>(`[data-testid="repair-${id}"]`);
+    expect(field('equipment').element.value).toBe('Старый блок');
+    expect(field('verdict').element.value).toBe('uneconomical');
+    expect(field('finding').element.value).toBe('Повторный выход из строя');
+    await wrapper.findAll('button').find(button => button.text() === 'Отменить')!.trigger('click');
+    expect(field('equipment').element.value).toBe('Блок из текущего заказа');
+    expect(field('verdict').element.value).toBe('');
+    expect(field('finding').element.value).toBe('');
+    scroll.mockRestore();
+  });
+
+  it('separates the findings of different linked units and supports manual equipment', async () => {
+    const items = [1, 2].map(id => ({
+      role: 'serviced', equipment: { id, customer_id: 11, display_name: 'Блок', serial: `SN-${id}` },
+    }));
+    vi.spyOn(ManagerEquipmentLinksService, 'listManagerOrderEquipmentLinks').mockResolvedValue({ items });
+    const wrapper = await mountWorkspace(undefined, {
+      ...baseOrder, workflow_type: 'repair', linked_equipment_count: 2,
+      repair_meta: { confirmed_facts: ['Утечка в первом блоке'], repair_recommendation: 'Заменить датчик первого блока' },
+    });
+    const field = (id: string) => wrapper.get<HTMLInputElement>(`[data-testid="repair-${id}"]`);
+    expect(field('equipment-selection').element.value).toBe('');
+    expect(field('finding').element.value).toBe('');
+    expect(wrapper.text()).not.toContain('Подставить рекомендацию из заказа');
+    await field('equipment-selection').setValue('Блок · S/N SN-1');
+    await field('verdict').setValue('repairable'); await field('finding').setValue('Утечка в первом блоке');
+    await field('cost').setValue('220 BYN');
+    await field('equipment-selection').setValue('Блок · S/N SN-2');
+    expect(field('finding').element.value).toBe('');
+    expect(field('cost').element.value).toBe('');
+    expect(field('verdict').element.value).toBe('');
+    await field('verdict').setValue('operational');
+    await field('equipment-selection').setValue('__manual');
+    expect(field('equipment').element.value).toBe('');
+    expect(field('verdict').element.value).toBe('');
+    await wrapper.setProps({ order: { ...baseOrder, id: 45, workflow_type: 'maintenance' } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="native-document-type-repair_defect_act"]').exists()).toBe(false);
   });
 
   it('opens only the saved draft template and gates both shortcuts by template-management access', async () => {
