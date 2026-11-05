@@ -10,6 +10,7 @@ import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftParameterUpdate = {
     expected_revision: string;
     reset_editable_copy?: boolean;
+    template_version_id?: (number | null);
     issue_date?: (string | null);
     issue_city?: (string | null);
     business_terms?: (BusinessDocumentTermsPayload_Input | null);

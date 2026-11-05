@@ -2,13 +2,13 @@
 import { computed, ref, watch } from 'vue';
 import {
   ManagerDocumentSystemService,
-  OpenAPI,
   type NativeDocumentTemplateItem,
   type NativePlaceholderConditionItem,
   type NativePlaceholderDescriptorItem,
   type NativePlaceholderCatalogResponse,
   type NativeTemplateVersionItem,
 } from '../../../client';
+import { downloadTemplateVersion } from '../integrations/template-download';
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
@@ -295,26 +295,9 @@ const activate = async (versionId: number) => {
 const downloadVersion = async (version: NativeTemplateVersionItem) => {
   if (!props.legalEntityId || !selectedTemplateId.value) return;
   const legalEntityId = props.legalEntityId;
-  const templateId = selectedTemplateId.value;
   downloadingId.value = version.id;
   try {
-    const query = new URLSearchParams({ legal_entity_id: String(legalEntityId) });
-    const response = await fetch(
-      `${OpenAPI.BASE}/api/manager/document-system/templates/${templateId}/versions/${version.id}/source?${query}`,
-      {
-        credentials: OpenAPI.WITH_CREDENTIALS ? OpenAPI.CREDENTIALS : 'same-origin',
-        headers: { Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-      },
-    );
-    if (!response.ok) throw new Error(`Не удалось скачать DOCX (${response.status})`);
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = version.source_filename || `template-v${version.version}.docx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    await downloadTemplateVersion(legalEntityId, version);
   } catch (error) {
     notify(getApiErrorMessage(error), 'error');
   } finally {

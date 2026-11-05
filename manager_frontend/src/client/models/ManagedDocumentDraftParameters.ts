@@ -16,6 +16,7 @@ export type ManagedDocumentDraftParameters = {
     transport_terms?: (TransportTermsPayload | null);
     participant_statement?: (ParticipantStatementPayload | null);
     revision: string;
+    template_version_id: number;
     has_editable_copy: boolean;
     total_amount: string;
     order_conditions?: (string | null);

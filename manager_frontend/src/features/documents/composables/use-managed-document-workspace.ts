@@ -381,7 +381,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     const legalEntityId = selectedLegalEntityId.value;
     const templateId = selectedTemplateId.value;
     const currentRequest = ++versionRequestId;
-    templateVersions.value = [];
+    if (templateVersions.value.some((version) => version.template_id !== templateId)) templateVersions.value = [];
     if (!legalEntityId || !templateId) {
       templateVersionsLoading.value = false;
       templateVersions.value = [];
@@ -861,6 +861,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     loading,
     loadDocuments,
     loadWorkspace,
+    loadTemplateVersions,
+    activeTemplateVersionId: computed(() => templateVersions.value.find((item) => item.status === 'active')?.id || null),
     pdfRuntime,
     prepareReplacement,
     replacesDocumentId,

@@ -58,27 +58,7 @@ class FacsimilePreviewService:
                    document_id: int, page_number: int) -> bytes:
         context = await load_context(session, tenant_scope=tenant_scope, document_id=document_id)
         content = await read_pdf(context.base)
-        normalized = await asyncio.to_thread(single_page_pdf, content, page_number)
-        async with _render_slots:
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    "pdftoppm", "-singlefile", "-scale-to", "2400", "-png", "-cropbox", "-",
-                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                )
-            except FileNotFoundError as exc:
-                raise FacsimilePdfError("Предпросмотр PDF временно недоступен") from exc
-            try:
-                output, _ = await asyncio.wait_for(process.communicate(normalized), timeout=20)
-            except (TimeoutError, asyncio.CancelledError) as exc:
-                if process.returncode is None:
-                    process.kill()
-                await process.communicate()
-                if isinstance(exc, asyncio.CancelledError):
-                    raise
-                raise FacsimilePdfError("Предпросмотр не успел загрузиться. Попробуйте ещё раз") from exc
-            if process.returncode != 0 or not output.startswith(b"\x89PNG\r\n\x1a\n"):
-                raise FacsimilePdfError("Не удалось построить предпросмотр PDF")
-            return output
+        return await render_pdf_page_png(content, page_number)
 
     @classmethod
     async def asset(cls, session: AsyncSession, *, tenant_scope: TenantScope,
@@ -88,6 +68,30 @@ class FacsimilePreviewService:
         if asset is None:
             raise FacsimilePdfError("Подпись или печать изменилась. Откройте предпросмотр заново")
         return await read_asset(asset)
+
+
+async def render_pdf_page_png(content: bytes, page_number: int, *, max_side_px: int = 2400) -> bytes:
+    normalized = await asyncio.to_thread(single_page_pdf, content, page_number)
+    async with _render_slots:
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pdftoppm", "-singlefile", "-scale-to", str(max_side_px), "-png", "-cropbox", "-",
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise FacsimilePdfError("Предпросмотр PDF временно недоступен") from exc
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(normalized), timeout=20)
+        except (TimeoutError, asyncio.CancelledError) as exc:
+            if process.returncode is None:
+                process.kill()
+            await process.communicate()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            raise FacsimilePdfError("Предпросмотр не успел загрузиться. Попробуйте ещё раз") from exc
+        if process.returncode != 0 or not output.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise FacsimilePdfError("Не удалось построить предпросмотр PDF")
+        return output
 
 
 def page_dimensions(content: bytes) -> list[dict]:

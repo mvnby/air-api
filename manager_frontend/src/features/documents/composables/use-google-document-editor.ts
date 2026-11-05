@@ -10,6 +10,7 @@ import {
 
 type GoogleDocumentEditorInput = {
   notify: (message: string, type?: 'success' | 'error') => void;
+  onPopupBlocked?: (editUrl: string) => void;
   onSynced?: (target: GoogleDocumentEditTarget, result: GoogleDocumentSyncResult, isCurrent?: () => boolean) => void | Promise<void>;
 };
 
@@ -85,6 +86,7 @@ export const useGoogleDocumentEditor = (input: GoogleDocumentEditorInput) => {
       sessions[key] = session;
       if (!session.edit_url) throw new Error('Google не вернул ссылку для редактирования');
       if (popup) popup.location.replace(session.edit_url);
+      else if (input.onPopupBlocked) input.onPopupBlocked(session.edit_url);
       else window.location.assign(session.edit_url);
     } catch (error) {
       popup?.close();
