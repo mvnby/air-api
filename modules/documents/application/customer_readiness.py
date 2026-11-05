@@ -22,7 +22,7 @@ from .template_selection import (
 )
 
 
-READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act", "repair_defect_act"})
+READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"})
 CRITICAL_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",
@@ -164,10 +164,15 @@ async def check_selection_readiness(
             business_role=role,
         )
     except ManagedDocumentNotFoundError:
-        if selection.document_type != "repair_defect_act" or template_id is not None:
+        if selection.document_type not in {"repair_defect_act", "retail_receipt", "warranty_certificate"} or template_id is not None:
             raise
         from .initial_templates import check_initial_template_available
-        from modules.documents.infrastructure.renderers.repair_defect_template import template_bytes
+        if selection.document_type == "repair_defect_act":
+            from modules.documents.infrastructure.renderers.repair_defect_template import template_bytes
+        else:
+            from functools import partial
+            from modules.documents.infrastructure.renderers.sale_templates import template_bytes as sale_template_bytes
+            template_bytes = partial(sale_template_bytes, selection.document_type)
 
         await check_initial_template_available(
             session, scope=tenant_scope, legal_entity_id=selection.legal_entity_id,

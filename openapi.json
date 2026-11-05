@@ -17288,7 +17288,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
               "title": "Doc Type"
             }
           }
@@ -18835,7 +18835,7 @@
           "manager-document-system"
         ],
         "summary": "Check Managed Document Readiness",
-        "description": "Read the selected native version and scoped order facts without creating a draft\nor reserving a number. A first-use repair defect act checks the built-in form in\nmemory and returns null template/version IDs until the first draft installs it.\nReports only applicable placeholders surviving the frozen\nparty conditions. Creating a draft and issuing it repeat server-side checks;\nthis response is advisory and does not authorize issuance. Returns 404 for\nscoped dependencies, 409 for incompatible context, 400 for invalid facts and\n503 for unavailable private template bytes. Manager membership is required.",
+        "description": "Read the selected native version and scoped order facts without creating a draft\nor reserving a number. Repair defect acts, retail receipts, and warranty certificates\ncheck their initial form in memory and return null template/version IDs until\nthe first draft installs that form.\nReports only applicable placeholders surviving the frozen\nparty conditions. Creating a draft and issuing it repeat server-side checks;\nthis response is advisory and does not authorize issuance. Returns 404 for\nscoped dependencies, 409 for incompatible context, 400 for invalid facts and\n503 for unavailable private template bytes. Manager membership is required.",
         "operationId": "check_manager_managed_document_readiness",
         "security": [
           {
@@ -63381,7 +63381,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -63582,6 +63582,30 @@
               }
             ]
           },
+          "receipt_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Note"
+          },
+          "warranty_equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Equipment Id"
+          },
           "participant_statement": {
             "anyOf": [
               {
@@ -63613,6 +63637,28 @@
                 "type": "null"
               }
             ]
+          },
+          "receipt_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Note"
+          },
+          "warranty_equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty Equipment Id"
           },
           "participant_statement": {
             "anyOf": [
@@ -88612,7 +88658,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
             "title": "Doc Type"
           },
           "description": {

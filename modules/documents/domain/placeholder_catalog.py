@@ -45,6 +45,10 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
             ("estimate_note", "Общая пометка о неизвестных стоимости и сроке"),
         )
     ),
+    PlaceholderDescriptor("receipt.note", "Примечание к товарному чеку", "Товарный чек"),
+    PlaceholderDescriptor("certificate.components", "Блоки и серийные номера", "Гарантийный талон"),
+    PlaceholderDescriptor("certificate.started_on", "Начало гарантии", "Гарантийный талон"),
+    PlaceholderDescriptor("certificate.expires_on", "Окончание гарантии", "Гарантийный талон"),
     PlaceholderDescriptor("maintenance.source_order", "Исходное ТО", "Замечания ТО"),
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
@@ -274,6 +278,10 @@ CONDITIONAL_FLAGS: tuple[ConditionDescriptor, ...] = tuple(
 )
 
 CONDITIONAL_FLAGS += (
+    ConditionDescriptor("sale.has_offer", "Применяется публичная оферта", "Продажа"),
+    ConditionDescriptor("receipt.has_note", "Есть примечание к чеку", "Товарный чек"),
+    ConditionDescriptor("certificate.has_components", "Указаны блоки оборудования", "Гарантийный талон"),
+    ConditionDescriptor("certificate.has_terms", "Указаны условия гарантии", "Гарантийный талон"),
     ConditionDescriptor("equipment.has_serial", "Указан серийный номер", "Оборудование"),
     ConditionDescriptor("installation.two_stages", "Монтаж в два этапа", "Этапы монтажа"),
     ConditionDescriptor("installation.single_stage", "Монтаж в один этап", "Этапы монтажа"),
@@ -394,7 +402,7 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
-    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act"})
+    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act", "retail_receipt", "warranty_certificate"})
     | B2C_NATIVE_DOCUMENT_TYPES
 )
 

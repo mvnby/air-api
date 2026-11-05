@@ -1097,8 +1097,11 @@ class DocumentService:
             contract_act_number = await allocate_contract_act_number(
                 session, contract_id=base_customer_contract.id,
             )
+        numbering_tenant_id = order.tenant_id if doc_type == "act" else None
+        if doc_type in {"retail_receipt", "warranty_certificate"}:
+            numbering_tenant_id = await session.scalar(select(Order.tenant_id).where(Order.id == order_id))
         doc_number = await DocumentService._get_next_number(
-            session, doc_type, base_date=effective_doc_date, tenant_id=order.tenant_id if doc_type == "act" else None,
+            session, doc_type, base_date=effective_doc_date, tenant_id=numbering_tenant_id,
         )
 
         # 3. Формируем название документа
@@ -1323,23 +1326,26 @@ class DocumentService:
                 {"lock_key": f"order_document_number:{number_prefix}"},
             )
 
-        query = (
-            select(OrderDocument)
+        numbers = await session.scalars(
+            select(OrderDocument.number)
             .where(OrderDocument.number.like(f"{number_prefix}%"))
             .order_by(OrderDocument.id.desc())
         )
-        result = await session.execute(query)
-        docs = list(result.scalars().all())
-
+        shared_annual_series = doc_type in {"act", "retail_receipt", "warranty_certificate"}
         next_num = 1
-        for doc in docs:
-            try:
-                next_num = int(str(doc.number).split("-")[-1]) + 1
-                break
-            except (ValueError, IndexError):
-                continue
+        for number in numbers:
+            if shared_annual_series:
+                suffix = str(number).removeprefix(number_prefix)
+                if suffix.isascii() and suffix.isdecimal():
+                    next_num = max(next_num, int(suffix) + 1)
+            else:
+                try:
+                    next_num = int(str(number).rsplit("-", 1)[-1]) + 1
+                    break
+                except ValueError:
+                    continue
 
-        if doc_type == "act" and tenant_id is not None:
+        if shared_annual_series and tenant_id is not None:
             # A reserved native issue already owns its annual CRM number, even
             # while DOCX/PDF generation is still in progress.
             native_floor = await session.scalar(

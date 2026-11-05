@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
   ManagerDocsService,
+  ManagerEquipmentLinksService,
   ManagerContractsService,
   ManagerEquipmentLinksService,
   ManagerService,
@@ -1551,5 +1552,49 @@ describe('Participant statement workspace', () => {
     await issue.trigger('click');
     await flushPromises();
     expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(55, true);
+  });
+});
+
+describe('Standalone sale documents', () => {
+  const product = { id: 20, proposal_id: 7, product_id: 3, product_title: 'Кондиционер', quantity: 1, price: 1200 };
+  const order = {
+    ...baseOrder, customer_contract: null, customer_contract_id: null,
+    customer: { ...baseOrder.customer!, type: 'individual' as const, name: 'Покупатель', inn: undefined },
+    proposals: [{ ...baseOrder.proposals![0]!, product_lines: [product] }],
+  } as ManagerOrderDetailResponse;
+  it('creates the first receipt with selected proposal, an optional note and no installation defaults', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockResolvedValue({ items: [] });
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-retail_receipt"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="receipt-note"]').setValue('Пуск после отделки');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    const calls = vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mock.calls;
+    expect(calls[0]?.[1]).toMatchObject({ document_type: 'retail_receipt', receipt_note: 'Пуск после отделки', proposal_id: 7, template_id: null });
+    expect(calls[0]?.[1].consumer_terms).toBeUndefined();
+  });
+  it('requires choosing equipment from this sale, excludes maintenance-only items and keeps consumer audience', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerNativeDocumentTemplates).mockResolvedValue({ items: [] });
+    const unit = { id: 18, customer_id: 11, model: 'Блок', serial: 'AB-123', catalog_product_id: 3, created_at: NOW };
+    vi.spyOn(ManagerEquipmentLinksService, 'listManagerOrderEquipmentLinks').mockResolvedValue({ items: [
+      { role: 'sale', equipment: unit },
+      { role: 'maintenance', equipment: { ...unit, id: 19, serial: 'SERVICE' } },
+      { role: 'sale', equipment: { ...unit, id: 20, customer_id: 12, serial: 'OTHER' } },
+      { role: 'sale', equipment: { ...unit, id: 21, catalog_product_id: 9, serial: 'ALTERNATIVE' } },
+    ] });
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-warranty_certificate"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="native-document-type-retail_receipt"]').exists()).toBe(true);
+    const select = wrapper.get('[data-testid="warranty-equipment"]');
+    expect(select.findAll('option').map(o => o.text())).toEqual(['Выберите оборудование из продажи', 'Блок · AB-123']);
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+    expect(create.attributes('disabled')).toBeDefined();
+    await select.setValue('18');
+    await create.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ document_type: 'warranty_certificate', warranty_equipment_id: 18 }));
   });
 });

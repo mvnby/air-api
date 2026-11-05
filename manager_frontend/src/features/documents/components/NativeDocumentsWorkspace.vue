@@ -25,6 +25,7 @@ import RepairDefectFields from './RepairDefectFields.vue';
 import { REPAIR_DEFECT_DOCUMENT, repairDefectFormError } from '../model/repair-defect';
 import ContractActNumberConfirmation from './ContractActNumberConfirmation.vue';
 import type { ContractActConfirmation } from '../model/contract-act-number';
+import WarrantyEquipmentPicker from './WarrantyEquipmentPicker.vue';
 import NativeActComposition from './NativeActComposition.vue';
 import { formatDocumentDate as formatDate, useNativeDocumentBasis } from '../composables/use-native-document-basis';
 import { useNativeActComposition } from '../composables/use-native-act-composition';
@@ -38,7 +39,7 @@ import { isBusinessTermsDocumentType } from '../model/business-document-terms';
 import { contractScenarioForWorkflow, withContractScenario, type ContractScenario } from '../model/business-document-terms';
 import { getCustomerDocumentWarnings } from '../model/customer-document-readiness';
 import {
-  BUSINESS_NATIVE_DOCUMENT_TYPES,
+  hasInitialDocumentForm, BUSINESS_NATIVE_DOCUMENT_TYPES,
   CONSUMER_NATIVE_DOCUMENT_TYPES,
   documentTypeName,
   documentArtifactName,
@@ -136,10 +137,10 @@ const documentTypes = computed(() => {
   const byAudience = documentAudience.value === 'business' ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES;
   return isRepairOrder.value ? [REPAIR_DEFECT_DOCUMENT, ...byAudience] : byAudience;
 });
-const hasInitialTemplate = computed(() => ['participant_statement', 'repair_defect_act'].includes(workspace.documentType.value));
+const hasInitialTemplate = computed(() => hasInitialDocumentForm(workspace.documentType.value));
 const documentTypeIcon = (type: string) => ({
   offer: FileText, invoice: ReceiptText, contract: Handshake, act: ClipboardCheck,
-  tn2: Truck, ttn1: Truck, repair_defect_act: Wrench, b2c_supply_installation_act: House,
+  retail_receipt: ReceiptText, warranty_certificate: ClipboardCheck, repair_defect_act: Wrench, tn2: Truck, ttn1: Truck, b2c_supply_installation_act: House,
   b2c_customer_equipment_installation_act: Hammer,
   b2c_maintenance_repair_act: Wrench, b2c_route_laying_act: Route,
 }[type] || FileText);
@@ -188,6 +189,12 @@ const issuerProfileUrl = computed(() => {
 });
 const selectionError = computed(() => {
   if (workspace.documentType.value === 'repair_defect_act') return repairDefectFormError(workspace.repairDefect.value);
+  if (workspace.documentType.value === 'retail_receipt') {
+    if (props.order.customer?.type !== 'individual') return 'Для товарного чека выберите покупателя-физлицо';
+    if (!(activeProposal.value ? activeProposal.value.product_lines : props.order.product_lines)?.length) return 'В выбранном предложении нет товаров';
+  }
+  if (workspace.documentType.value === 'warranty_certificate' && !workspace.warrantyEquipmentId.value)
+    return 'Выберите оборудование для гарантийного талона';
   if (basisSupported.value && basis.loading.value) return 'Загружаем договоры клиента…';
   if (basisRequired.value && basis.loadError.value) return 'Повторите загрузку договоров клиента';
   if (basisRequired.value && !basis.selected.value) return basisOptions.value.length
@@ -207,7 +214,7 @@ const customerTypeLabel = computed(() => {
   if (props.order.customer?.type === 'individual_entrepreneur') return 'ИП';
   return 'физлицо';
 });
-const customerWarnings = computed(() => ['contract', 'invoice', 'act', 'repair_defect_act'].includes(workspace.documentType.value)
+const customerWarnings = computed(() => ['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(workspace.documentType.value)
   ? (workspace.customerReadiness.value?.missing_fields || []).map((item) => item.label)
   : getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value));
 const incompleteDraft = (document: Parameters<typeof workspace.issue>[0]) => document.status === 'draft'
@@ -220,7 +227,8 @@ const audienceMismatchWarning = computed(() => (
     : ''
 ));
 watch(workspace.documentType, (type) => {
-  if (type !== 'repair_defect_act') documentAudience.value = isConsumerDocumentType(type) ? 'consumer' : 'business';
+  if (!['repair_defect_act', 'warranty_certificate'].includes(type))
+    documentAudience.value = isConsumerDocumentType(type) || type === 'retail_receipt' ? 'consumer' : 'business';
 });
 
 const setAudience = (audience: DocumentAudience) => {
@@ -539,7 +547,6 @@ defineExpose({
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <FileText :size="32" class="shrink-0" aria-hidden="true" />
           <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
-          <p v-if="!isRepairOrder" class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
         </div>
       </div>
       <div v-if="access.canSend && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
@@ -591,8 +598,8 @@ defineExpose({
             </div>
           </details>
         </div>
-        <div class="mt-3 flex gap-2 overflow-x-auto pb-2" data-testid="native-document-type">
-          <button v-for="type in documentTypes" :key="type.value" type="button" class="flex min-h-20 min-w-28 max-w-36 flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center text-xs font-bold transition" :class="workspace.documentType.value === type.value ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'" :aria-pressed="workspace.documentType.value === type.value" :data-testid="`native-document-type-${type.value}`" @click="workspace.documentType.value = type.value">
+        <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" data-testid="native-document-type">
+          <button v-for="type in documentTypes" :key="type.value" type="button" class="flex min-h-14 min-w-0 flex-col sm:flex-row items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center text-xs font-bold transition" :class="workspace.documentType.value === type.value ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'" :aria-pressed="workspace.documentType.value === type.value" :data-testid="`native-document-type-${type.value}`" @click="workspace.documentType.value = type.value">
             <component :is="documentTypeIcon(type.value)" :size="22" class="shrink-0" aria-hidden="true" />{{ type.label }}
           </button>
         </div>
@@ -674,6 +681,11 @@ defineExpose({
             </div>
             <p class="mt-1.5 text-xs text-slate-500">{{ workspace.businessRole.value === 'payment_request' ? 'После появления договора закрывающие документы будут ссылаться на договор.' : 'Оферта может сама стать основанием сделки.' }}</p>
           </div>
+          <label v-if="workspace.documentType.value === 'retail_receipt'" class="native-field mt-4">
+            <span>Примечание к чеку <span class="font-normal text-slate-500">(необязательно)</span></span>
+            <textarea v-model="workspace.receiptNote.value" rows="2" maxlength="1500" class="native-input" data-testid="receipt-note" placeholder="Например, срок гарантии конкретной модели или этап монтажа" />
+          </label>
+          <WarrantyEquipmentPicker v-if="workspace.documentType.value === 'warranty_certificate'" v-model="workspace.warrantyEquipmentId.value" :order="order" :proposal-id="proposalId" />
           <div v-if="workspace.documentType.value === 'participant_statement'" class="mt-4 space-y-3" data-testid="participant-statement-fields">
             <p class="text-sm text-slate-600 dark:text-slate-300">Сверьте форму с требованиями конкретной закупки. Укажите только проверенные факты; сведения о задолженности, судимости и другие заверения автоматически не добавляются.</p>
             <div class="grid gap-3 sm:grid-cols-2">
