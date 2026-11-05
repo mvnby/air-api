@@ -163,7 +163,6 @@ async def prepare_service_order_contract(session, ctx, data, *, template_storage
             selection=selection,
             template_id=data.template_id,
             template_storage=storage,
-            allow_incomplete_customer=True,
             commit=False,
         )
     except ManagedDocumentNotFoundError as exc:

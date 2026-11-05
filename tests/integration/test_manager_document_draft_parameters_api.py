@@ -210,7 +210,8 @@ async def test_apply_template_version_preserves_frozen_draft_and_protects_manual
     )
     assert response.status_code == 200, response.text
     assert response.json()["template_version_id"] == next_id
-    assert response.json()["customer_readiness"]["can_issue"] is False
+    assert response.json()["customer_readiness"]["can_issue"]
+    assert response.json()["customer_readiness"]["missing_fields"]
     await db.refresh(draft)
     assert draft.official_number is None and draft.status == "draft"
     assert draft.render_snapshot["values"] == frozen["values"]

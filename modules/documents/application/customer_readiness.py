@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from io import BytesIO
 from collections.abc import Mapping
 import re
-
-from docx import Document
-from docx.shared import Pt, RGBColor
 
 from modules.documents.domain.party import INDIVIDUAL, INDIVIDUAL_ENTREPRENEUR, SELF
 from modules.documents.domain.placeholder_catalog import SCALAR_PLACEHOLDERS
@@ -23,7 +19,7 @@ from .template_selection import (
 
 
 READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"})
-CRITICAL_CUSTOMER_FIELDS = frozenset(
+CHECKED_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",
         "customer.full_name",
@@ -35,17 +31,17 @@ CRITICAL_CUSTOMER_FIELDS = frozenset(
         "customer.signer_position",
         "customer.signer_name",
         "customer.acting_basis",
+        "customer.phone",
+        "customer.email",
+        "customer.city",
     }
-)
-OPTIONAL_CUSTOMER_FIELDS = frozenset(
-    {"customer.phone", "customer.email", "customer.city"}
 )
 LABELS = {item.name: item.label for item in SCALAR_PLACEHOLDERS}
 
 
 def _present(value) -> bool:
     text = str(value or "").strip()
-    return bool(text) and not re.match(r"^_{3,}(?:\s|$)", text)
+    return bool(text) and not re.fullmatch(r"[\s_.‐‑‒–—―−-]+(?:\s*\([^()]*\))?", text)
 
 
 def snapshot_customer_readiness(
@@ -60,7 +56,7 @@ def snapshot_customer_readiness(
             "Сохранённый снимок документа повреждён: отсутствует каталог фактических значений"
         )
     values = snapshot["values"]
-    for field in CRITICAL_CUSTOMER_FIELDS | OPTIONAL_CUSTOMER_FIELDS:
+    for field in CHECKED_CUSTOMER_FIELDS:
         if values.get(field) is not None and not isinstance(values[field], str):
             raise ValueError(
                 "Сохранённый снимок документа повреждён: поле клиента должно быть строкой: "
@@ -75,7 +71,7 @@ def snapshot_customer_readiness(
     effective = NativeDocxRenderer().discover_active_placeholders(
         source, snapshot.get("conditions") or {}
     )
-    applicable = set(CRITICAL_CUSTOMER_FIELDS | OPTIONAL_CUSTOMER_FIELDS)
+    applicable = set(CHECKED_CUSTOMER_FIELDS)
     if entity == INDIVIDUAL:
         applicable -= {
             "customer.unp",
@@ -102,7 +98,7 @@ def snapshot_customer_readiness(
                 and field in {"customer.full_name", "customer.display_name"}
                 else LABELS[field]
             ),
-            "critical": field in CRITICAL_CUSTOMER_FIELDS,
+            "critical": False,
         }
         for field in sorted(effective & applicable)
         if not _present(values.get(field))
@@ -110,7 +106,7 @@ def snapshot_customer_readiness(
     return {
         "checked": True,
         "missing_fields": missing,
-        "can_issue": not any(item["critical"] for item in missing),
+        "can_issue": True,
     }
 
 
@@ -217,62 +213,3 @@ async def check_saved_document_readiness(
         template_storage=template_storage,
         document_type=document.doc_type,
     )
-
-
-def assert_customer_ready(readiness: dict) -> None:
-    missing = [
-        item["label"]
-        for item in readiness.get("missing_fields", [])
-        if item.get("critical")
-    ]
-    if missing:
-        raise ManagedDocumentConflictError(
-            "Не заполнены поля клиента: "
-            + ", ".join(missing)
-            + ". Заполните карточку и создайте новый черновик; сохранённый снимок не изменяется."
-        )
-
-
-INCOMPLETE_DRAFT_MARKER = "ЧЕРНОВИК — не заполнены обязательные поля клиента"
-
-
-def mark_incomplete_docx(content: bytes, readiness: dict) -> bytes:
-    """Mark the output copy, including every active section/header variant."""
-    if readiness.get("can_issue", True):
-        return content
-    try:
-        document = Document(BytesIO(content))
-    except Exception as exc:
-        raise ValueError("Черновик DOCX повреждён или не читается") from exc
-
-    def add_marker(container):
-        if any(p.text == INCOMPLETE_DRAFT_MARKER for p in container.paragraphs):
-            return
-        paragraph = (
-            container.paragraphs[0].insert_paragraph_before()
-            if container.paragraphs
-            else container.add_paragraph()
-        )
-        paragraph.paragraph_format.space_after = Pt(6)
-        run = paragraph.add_run(INCOMPLETE_DRAFT_MARKER)
-        run.bold = True
-        run.font.size = Pt(10)
-        run.font.color.rgb = RGBColor(160, 30, 30)
-
-    add_marker(document)
-    seen = set()
-    for section in document.sections:
-        headers = [section.header]
-        if section.different_first_page_header_footer:
-            headers.append(section.first_page_header)
-        if document.settings.odd_and_even_pages_header_footer:
-            headers.append(section.even_page_header)
-        for header in headers:
-            element = header._element
-            if element in seen:
-                continue
-            seen.add(element)
-            add_marker(header)
-    output = BytesIO()
-    document.save(output)
-    return output.getvalue()

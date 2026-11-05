@@ -17,6 +17,7 @@ import {
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { toLocalDateTimeInput } from '../../../utils/datetime';
 import { confirmDialog } from '../../../services/ui-feedback';
+import { checksCustomerTemplate, customerFieldsAllowIssue } from '../model/customer-document-readiness';
 import { previousContractAct, type ContractActConfirmation, type PreviousContractAct } from '../model/contract-act-number';
 import {
   createDefaultConsumerDocumentTerms,
@@ -624,7 +625,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const customerContextKey = computed(() => JSON.stringify(input.customerContext?.() || null));
   watch([draftPayload, customerContextKey, () => input.orderId()], () => { customerReadiness.value = null; }, { deep: true, flush: 'sync' });
 
-  const createDraft = async (allowIncomplete = false) => {
+  const createDraft = async () => {
     if (!workspaceActive || draftBlockedReason.value || !selectedLegalEntityId.value) return;
     const generation = workspaceGeneration;
     const orderId = input.orderId();
@@ -634,7 +635,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
-      if (['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(payload.document_type)) {
+      let allowIncompleteCustomer = false;
+      if (checksCustomerTemplate(payload.document_type)) {
         const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
         if (!isCurrent()) return;
         if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
@@ -642,11 +644,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
           return;
         }
         customerReadiness.value = readiness;
-        if (!readiness.can_issue && !allowIncomplete) return;
+        if (!customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
+        allowIncompleteCustomer = !readiness.can_issue;
       }
       if (!isCurrent()) return;
       await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
-        ...payload, allow_incomplete_customer: allowIncomplete,
+        ...payload, allow_incomplete_customer: allowIncompleteCustomer,
       }), isCurrent);
       if (!isCurrent()) return;
       customerReadiness.value = null;
@@ -681,17 +684,14 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
     if (!action.canIssue()) return false;
-    if (document.status !== 'draft' || !['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(document.doc_type)) return true;
+    if (document.status !== 'draft' || !checksCustomerTemplate(document.doc_type)) return true;
     busy.value = true;
     try {
       const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
       if (!action.canIssue()) return false;
       documents.value = documents.value.map((item) => item.id === document.id
         ? { ...item, customer_readiness: readiness } : item);
-      if (!readiness.can_issue) {
-        input.notify(`Не заполнены поля клиента: ${(readiness.missing_fields || []).filter((item) => item.critical).map((item) => item.label).join(', ')}. Заполните карточку и создайте новый черновик.`, 'error');
-        return false;
-      }
+      if (!customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
       return true;
     } catch (error) {
       if (action.canIssue()) input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');
@@ -725,7 +725,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (!action.isCurrent()) return;
       input.refresh();
       if (contractActPrompt.value?.documentId === document.id) contractActPrompt.value = null;
-      input.notify('Документу присвоен официальный номер, DOCX и PDF сохранены.');
+      input.notify('Документ выпущен');
     } catch (error) {
       if (!action.isCurrent()) return;
       const previous = document.doc_type === 'act' ? previousContractAct(error) : null;

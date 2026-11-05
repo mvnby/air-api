@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from hashlib import sha256
 
 from sqlalchemy import select
@@ -23,7 +24,9 @@ from modules.documents.infrastructure.renderers.docx_form_fields import (
 )
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 
+from modules.documents.infrastructure.renderers.legacy_customer_marker import remove_legacy_customer_marker
 from .artifact_helpers import artifact_row, stored_artifact
+from .customer_readiness import READINESS_DOCUMENT_TYPES
 from .editable_draft import (
     official_placeholder_counts,
     render_editable_draft,
@@ -78,6 +81,7 @@ class ManagedDocumentExternalEditSessionService:
         )
         stored_source_artifact = stored_artifact(source_artifact)
         source_filename = source_artifact.filename
+        document_type = document.doc_type
         edit_session = await cls._find_session(
             session,
             tenant_scope=tenant_scope,
@@ -113,6 +117,8 @@ class ManagedDocumentExternalEditSessionService:
 
         try:
             content = await artifact_storage.read(stored_source_artifact)
+            if document_type in READINESS_DOCUMENT_TYPES:
+                content = await asyncio.to_thread(remove_legacy_customer_marker, content)
             metadata = await provider.ensure_docx(
                 edit_session_id=edit_session.id,
                 filename=source_filename,

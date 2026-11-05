@@ -297,7 +297,7 @@ class NativePlaceholderCatalogResponse(BaseModel):
 class ManagedDocumentDraftPayload(BaseModel):
     allow_incomplete_customer: bool = Field(
         default=False,
-        description="Явное создание черновика с незаполненными обязательными полями клиента",
+        description="Для совместимости. Неизвестные реквизиты можно вписать от руки без дополнительного подтверждения.",
     )
     document_role_type: DocumentPartyRoleType | None = None
 

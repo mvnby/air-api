@@ -11,7 +11,8 @@ from sqlmodel import select
 
 from models import DocumentArtifact, DocumentTemplate, DocumentTemplateVersion
 from modules.documents.domain.customer_signing import customer_signing_text
-from .customer_readiness import snapshot_customer_readiness, mark_incomplete_docx
+from .customer_readiness import READINESS_DOCUMENT_TYPES, snapshot_customer_readiness
+from modules.documents.infrastructure.renderers.legacy_customer_marker import remove_legacy_customer_marker
 from modules.documents.infrastructure.artifact_storage import StoredDocumentArtifact
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
@@ -44,13 +45,17 @@ def build_render_inputs(
     render_template = RenderTemplateVersion(
         template_key=f"template-{template.id}",
         version=version.version,
-        source=mark_incomplete_docx(source, readiness),
+        source=source,
         field_catalog=field_catalog,
         condition_catalog=condition_catalog,
         table_blocks=table_blocks,
         filename=str(version.source_filename or "template.docx"),
     )
     snapshot_values = dict(snapshot.get("values", {}))
+    for item in readiness["missing_fields"]:
+        # Older snapshots sometimes contain a dotted/dashed line or a printed
+        # hint instead of a fact. Normalize the presentation copy only.
+        snapshot_values[item["field"]] = ""
     # Use frozen party metadata before projecting to the template allowlist.
     # Handwriting hints belong only to rendering, never to the factual snapshot.
     if snapshot_values.get("customer.entity_type"):
@@ -189,13 +194,13 @@ async def requires_guarded_draft_download(session, *, tenant_scope, artifact) ->
     document = await ManagedDocumentService.get_document(
         session, tenant_scope=tenant_scope, document_id=artifact.order_document_id
     )
-    return document.status == "draft" and document.doc_type in {"contract", "invoice"}
+    return document.status == "draft" and document.doc_type in READINESS_DOCUMENT_TYPES
 
 
 async def prepare_artifact_download(
     session, *, tenant_scope, artifact, content, template_storage
 ) -> bytes:
-    """Keep downloaded incomplete draft copies marked without rewriting stored artifacts."""
+    """Clean old working-copy markers without rewriting stored artifacts."""
     if not await requires_guarded_draft_download(
         session, tenant_scope=tenant_scope, artifact=artifact
     ):
@@ -206,10 +211,10 @@ async def prepare_artifact_download(
     document = await ManagedDocumentService.get_document(
         session, tenant_scope=tenant_scope, document_id=artifact.order_document_id
     )
-    readiness = await check_saved_document_readiness(
+    await check_saved_document_readiness(
         session,
         tenant_scope=tenant_scope,
         document=document,
         template_storage=template_storage,
     )
-    return await asyncio.to_thread(mark_incomplete_docx, content, readiness)
+    return await asyncio.to_thread(remove_legacy_customer_marker, content)

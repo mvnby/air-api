@@ -9,7 +9,12 @@ const port = Number(process.env.KITLANE_FIXTURE_PORT || 5228);
 const origin = `http://127.0.0.1:${port}`;
 const output = process.env.KITLANE_SCREENSHOTS || '/tmp/open-contract-act-screens';
 const previous = { id: 901, order_id: 550, number: 'А-2026-086', url: null };
-const readiness = { checked: true, can_issue: true, missing_fields: [], template_id: 100, template_version_id: 101 };
+const missingFields = [
+  { field: 'customer.signer_name', label: 'ФИО подписанта клиента', critical: false },
+  { field: 'customer.acting_basis', label: 'Основание полномочий подписанта клиента', critical: false },
+];
+const readiness = { checked: true, can_issue: true, missing_fields: missingFields, template_id: 100, template_version_id: 101 };
+const legacyReadiness = { ...readiness, can_issue: false, missing_fields: missingFields.map(field => ({ ...field, critical: true })) };
 const fixture = createFixtureServer(port, async (req, res, { url, state, json, body }) => {
   const endpoint = url.pathname;
   if (endpoint === '/api/manager/orders/590/request-context') {
@@ -21,11 +26,17 @@ const fixture = createFixtureServer(port, async (req, res, { url, state, json, b
     json(res, { items: [{ id: 81, customer_id: 541, name: 'Магазин', delivery_address: 'Витебск, ул. Кирова, 2' }] });
   } else if (endpoint.endsWith('/documents/readiness') || endpoint.endsWith('/documents/863/readiness')) {
     json(res, readiness);
+  } else if (endpoint.endsWith('/documents/864/readiness')) {
+    json(res, readiness);
+  } else if (endpoint.endsWith('/documents/864/issue')) {
+    assert.equal(state.documents[0].id, 864);
+    Object.assign(state.documents[0], { status: 'issued', official_full_number: 'А-2026-086', customer_readiness: readiness });
+    json(res, state.documents[0]);
   } else if (endpoint.endsWith('/orders/590/documents/drafts')) {
     const payload = await body(req);
     state.creates.push(payload);
-    state.documents = [{ id: 863, order_id: 590, doc_type: 'act', status: 'draft', provider: 'native', display_number: '',
-      base_customer_contract_id: payload.base_customer_contract_id, date: '2026-11-05', created_at: '2026-11-05', artifacts: [] }];
+    state.documents.unshift({ id: 863, order_id: 590, doc_type: 'act', status: 'draft', provider: 'native', display_number: '',
+      base_customer_contract_id: payload.base_customer_contract_id, date: '2026-11-05', created_at: '2026-11-05', customer_readiness: readiness, artifacts: [] });
     json(res, state.documents[0]);
   } else if (endpoint.endsWith('/documents/863/issue')) {
     if (url.searchParams.get('confirmed_previous_act_number') !== '21') {
@@ -51,10 +62,34 @@ async function checkViewport(browser, width) {
   try {
     await fetch(`${origin}/__fixture/reset?kind=maintenance&documents=false`);
     const state = fixture.getState();
+    state.documents.push({ id: 864, order_id: 590, legal_entity_id: 5, doc_type: 'act', status: 'draft', provider: 'native',
+      date: '2026-11-05', created_at: '2026-11-05', customer_readiness: legacyReadiness, artifacts: [] });
     const lines = state.order.proposals[0].service_lines;
     lines.push({ ...lines[0], id: 30, service_title: 'Дополнительная диагностика на другом объекте' });
     await page.goto(`${origin}/manager/orders/590?company=999&site=minsk&proposalId=586`);
     await page.getByRole('navigation', { name: 'Рабочая область заказа' }).getByRole('button', { name: 'Документы', exact: true }).click();
+    const previousDraft = page.getByTestId('current-document-864');
+    const hint = previousDraft.getByTestId('native-manual-fields');
+    await hint.getByText('Можно вписать от руки').waitFor();
+    assert((await hint.innerText()).includes('ФИО подписанта клиента'));
+    const issue = previousDraft.getByRole('button', { name: 'Выпустить', exact: true });
+    assert(await issue.isEnabled());
+    if (width < 640) {
+      assert((await issue.boundingBox()).height >= 44);
+      const preview = previousDraft.getByRole('button', { name: 'Предпросмотр' });
+      assert.equal((await issue.boundingBox()).y, (await preview.boundingBox()).y);
+    }
+    await previousDraft.evaluate(el => el.scrollIntoView({ behavior: 'instant', block: 'center' }));
+    await previousDraft.getByRole('heading').click({ trial: true });
+    await previousDraft.screenshot({ path: path.join(output, `${width}-handwritten-draft.png`), animations: 'disabled' });
+    await issue.click();
+    await previousDraft.getByText('Выпущен', { exact: true }).waitFor();
+    assert.equal(state.creates.length, 0);
+    assert((await hint.innerText()).includes('Основание полномочий'));
+    assert.equal(await previousDraft.getByRole('button', { name: 'Выпустить', exact: true }).count(), 0);
+    await page.getByText('Документ выпущен', { exact: true }).waitFor({ state: 'hidden' });
+    await previousDraft.screenshot({ path: path.join(output, `${width}-handwritten-issued.png`), animations: 'disabled' });
+    assert(await previousDraft.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
     await page.getByTestId('native-document-type-act').click();
     const basis = page.getByTestId('native-document-basis');
     await basis.locator('option[value="customer-contract:71"]').waitFor({ state: 'attached' });
@@ -74,6 +109,8 @@ async function checkViewport(browser, width) {
     await page.screenshot({ path: path.join(output, `${width}-composition.png`), animations: 'disabled' });
     await create.click();
     const draft = page.getByTestId('current-document-863');
+    await draft.getByTestId('native-manual-fields').getByText('Можно вписать от руки').waitFor();
+    assert.equal(state.creates.length, 1);
     await draft.getByRole('button', { name: 'Выпустить', exact: true }).click();
     assert.deepEqual(state.creates[0].scope_service_line_quantities, { 1: 1 });
     assert.equal(state.creates[0].scope_customer_branch_id, 81);

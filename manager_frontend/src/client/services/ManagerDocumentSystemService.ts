@@ -1440,7 +1440,8 @@ export class ManagerDocumentSystemService {
      * check their initial form in memory and return null template/version IDs until
      * the first draft installs that form.
      * Reports only applicable placeholders surviving the frozen
-     * party conditions. Creating a draft and issuing it repeat server-side checks;
+     * party conditions. Missing customer fields are handwriting suggestions,
+     * and do not prevent draft creation or issue. Both still check source integrity;
      * this response is advisory and does not authorize issuance. Returns 404 for
      * scoped dependencies, 409 for incompatible context, 400 for invalid facts and
      * 503 for unavailable private template bytes. Manager membership is required.

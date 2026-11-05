@@ -43,7 +43,6 @@ from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
 from .customer_readiness import (
     source_customer_readiness,
     check_saved_document_readiness,
-    assert_customer_ready,
 )
 from .editable_draft import EditableDraftError
 from .installation_context import staged_template_is_supported
@@ -191,7 +190,6 @@ class ManagedDocumentService:
         selection: DocumentContextSelection,
         template_id: int | None = None,
         replaces_document_id: int | None = None,
-        allow_incomplete_customer: bool = False,
         template_storage: TemplateSourceStorage | None = None,
         commit: bool = True,
     ) -> OrderDocument:
@@ -259,8 +257,6 @@ class ManagedDocumentService:
             template_storage=template_storage,
             document_type=selection.document_type,
         )
-        if not allow_incomplete_customer:
-            assert_customer_ready(readiness)
         if readiness["checked"]:
             snapshot["meta"]["customer_readiness"] = readiness
         internal_reference = new_internal_reference()
@@ -329,14 +325,12 @@ class ManagedDocumentService:
         if (document.doc_type == "participant_statement" and document.status == "draft"
                 and not participant_statement_confirmed):
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
-        readiness = await check_saved_document_readiness(
+        return await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
             document=document,
             template_storage=template_storage,
         )
-        assert_customer_ready(readiness)
-        return readiness
 
     @classmethod
     async def issue(
@@ -415,7 +409,6 @@ class ManagedDocumentService:
             document=document,
             template_storage=template_storage,
         )
-        assert_customer_ready(readiness)
         if document.replaces_document_id:
             await lock_replacement_target(
                 session,
@@ -522,6 +515,8 @@ class ManagedDocumentService:
             period_key=period_key,
             issued_on=issued_on,
         )
+        if readiness["checked"]:
+            snapshot.setdefault("meta", {})["customer_readiness"] = readiness
         session.add(document)
         await cls._commit(session, "Не удалось зарезервировать номер документа")
 

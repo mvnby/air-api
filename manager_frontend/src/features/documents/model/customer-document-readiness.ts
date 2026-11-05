@@ -1,4 +1,14 @@
-import type { OrderCustomerBrief } from '../../../client';
+import type { DocumentCustomerReadiness, OrderCustomerBrief } from '../../../client';
+
+export const checksCustomerTemplate = (type: string) =>
+  ['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
+
+// Older readiness responses marked customer details intended for handwriting as blocking.
+export const customerFieldsAllowIssue = ({ can_issue, checked, missing_fields = [] }: DocumentCustomerReadiness) =>
+  can_issue || (checked && missing_fields.length > 0 && missing_fields.every(({ field }) => field.startsWith('customer.')));
+
+export const manualFieldLabels = (readiness?: DocumentCustomerReadiness | null) =>
+  [...new Set((readiness?.missing_fields || []).map(({ label }) => label))];
 
 const BUSINESS_DOCUMENT_TYPES = new Set([
   'contract',

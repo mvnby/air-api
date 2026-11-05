@@ -10,7 +10,7 @@ import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
 export type ManagedDocumentDraftPayload = {
     /**
-     * Явное создание черновика с незаполненными обязательными полями клиента
+     * Для совместимости. Неизвестные реквизиты можно вписать от руки без дополнительного подтверждения.
      */
     allow_incomplete_customer?: boolean;
     document_role_type?: ('seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer' | null);

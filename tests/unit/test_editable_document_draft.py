@@ -73,6 +73,7 @@ def test_editable_draft_renders_business_data_but_keeps_official_markers():
     assert "{{ document.issued_on }}" in text
 
     final = finalize_editable_draft(
+        document_type="contract",
         source=editable,
         placeholder_schema=version.placeholder_schema,
         official_values={
