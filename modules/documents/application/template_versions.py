@@ -389,6 +389,7 @@ class NativeTemplateVersionService:
         legal_entity_id: int,
         template_id: int,
         version_id: int,
+        expected_active_version_id: int | None = None,
     ) -> DocumentTemplateVersion:
         template = await cls._get_scoped_template(
             session,
@@ -420,6 +421,12 @@ class NativeTemplateVersionService:
                 .scalars()
                 .all()
             )
+            if expected_active_version_id is not None and not any(
+                active.id == expected_active_version_id for active in active_rows
+            ):
+                raise TemplateVersionConflictError(
+                    "Активная версия шаблона изменилась. Проверьте версии перед сохранением"
+                )
             for active in active_rows:
                 active.status = "retired"
                 session.add(active)

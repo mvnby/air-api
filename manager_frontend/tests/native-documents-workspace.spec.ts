@@ -204,6 +204,32 @@ const mountWorkspace = async (beforeGenerate?: (type: string) => unknown | Promi
 };
 
 describe('NativeDocumentsWorkspace', () => {
+  it('opens only the saved draft template and gates both shortcuts by template-management access', async () => {
+    const draft = { ...revision(77, 'draft'), document_template_id: 19, template_version_id: 22, legal_entity_id: 6 };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+      items: [draft, { ...draft, id: 78, status: 'issued' }],
+    });
+    const wrapper = await mountWorkspace();
+    expect(wrapper.find('[data-testid="edit-draft-template"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="edit-selected-template"]').exists()).toBe(false);
+    managerSession.auth.value = { capabilities: ['documents.manage'] } as never;
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="edit-draft-template"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="edit-selected-template"]').exists()).toBe(true);
+    HTMLDialogElement.prototype.showModal = vi.fn();
+    vi.spyOn(ManagerDocumentSystemService, 'getManagerManagedDocumentDraftParameters').mockResolvedValue({
+      template_version_id: 22, revision: 'r', has_editable_copy: false, total_amount: '10', issue_date: '2026-10-01',
+    });
+    await wrapper.get('[data-testid="edit-draft-template"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    expect(ManagerDocumentSystemService.listManagerNativeTemplateVersions).toHaveBeenCalledWith(19, 6);
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentDraftParameters).toHaveBeenCalledWith(77);
+    await wrapper.setProps({ order: { ...baseOrder, id: 43 } });
+    await flushPromises();
+    expect(document.querySelector('dialog[aria-labelledby="order-template-editor-title"]')).toBeNull();
+  });
+
   it('keeps customer contract registration behind one compact attachment action', async () => {
     const wrapper = await mountWorkspace();
     await wrapper.get('[data-testid="native-document-type-contract"]').trigger('click');

@@ -10,7 +10,7 @@ const document = { id: 77, order_id: 42, doc_type: 'contract', status: 'draft', 
 beforeEach(() => {
   confirmDialog.mockReset().mockResolvedValue(true);
   vi.spyOn(ManagerDocumentSystemService, 'getManagerManagedDocumentDraftParameters').mockResolvedValue({
-    issue_date: '2026-10-09', issue_city: 'Витебск', revision: 'a'.repeat(64), has_editable_copy: true, total_amount: '1000.00',
+    issue_date: '2026-10-09', issue_city: 'Витебск', revision: 'a'.repeat(64), template_version_id: 3, has_editable_copy: true, total_amount: '1000.00',
   });
   vi.spyOn(ManagerDocumentSystemService, 'updateManagerManagedDocumentDraftParameters').mockResolvedValue(document);
 });

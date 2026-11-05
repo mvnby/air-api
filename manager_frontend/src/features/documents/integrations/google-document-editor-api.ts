@@ -1,4 +1,4 @@
-import { OpenAPI } from '../../../client';
+import { OpenAPI, type NativeTemplateVersionItem } from '../../../client';
 import type { ApiRequestOptions } from '../../../client/core/ApiRequestOptions';
 
 export type GoogleDocumentEditTarget =
@@ -37,12 +37,13 @@ export type DocumentDriveConnectionStatus = {
 
 type SessionPayload = GoogleDocumentEditSession | {
   session: GoogleDocumentEditSession;
-  new_template_version?: unknown | null;
+  new_template_version?: NativeTemplateVersionItem | null;
 };
 
 export type GoogleDocumentSyncResult = {
   session: GoogleDocumentEditSession;
   newTemplateVersionCreated: boolean;
+  newTemplateVersion?: NativeTemplateVersionItem | null;
 };
 
 export class GoogleDocumentEditorApiError extends Error {
@@ -160,6 +161,7 @@ export const googleDocumentEditorApi = {
     return {
       session: unwrapSession(payload),
       newTemplateVersionCreated: 'session' in payload && Boolean(payload.new_template_version),
+      ...('session' in payload && payload.new_template_version ? { newTemplateVersion: payload.new_template_version } : {}),
     } satisfies GoogleDocumentSyncResult;
   },
 };

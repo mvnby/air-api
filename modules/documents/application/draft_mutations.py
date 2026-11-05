@@ -1,5 +1,6 @@
 """Change or discard an unnumbered draft while preserving issued history."""
 
+import asyncio
 from copy import deepcopy
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -9,6 +10,8 @@ from sqlmodel import select
 from models import (
     DocumentArtifact,
     DocumentExternalEditSession,
+    DocumentTemplate,
+    DocumentTemplateVersion,
     MaintenanceActPreparation,
 )
 from modules.documents.domain import (
@@ -156,6 +159,7 @@ class ManagedDocumentDraftMutationService:
         return {
             **read_draft_parameters(document),
             "revision": draft_revision(document, artifacts),
+            "template_version_id": document.template_version_id,
             "has_editable_copy": bool(artifacts),
             "total_amount": str(saved_total(document.render_snapshot)),
             "order_conditions": document.render_snapshot.get("values", {}).get(
@@ -172,7 +176,7 @@ class ManagedDocumentDraftMutationService:
         document_id,
         changes,
         expected_revision,
-        reset_editable_copy=False
+        reset_editable_copy=False,
     ):
         from .lifecycle_service import ManagedDocumentService
 
@@ -274,6 +278,103 @@ class ManagedDocumentDraftMutationService:
         session.add(document)
         await ManagedDocumentService._commit(
             session, "Не удалось сохранить параметры черновика"
+        )
+        await session.refresh(document)
+        return document
+
+    @classmethod
+    async def apply_template_version(
+        cls,
+        session,
+        *,
+        tenant_scope,
+        document_id,
+        version_id,
+        expected_revision,
+        reset_editable_copy,
+        template_storage,
+    ):
+        from .customer_readiness import snapshot_customer_readiness
+        from .editable_draft import render_editable_draft
+        from .lifecycle_service import ManagedDocumentService
+
+        document, artifacts = await cls._load(
+            session, tenant_scope=tenant_scope, document_id=document_id, lock=True
+        )
+        if draft_revision(document, artifacts) != expected_revision:
+            raise ManagedDocumentConflictError(
+                "Черновик изменился. Откройте редактор шаблона заново"
+            )
+        target = (
+            await session.execute(
+                select(DocumentTemplate, DocumentTemplateVersion)
+                .join(
+                    DocumentTemplateVersion,
+                    DocumentTemplateVersion.template_id == DocumentTemplate.id,
+                )
+                .where(
+                    DocumentTemplate.id == document.document_template_id,
+                    DocumentTemplate.tenant_id == tenant_scope.tenant_id,
+                    DocumentTemplate.legal_entity_id == document.legal_entity_id,
+                    DocumentTemplate.doc_type == document.doc_type,
+                    DocumentTemplate.is_active.is_(True),
+                    DocumentTemplateVersion.id == version_id,
+                    DocumentTemplateVersion.renderer == "docx",
+                    DocumentTemplateVersion.status == "active",
+                )
+                .with_for_update(read=True)
+            )
+        ).first()
+        if target is None:
+            raise ManagedDocumentConflictError(
+                "Выберите активную версию шаблона этого черновика"
+            )
+        if document.template_version_id == version_id:
+            return document
+        template, version = target
+        if artifacts and not reset_editable_copy:
+            raise ManagedDocumentConflictError(
+                "Подтвердите замену рабочей копии с ручными правками"
+            )
+        snapshot = deepcopy(document.render_snapshot)
+        if snapshot.get("conditions", {}).get(
+            "installation.two_stages"
+        ) and not staged_template_is_supported(version.placeholder_schema or {}):
+            raise ManagedDocumentConflictError(
+                "Версия шаблона не поддерживает монтаж в два этапа"
+            )
+        source = await template_storage.read_persisted(
+            tenant_id=tenant_scope.tenant_id,
+            template_id=template.id,
+            version=version.version,
+            storage_key=version.source_storage_key,
+            filename=version.source_filename or "template.docx",
+            checksum_sha256=version.checksum_sha256,
+        )
+        readiness = await asyncio.to_thread(
+            snapshot_customer_readiness,
+            snapshot,
+            source=source,
+            document_type=document.doc_type,
+        )
+        if readiness["checked"]:
+            snapshot.setdefault("meta", {})["customer_readiness"] = readiness
+        # Verify rendering against the frozen facts before detaching a working copy.
+        await asyncio.to_thread(
+            render_editable_draft,
+            template=template,
+            version=version,
+            source=source,
+            snapshot=snapshot,
+        )
+        await cls._discard_editable_copies(session, artifacts)
+        document.google_edit_url = None
+        document.google_file_id = None
+        document.template_version_id = version.id
+        document.render_snapshot = snapshot
+        session.add(document)
+        await ManagedDocumentService._commit(
+            session, "Не удалось применить версию шаблона"
         )
         await session.refresh(document)
         return document

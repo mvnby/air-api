@@ -16,6 +16,7 @@ class ManagedDocumentDraftParameters(BaseModel):
     transport_terms: TransportTermsPayload | None = None
     participant_statement: ParticipantStatementPayload | None = None
     revision: str
+    template_version_id: int
     has_editable_copy: bool
     total_amount: str
     order_conditions: str | None = None
@@ -26,6 +27,7 @@ class ManagedDocumentDraftParameterUpdate(BaseModel):
 
     expected_revision: str = Field(pattern="^[a-f0-9]{64}$")
     reset_editable_copy: bool = False
+    template_version_id: int | None = Field(default=None, gt=0)
     issue_date: date | None = None
     issue_city: str | None = Field(default=None, max_length=160)
     business_terms: BusinessDocumentTermsPayload | None = None
@@ -36,6 +38,14 @@ class ManagedDocumentDraftParameterUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_changes(self):
+        if self.template_version_id is not None and self.model_fields_set - {
+            "template_version_id",
+            "expected_revision",
+            "reset_editable_copy",
+        }:
+            raise ValueError(
+                "Примените версию шаблона отдельно от изменения параметров"
+            )
         for name in self.model_fields_set - {
             "expected_revision",
             "reset_editable_copy",

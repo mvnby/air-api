@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { ExternalLink, RefreshCw } from 'lucide-vue-next';
 import type { GoogleDocumentEditSession } from '../integrations/google-document-editor-api';
 
 const props = withDefaults(defineProps<{
@@ -30,7 +31,7 @@ const statusLabel = computed(() => {
       :class="session?.status === 'changed' ? 'text-amber-700 dark:text-amber-300' : session?.status === 'error' ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500'"
     >{{ statusLabel }}</span>
     <button class="google-editor-action" type="button" :disabled="busy" @click="emit('open')">
-      <span class="material-icons-round text-[17px]">open_in_new</span>
+      <ExternalLink :size="16" aria-hidden="true" class="shrink-0" />
       {{ session?.edit_url ? 'Открыть' : editable ? 'Редактировать в Google Docs' : 'Открыть в Google Docs' }}
     </button>
     <button
@@ -40,7 +41,7 @@ const statusLabel = computed(() => {
       :disabled="busy"
       @click="emit('sync')"
     >
-      <span class="material-icons-round text-[17px]">sync</span>Забрать изменения
+      <RefreshCw :size="16" aria-hidden="true" class="shrink-0" />Забрать изменения
     </button>
   </div>
 </template>

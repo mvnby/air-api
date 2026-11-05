@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
 import { ClipboardCheck, Download, Ellipsis, Eye, FileText, Hammer, Handshake, House, LoaderCircle, PenLine, ReceiptText, Route, Send, Truck, Wrench } from 'lucide-vue-next';
 import { DOCUMENT_ROLE_OPTIONS, EXTERNAL_CONTRACT_FILE_ACCEPT } from '../model/document-constants';
-import { ManagerDocsService, type ManagerOrderDetailResponse, type ManagerOrderDocumentItem } from '../../../client';
+import { ManagerDocsService, type ManagedDocumentItem, type ManagerOrderDetailResponse, type ManagerOrderDocumentItem } from '../../../client';
 import DocumentSendModal from '../../../components/orders/DocumentSendModal.vue';
 import { getOrderDocumentAccess } from '../../../components/orders/order-document-access';
 import { MANAGER_CAPABILITY, hasManagerCapability } from '../../../manager-capabilities';
@@ -44,6 +44,8 @@ import {
   managedDocumentStatusClass,
   officialDocumentTitle,
 } from '../model/native-document-options';
+
+const OrderTemplateEditor = defineAsyncComponent(() => import('./OrderTemplateEditor.vue'));
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
@@ -319,6 +321,27 @@ const canChangeDraft = (document: Parameters<typeof workspace.issue>[0]) => docu
   && !document.official_number && !document.official_date && !document.issued_at
   && (document.artifacts || []).every((item) => item.kind === 'source_docx');
 
+type TemplateTarget = {
+  legalEntityId: number; templateId: number; sourceVersionId: number; documentType: string; draftId?: number;
+};
+const templateTarget = ref<TemplateTarget | null>(null);
+watch(() => props.order.id, () => { templateTarget.value = null; });
+const editTemplate = (draft?: ManagedDocumentItem) => {
+  if (!canManageDocumentSettings.value || !access.value.canCreate) return;
+  const templateId = draft ? draft.document_template_id : workspace.selectedTemplateId.value;
+  const legalEntityId = draft ? draft.legal_entity_id : workspace.selectedLegalEntityId.value;
+  const sourceVersionId = draft ? draft.template_version_id : workspace.activeTemplateVersionId.value;
+  if (!templateId || !legalEntityId || !sourceVersionId) return;
+  templateTarget.value = {
+    templateId, legalEntityId, sourceVersionId, draftId: draft?.id,
+    documentType: draft?.doc_type || workspace.documentType.value,
+  };
+};
+const templateChanged = (draftId?: number) => {
+  if (draftId) void draftParametersSaved(draftId);
+  else void workspace.loadTemplateVersions();
+};
+
 const createDraft = async (allowIncomplete = false) => {
   if (preparingDraft.value || workspace.busy.value || draftBlockedReason.value) return;
   preparingDraft.value = true;
@@ -367,6 +390,8 @@ defineExpose({
 
 <template>
   <section class="rounded-2xl border border-brand-200 bg-white p-4 shadow-sm dark:border-brand-900/70 dark:bg-slate-900/60 sm:p-5" data-testid="native-documents-workspace">
+    <OrderTemplateEditor v-if="templateTarget && canManageDocumentSettings && access.canCreate"
+      v-bind="templateTarget" @close="templateTarget = null" @changed="templateChanged" />
     <DocumentSendModal
       v-model="sendOpen"
       transport="native"
@@ -447,6 +472,9 @@ defineExpose({
                 @sync="syncGoogleDocument(document.id)"
               />
               <button v-if="document.status === 'draft' && access.canCreate && workspace.contractActPrompt.value?.documentId !== document.id" class="native-action-primary" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || Boolean(workspace.issueBlockedReason.value) || editingDraftId === document.id || incompleteDraft(document) || (document.doc_type === 'participant_statement' && !workspace.participantStatementConfirmations.value[document.id])" :title="incompleteDraft(document) ? `Не заполнены поля: ${criticalMissingLabels(document)}` : workspace.issueBlockedReason.value" @click="issueDocument(document)">Выпустить</button>
+              <button v-if="canManageDocumentSettings && access.canCreate && canChangeDraft(document) && document.template_version_id && document.document_template_id && document.legal_entity_id"
+                class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || editingDraftId === document.id"
+                data-testid="edit-draft-template" @click="editTemplate(document)">Редактировать шаблон</button>
               <button v-if="canChangeDraft(document) && access.canCreate" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="editingDraftId = editingDraftId === document.id ? null : document.id">Изменить параметры</button>
               <button v-if="canChangeDraft(document) && !document.maintenance_source_order_id && access.canDelete" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
@@ -548,7 +576,12 @@ defineExpose({
           <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
             <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (workspace.documentType.value === 'participant_statement' ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-3">
-              <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="workspace.documentType.value === 'participant_statement' && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+              <div class="min-w-0">
+                <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="workspace.documentType.value === 'participant_statement' && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+                <button v-if="canManageDocumentSettings && access.canCreate && workspace.activeTemplateVersionId.value" type="button"
+                  class="mt-1 min-h-8 text-left text-xs font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
+                  data-testid="edit-selected-template" @click="editTemplate()">Редактировать шаблон</button>
+              </div>
               <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
               <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
             </div>

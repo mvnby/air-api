@@ -85,10 +85,31 @@ async def update_draft_parameters(
     expected_revision prevents overwriting a concurrent edit. A date-only update preserves
     manual DOCX edits; other changes require reset_editable_copy when a working copy exists.
     Confirmed reset detaches old editor sessions; the next editor open creates a new copy.
+    Pass template_version_id alone with the revision to apply an active DOCX version of
+    the same template. This keeps frozen facts, rechecks requirements and uses the same
+    explicit working-copy reset. Unavailable template storage returns 503.
     Term groups replace their saved group. Issued/reserved/closed drafts and stale revisions
     return 409, missing documents 404, incompatible terms 400. Requires Manager access.
     """
     try:
+        if payload.template_version_id is not None:
+            from .router import get_private_attachment_storage
+            from modules.documents.infrastructure.template_source_storage import (
+                PrivateTemplateSourceStorage,
+            )
+
+            row = await ManagedDocumentDraftMutationService.apply_template_version(
+                session,
+                tenant_scope=auth.tenant_scope(),
+                document_id=document_id,
+                version_id=payload.template_version_id,
+                expected_revision=payload.expected_revision,
+                reset_editable_copy=payload.reset_editable_copy,
+                template_storage=PrivateTemplateSourceStorage(
+                    get_private_attachment_storage()
+                ),
+            )
+            return await _document_item(session, auth, row)
         changes = payload.model_dump(
             mode="json",
             exclude_unset=True,
@@ -114,6 +135,13 @@ async def update_draft_parameters(
             409,
             UPDATE_MANAGER_MANAGED_DOCUMENT_DRAFT_PARAMETERS,
             "managed_document_draft_conflict",
+            exc,
+        )
+    except OSError as exc:
+        raise _document_error(
+            503,
+            UPDATE_MANAGER_MANAGED_DOCUMENT_DRAFT_PARAMETERS,
+            "managed_document_template_unavailable",
             exc,
         )
     except (TypeError, ValueError) as exc:

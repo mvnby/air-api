@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from urllib.parse import quote
+from uuid import uuid4
 
 from pydantic import ValidationError
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
@@ -21,6 +23,8 @@ from modules.documents.application.errors import (
 from modules.documents.application.lifecycle_service import (
     ManagedDocumentService,
 )
+from modules.documents.application.facsimile_context import FacsimilePdfError, MAX_PDF_BYTES
+from modules.documents.application.facsimile_preview import render_pdf_page_png
 from modules.documents.application.draft_preview import (
     ManagedDocumentDraftPreviewService,
 )
@@ -76,17 +80,21 @@ router = APIRouter(
 @router.get(
     "/documents/{document_id}/preview",
     response_class=Response,
-    responses={200: {"content": {"application/pdf": {}}}},
+    responses={200: {"content": {"application/pdf": {}, "multipart/form-data": {}}}},
     operation_id=PREVIEW_MANAGER_MANAGED_DOCUMENT_DRAFT,
 )
 async def preview_managed_document_draft(
     document_id: int,
+    include_first_page: bool = False,
     session: AsyncSession = Depends(get_session),
     auth: AuthenticatedUser = Depends(require_manager_access),
 ) -> Response:
     """
     Render a private/no-store PDF preview for a scoped managed draft using its saved
     context/template or edited source. Does not issue the document or reserve a number.
+    include_first_page requests multipart/form-data containing the PDF (pdf) and an
+    image/png rendering (first_page) from the same bytes. If the optional page renderer
+    is unavailable, the response is still the complete application/pdf.
     Missing/inaccessible document returns 404, incompatible draft state 409 and
     rendering/source failure 503. See the [document lifecycle
     contract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).
@@ -125,6 +133,16 @@ async def preview_managed_document_draft(
             "managed_document_preview_failed",
             exc,
         )
+    if include_first_page and len(content) < MAX_PDF_BYTES:
+        try:
+            page = await render_pdf_page_png(content, 1, max_side_px=1400)
+        except (FacsimilePdfError, OSError):
+            # A missing rasterizer or an unsupported page must not hide the valid PDF.
+            pass
+        else:
+            bundle = _draft_preview_bundle(content, page)
+            if bundle is not None:
+                return bundle
     return Response(
         content=content,
         media_type="application/pdf",
@@ -133,6 +151,28 @@ async def preview_managed_document_draft(
             "X-Content-Type-Options": "nosniff",
             "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
         },
+    )
+
+
+def _draft_preview_bundle(pdf: bytes, page: bytes) -> StreamingResponse | None:
+    boundary = uuid4().hex
+
+    def part_header(name: str, filename: str, mime_type: str) -> bytes:
+        return (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+            f'Content-Type: {mime_type}\r\n\r\n'
+        ).encode("ascii")
+
+    parts = (
+        part_header("pdf", "draft.pdf", "application/pdf"), pdf, b"\r\n",
+        part_header("first_page", "page.png", "image/png"), page,
+        f"\r\n--{boundary}--\r\n".encode("ascii"),
+    )
+    if sum(map(len, parts)) > MAX_PDF_BYTES:
+        return None
+    return StreamingResponse(
+        iter(parts), media_type=f"multipart/form-data; boundary={boundary}",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 
