@@ -204,6 +204,7 @@ class OrderProjectionService:
             "service_id": link.service_id,
             "service_title": service_title,
             "description": getattr(link, "description", None),
+            "unit": link.unit,
             "service_category": link.service.category if link.service else None,
             "quantity": link.quantity,
             "price": link.price,

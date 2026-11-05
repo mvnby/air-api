@@ -1,11 +1,56 @@
 ---
 name: kitlane-work
-description: Prepare standalone mail drafts, review saved mail and send exact versions approved in Manager; select catalog equipment, prepare business document drafts, save requests and manage tasks and maintenance through connected Kitlane tools.
+description: Create service and repair orders with priced proposals and native contract drafts, prepare standalone mail drafts, review saved mail and send exact versions approved in Manager; select catalog equipment, prepare business document drafts, save requests and manage tasks and maintenance through connected Kitlane tools.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend
 determines the authenticated person, company, workspace and permissions; never
 ask for an actor or tenant ID as a tool argument.
+
+For an explicit request to arrange a service or repair deal, use the order
+workflow. Search the existing customer, use a single verified match directly,
+and ask only if the customer or intended proposal is ambiguous. Use the known
+order if the conversation concerns an existing negotiation. `get_order` lists
+its proposal IDs. Choose the entry point from the saved record:
+
+- For a new deal, call `create_service_order` with the verified customer,
+  workflow and source text.
+- For an intake saved by `create_incoming`, read `get_incoming` and pass its
+  lead_id as incoming_id together with expected_incoming_version.
+- A Manager inbox record with `get_order` status `new_lead` is itself an order.
+  Read `get_service_order_intake` for the requester, source and workflow revision.
+  Match the actual legal name and use incoming_order_id with
+  expected_incoming_order_revision to promote that same order in place.
+
+Use workflow_type=maintenance for ordinary maintenance services. Use a tender
+budget as an offer price only when explicitly instructed, and describe a
+provisional price as such. Keep the returned order_id and proposal_id across
+the following steps.
+
+Read `get_service_order_proposal`, then use `edit_service_order_proposal` with
+its current version and the user's quantity, unit and price. Describe agreed
+equipment, materials and scope in the line description. If the user priced a
+repair as one package, save one service line for that amount. A compressor
+included in the work belongs in the description. Preserve measurements with
+their units and any uncertainty. Mention a photo attachment only if a supported
+upload tool has actually saved it. For separately priced services add one line
+at a time using each returned version. For a correction, use the target line
+ID and its complete edited contents. Preserve the other variants.
+
+When requested, call `prepare_service_order_contract` on the saved version.
+A normal contract needs no preliminary quote. For a requested invoice-contract
+use the appropriate native invoice offer role and template. Use the company's
+default issuer when unambiguous, or choose among verified issuers with
+`list_catalog_document_issuers`. Report the total, exact missing fields,
+and the Manager link to the particular draft. Read `get_service_order_contract`
+to check readiness and freshness. After edits, prepare a fresh draft on the new
+proposal version when requested. On partial success, keep the saved IDs, explain
+the remaining step, and resume there. A single explicit instruction to prepare
+the deal covers these draft saves. Issue, signature, delivery, collection,
+customer acceptance and recording completed work are separate Manager actions.
+Order editing requires `kitlane:orders:write`, preparing/reading contract drafts
+requires `kitlane:contracts:drafts:write`, and qualifying an incoming also
+requires `kitlane:incoming:write`. Reconnect if these permissions are missing.
 
 For an equipment recommendation, use `select_catalog_products` with the stated
 capacity or room area, quantity, inverter, heating temperature and Wi-Fi needs.

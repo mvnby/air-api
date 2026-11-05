@@ -136,6 +136,7 @@ const mapServiceLineFromResponse = (line: OrderServiceLineResponse): ServiceLine
   service_id: line.service_id,
   title: line.service_title,
   description: line.description,
+  unit: line.unit,
   installation_display_lines: line.installation_display_lines,
   quantity: Math.max(1, Number(line.quantity || 1)),
   price: Number(line.price || 0),
@@ -569,6 +570,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       title: line.title,
       ...(line.description !== undefined && !line.installation_estimate_revision_id
         ? { description: line.description?.trim() || null } : {}),
+      ...(line.unit !== undefined && !line.installation_estimate_revision_id ? { unit: line.unit?.trim() || null } : {}),
       quantity: Math.trunc(Number(line.quantity) || 0),
       price: Number(line.price || 0),
       cost: (!line.cost && line.cost !== 0) ? null : Number(line.cost),
@@ -617,6 +619,7 @@ export const useOrderCommercialEditor = ({ order, setToast, persistDraft }: UseO
       service_id: line.service_id ?? null,
       title: String(line.title || '').trim(),
       description: String(line.description || '').trim() || null,
+      unit: String(line.unit || '').trim() || null,
       quantity: Number(line.quantity || 0),
       price: Number(line.price || 0),
       cost: Number(line.cost || 0),

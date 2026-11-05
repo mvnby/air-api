@@ -11,14 +11,18 @@ from sqlmodel import select
 
 from core.command_actor import CommandActor
 from core.config import settings
-from models import Customer, Order
+from models import Customer, Order, OrderProposal
 from schemas_connector_mcp import (
     ConnectorContext,
     CustomerSearchResult,
     CustomerSummary,
+    IncomingOrderContext,
+    OrderDetail,
+    OrderProposalSummary,
     OrderSearchResult,
     OrderSummary,
 )
+from services.leads_inbox_service import InboxError, LeadsInboxService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import tenant_scope_clause
 
@@ -148,8 +152,39 @@ class ConnectorQueryService:
     @classmethod
     async def get_order(
         cls, session: AsyncSession, actor: CommandActor, *, order_id: int
-    ) -> OrderSummary:
+    ) -> OrderDetail:
         row = (await session.execute(cls._orders_statement(actor).where(Order.id == order_id))).first()
         if row is None:
             raise HTTPException(404, "Order not found")
-        return cls._order(row[0], row[1])
+        proposals = (await session.execute(
+            select(OrderProposal.id, OrderProposal.name, OrderProposal.status,
+                   OrderProposal.is_selected, OrderProposal.is_archived)
+            .where(OrderProposal.order_id == order_id)
+            .order_by(OrderProposal.sort_order, OrderProposal.id)
+        )).mappings().all()
+        return OrderDetail(**cls._order(row[0], row[1]).model_dump(),
+                           proposals=[OrderProposalSummary(**item) for item in proposals])
+
+    @staticmethod
+    async def service_order_intake(session, actor, order_id: int) -> IncomingOrderContext:
+        order = await TenantEntityAccessService.get_order(
+            session, order_id, tenant_scope=actor.tenant_scope, for_update=True,
+        )
+        if order is None:
+            raise HTTPException(404, "Incoming order not found")
+        try:
+            entry = await LeadsInboxService.detail(
+                session, order_id=order_id, username=actor.username, tenant_scope=actor.tenant_scope,
+            )
+        except InboxError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        source = entry.original_text or entry.comment or entry.summary or ""
+        return IncomingOrderContext(
+            order_id=order_id, workflow_revision=order.workflow_revision, title=entry.title,
+            customer_id=entry.customer_id, requester_name=entry.customer_full_legal_name or entry.customer_name,
+            source_kind=entry.source_kind, source_text=source[:20000],
+            source_text_truncated=entry.original_text_truncated or len(source) > 20000,
+            estimated_budget=entry.budget_amount, budget_currency=entry.budget_currency,
+            eligible=entry.status == "new_lead" and entry.archive is None and entry.linked_order_id is None,
+            manager_url=f"{settings.MANAGER_BASE_URL.rstrip('/')}/orders/{order_id}",
+        )

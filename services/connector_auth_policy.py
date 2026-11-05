@@ -15,6 +15,7 @@ CLIENT_ID = "kitlane-chatgpt"
 SCOPES = frozenset({
     "kitlane:read", "kitlane:incoming:write", "kitlane:tasks:write",
     "kitlane:maintenance:write", "kitlane:catalog:write",
+    "kitlane:orders:write", "kitlane:contracts:drafts:write",
     "kitlane:mail:read", "kitlane:mail:drafts:write", "kitlane:mail:send",
 })
 ROLE_RANK = {"manager": 1, "admin": 2, "owner": 3}

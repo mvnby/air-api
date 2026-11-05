@@ -9,6 +9,8 @@ const scopeLabels: Record<string, string> = {
   'kitlane:tasks:write': 'Создание и изменение личных задач',
   'kitlane:maintenance:write': 'Замечания, фото и черновики документов ТО',
   'kitlane:catalog:write': 'Подбор оборудования и черновики КП и счетов',
+  'kitlane:orders:write': 'Заказы на работы, услуги и цены предложения',
+  'kitlane:contracts:drafts:write': 'Подготовка и проверка черновиков договоров',
   'kitlane:mail:read': 'Чтение почты и вложений',
   'kitlane:mail:drafts:write': 'Изменение почтовых черновиков и вложений',
   'kitlane:mail:send': 'Отправка писем после подтверждения в Manager',

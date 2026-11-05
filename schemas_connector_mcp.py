@@ -83,6 +83,33 @@ class OrderSummary(BaseModel):
     link: str
 
 
+class OrderProposalSummary(BaseModel):
+    id: int
+    name: str
+    status: str
+    is_selected: bool
+    is_archived: bool
+
+
+class OrderDetail(OrderSummary):
+    proposals: list[OrderProposalSummary]
+
+
+class IncomingOrderContext(BaseModel):
+    order_id: int
+    workflow_revision: int
+    customer_id: int | None
+    requester_name: str | None
+    title: str | None
+    source_kind: str
+    source_text: str
+    source_text_truncated: bool
+    estimated_budget: float | None
+    budget_currency: str | None
+    eligible: bool
+    manager_url: str
+
+
 class OrderSearchResult(BaseModel):
     items: list[OrderSummary]
     ambiguous: bool

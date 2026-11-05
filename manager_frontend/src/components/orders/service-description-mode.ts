@@ -11,6 +11,7 @@ export type ServiceDescriptionLine = {
   service_id?: number | null;
   title: string;
   description?: string | null;
+  unit?: string | null;
   installation_display_lines?: Array<{ title: string; description?: string | null; quantity: number; price: number }>;
   quantity: number;
   price: number;
