@@ -12,6 +12,7 @@ import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
 import RepairDefectFields from './RepairDefectFields.vue';
 import { repairDefectFormError, repairDefectPayload, type RepairDefectForm } from '../model/repair-defect';
+import WaybillCargoFields from './WaybillCargoFields.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import { installationTermsError, serializeInstallationTerms } from '../model/installation-two-stages';
 
@@ -31,7 +32,7 @@ const saving = ref(false);
 const error = ref('');
 let active = true;
 onBeforeUnmount(() => { active = false; });
-const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement', 'repair_defect'] as const;
+const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement', 'repair_defect', 'waybill_cargo'] as const;
 const changes = computed(() => {
   const result: Record<string, unknown> = {};
   if (!form.value || !baseline.value) return result;
@@ -81,6 +82,9 @@ const save = async () => {
   const rebuilt = rebuilds.value;
   const reset = rebuilt && form.value.has_editable_copy;
   const payload = { ...changes.value, expected_revision: form.value.revision, reset_editable_copy: reset } as ManagedDocumentDraftParameterUpdate;
+  if (payload.waybill_cargo && form.value.waybill_cargo) {
+    payload.waybill_cargo = form.value.waybill_cargo.map(({ line_number, seats, mass_kg }) => ({ line_number, seats, mass_kg }));
+  }
   if (payload.repair_defect && form.value.repair_defect) payload.repair_defect = repairDefectPayload(form.value.repair_defect);
   if (payload.consumer_terms && form.value.consumer_terms) payload.consumer_terms = serializeInstallationTerms(form.value.consumer_terms);
   saving.value = true;
@@ -110,6 +114,7 @@ const save = async () => {
     <p class="mt-1 text-xs text-slate-500">Изменения сохраняются в этот документ. Дата в готовом файле будет взята отсюда; её изменение сохраняет ручные правки.</p>
     <p v-if="loading" class="mt-3 text-sm">Загружаем параметры…</p>
     <fieldset v-if="form" :disabled="saving || disabled" class="mt-3">
+      <WaybillCargoFields v-if="form.waybill_cargo?.length" v-model="form.waybill_cargo" />
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="native-field"><span>Дата документа</span><input v-model="form.issue_date" type="date" class="native-input" data-testid="draft-issue-date" required /></label>
         <label class="native-field"><span>Город документа</span><input v-model="form.issue_city" class="native-input" data-testid="draft-issue-city" maxlength="160" /></label>

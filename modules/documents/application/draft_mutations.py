@@ -27,6 +27,7 @@ from modules.documents.domain.repair_defect import RepairDefect
 from modules.documents.domain.participant_statement import ParticipantStatement
 from .business_context import build_business_document_context
 from .consumer_context import build_consumer_document_context
+from .waybill_cargo import apply_cargo_measures, cargo_lines
 from .draft_parameters import (
     TERM_GROUPS,
     draft_revision,
@@ -160,6 +161,7 @@ class ManagedDocumentDraftMutationService:
         )
         return {
             **read_draft_parameters(document),
+            "waybill_cargo": cargo_lines(document.render_snapshot) if document.doc_type == "ttn1" else None,
             "revision": draft_revision(document, artifacts),
             "template_version_id": document.template_version_id,
             "has_editable_copy": bool(artifacts),
@@ -194,6 +196,7 @@ class ManagedDocumentDraftMutationService:
             "consumer_terms": document.doc_type in B2C_NATIVE_DOCUMENT_TYPES,
             "act_terms": document.doc_type == "act",
             "transport_terms": document.doc_type in {"tn2", "ttn1"},
+            "waybill_cargo": document.doc_type == "ttn1",
             "repair_defect": document.doc_type == "repair_defect_act",
             "participant_statement": document.doc_type == "participant_statement",
         }
@@ -203,6 +206,11 @@ class ManagedDocumentDraftMutationService:
         changed = {
             key: value for key, value in changes.items() if value != current.get(key)
         }
+        snapshot = deepcopy(document.render_snapshot)
+        if "waybill_cargo" in changed:
+            apply_cargo_measures(snapshot, changed["waybill_cargo"])
+            if snapshot == document.render_snapshot:
+                del changed["waybill_cargo"]
         if not changed:
             return document
         rebuild = bool(set(changed) - {"issue_date"})
@@ -210,7 +218,6 @@ class ManagedDocumentDraftMutationService:
             raise ManagedDocumentConflictError(
                 "Изменение этих параметров требует пересборки рабочей копии. Подтвердите замену ручных правок"
             )
-        snapshot = deepcopy(document.render_snapshot)
         values, meta = snapshot["values"], snapshot.setdefault("meta", {})
         parameters = {**current, **changed}
         new_date = date.fromisoformat(parameters["issue_date"])

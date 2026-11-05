@@ -8,6 +8,7 @@ import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayloa
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
+import type { WaybillCargoMeasure } from './WaybillCargoMeasure';
 export type ManagedDocumentDraftParameterUpdate = {
     expected_revision: string;
     reset_editable_copy?: boolean;
@@ -20,5 +21,6 @@ export type ManagedDocumentDraftParameterUpdate = {
     transport_terms?: (TransportTermsPayload | null);
     repair_defect?: (RepairDefect | null);
     participant_statement?: (ParticipantStatementPayload | null);
+    waybill_cargo?: (Array<WaybillCargoMeasure> | null);
 };
 

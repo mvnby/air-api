@@ -648,7 +648,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         allowIncompleteCustomer = !readiness.can_issue;
       }
       if (!isCurrent()) return;
-      await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
+      const created = await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
         ...payload, allow_incomplete_customer: allowIncompleteCustomer,
       }), isCurrent);
       if (!isCurrent()) return;
@@ -675,6 +675,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (!isCurrent()) return;
       input.refresh();
       input.notify('Черновик создан');
+      return created;
     } catch (error) {
       if (isCurrent()) input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
     } finally {

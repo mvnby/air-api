@@ -425,7 +425,9 @@ const createDraft = async () => {
     // The save callback may replace the order in the parent; let its new props reach this workspace.
     await nextTick();
     if (orderId !== props.order.id || type !== workspace.documentType.value || proposal !== proposalId.value || draftBlockedReason.value) return;
-    await workspace.createDraft();
+    const created = await workspace.createDraft();
+    if (created?.doc_type === 'ttn1' && type === workspace.documentType.value
+      && orderId === props.order.id && proposal === proposalId.value) editingDraftId.value = created.id;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Не удалось сохранить изменения заказа.';
     emit('toast', { message, type: 'error' });
@@ -560,7 +562,7 @@ defineExpose({
               <button v-if="canManageDocumentSettings && access.canCreate && canChangeDraft(document) && document.template_version_id && document.document_template_id && document.legal_entity_id"
                 class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id) || editingDraftId === document.id"
                 data-testid="edit-draft-template" @click="editTemplate(document)">Редактировать шаблон</button>
-              <button v-if="canChangeDraft(document) && access.canCreate" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="editingDraftId = editingDraftId === document.id ? null : document.id">Изменить параметры</button>
+              <button v-if="canChangeDraft(document) && access.canCreate" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="editingDraftId = editingDraftId === document.id ? null : document.id">{{ document.doc_type === 'ttn1' ? 'Груз и параметры' : 'Изменить параметры' }}</button>
               <button v-if="canChangeDraft(document) && !document.maintenance_source_order_id && access.canDelete" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
               <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
@@ -766,7 +768,7 @@ defineExpose({
           />
           <p v-if="draftBlockedReason && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ draftBlockedReason }}. <button v-if="canManageDocumentSettings && !selectionError" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <span class="text-xs text-slate-500">Черновик можно проверить до присвоения номера.</span>
+            <span class="text-xs text-slate-500">{{ workspace.documentType.value === 'ttn1' ? 'В черновике укажите грузовые места и массу по строкам.' : 'Черновик можно проверить до присвоения номера.' }}</span>
             <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(draftBlockedReason)" :title="draftBlockedReason" @click="createDraft()">Создать черновик</button>
           </div>
         </template>

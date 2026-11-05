@@ -56,12 +56,11 @@ def build_logistics_rows(
                     "line.unit_price": _money(unit_price),
                     "line.amount": _money(amount),
                     "line.vat_label": "",
-                    "line.seats": str(quantity),
-                    "line.mass": "0.00",
+                    "line.seats": "",
+                    "line.mass": "",
                     "line.note": "—",
                     "line.amount_raw": str(amount),
                     "line.quantity_raw": str(quantity),
-                    "line.mass_raw": "0",
                 }
             )
     return rows

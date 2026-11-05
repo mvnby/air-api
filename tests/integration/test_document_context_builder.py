@@ -698,8 +698,8 @@ async def test_paper_waybill_uses_contract_and_only_expanded_product_rows(db):
             "line.unit_price": "333.33",
             "line.amount": "333.33",
             "line.vat_label": "без НДС",
-            "line.seats": "1",
-            "line.mass": "0.00",
+            "line.seats": "",
+            "line.mass": "",
             "line.note": "—",
         },
         {
@@ -712,8 +712,8 @@ async def test_paper_waybill_uses_contract_and_only_expanded_product_rows(db):
             "line.unit_price": "666.67",
             "line.amount": "666.67",
             "line.vat_label": "без НДС",
-            "line.seats": "1",
-            "line.mass": "0.00",
+            "line.seats": "",
+            "line.mass": "",
             "line.note": "—",
         },
     ]

@@ -223,6 +223,8 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor(
         "totals.quantity_in_words", "Общее количество прописью", "Итоги"
     ),
+    PlaceholderDescriptor("totals.seats", "Всего грузовых мест", "Итоги"),
+    PlaceholderDescriptor("totals.seats_in_words", "Всего грузовых мест прописью", "Итоги"),
     PlaceholderDescriptor("totals.weight", "Общая масса", "Итоги"),
     PlaceholderDescriptor("totals.weight_in_words", "Общая масса прописью", "Итоги"),
 )

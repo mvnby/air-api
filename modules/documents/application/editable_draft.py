@@ -7,7 +7,6 @@ This keeps Google Drive an editor rather than the numbering source of truth.
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
 from modules.documents.infrastructure.renderers import (
@@ -17,6 +16,8 @@ from modules.documents.infrastructure.renderers import (
 )
 
 from modules.documents.infrastructure.renderers.legacy_customer_marker import remove_legacy_customer_marker
+
+from .waybill_cargo import draft_snapshot_copy
 from .artifact_helpers import build_render_inputs
 from .customer_readiness import READINESS_DOCUMENT_TYPES
 
@@ -38,7 +39,7 @@ class EditableDraftError(ValueError):
 
 def render_editable_draft(*, template, version, source: bytes, snapshot: dict[str, Any]) -> bytes:
     """Render business data while retaining official fields as placeholders."""
-    editable_snapshot = deepcopy(snapshot)
+    editable_snapshot = draft_snapshot_copy(snapshot)
     values = editable_snapshot.setdefault("values", {})
     deferred_fields = _deferred_fields(version.placeholder_schema or {})
     for field in deferred_fields:

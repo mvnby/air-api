@@ -63223,6 +63223,20 @@
                 "type": "null"
               }
             ]
+          },
+          "waybill_cargo": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaybillCargoMeasure"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waybill Cargo"
           }
         },
         "additionalProperties": false,
@@ -63309,6 +63323,20 @@
                 "type": "null"
               }
             ]
+          },
+          "waybill_cargo": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaybillCargoLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waybill Cargo"
           },
           "revision": {
             "type": "string",
@@ -104293,6 +104321,105 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WaybillCargoLine": {
+        "properties": {
+          "line_number": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Line Number"
+          },
+          "seats": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 999999999.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seats"
+          },
+          "mass_kg": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,9}|(?=[\\d.]{1,13}0*$)\\d{0,9}\\.\\d{0,3}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mass Kg"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quantity": {
+            "type": "string",
+            "title": "Quantity"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "line_number",
+          "title",
+          "quantity",
+          "unit"
+        ],
+        "title": "WaybillCargoLine"
+      },
+      "WaybillCargoMeasure": {
+        "properties": {
+          "line_number": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Line Number"
+          },
+          "seats": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 999999999.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seats"
+          },
+          "mass_kg": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,9}|(?=[\\d.]{1,13}0*$)\\d{0,9}\\.\\d{0,3}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mass Kg"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "line_number"
+        ],
+        "title": "WaybillCargoMeasure"
       },
       "WebRebuildCompletePayload": {
         "properties": {

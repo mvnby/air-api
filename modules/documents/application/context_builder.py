@@ -494,6 +494,10 @@ class DocumentContextBuilder:
             "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
 
+        if document_type in WAYBILL_DOCUMENT_TYPES:
+            # A product count is not a package count. Unmeasured cargo has no weight total.
+            values.update(dict.fromkeys(("totals.seats", "totals.seats_in_words",
+                                         "totals.weight", "totals.weight_in_words"), ""))
         if selection.repair_defect is not None:
             # An order quote or sold part is not an expert's repair estimate.
             snapshot["table_rows"] = {}
