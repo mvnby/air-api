@@ -17288,7 +17288,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
               "title": "Doc Type"
             }
           }
@@ -18835,7 +18835,7 @@
           "manager-document-system"
         ],
         "summary": "Check Managed Document Readiness",
-        "description": "Read the selected native version and scoped order facts without creating a draft\nor reserving a number. Reports only applicable placeholders surviving the frozen\nparty conditions. Creating a draft and issuing it repeat server-side checks;\nthis response is advisory and does not authorize issuance. Returns 404 for\nscoped dependencies, 409 for incompatible context, 400 for invalid facts and\n503 for unavailable private template bytes. Manager membership is required.",
+        "description": "Read the selected native version and scoped order facts without creating a draft\nor reserving a number. A first-use repair defect act checks the built-in form in\nmemory and returns null template/version IDs until the first draft installs it.\nReports only applicable placeholders surviving the frozen\nparty conditions. Creating a draft and issuing it repeat server-side checks;\nthis response is advisory and does not authorize issuance. Returns 404 for\nscoped dependencies, 409 for incompatible context, 400 for invalid facts and\n503 for unavailable private template bytes. Manager membership is required.",
         "operationId": "check_manager_managed_document_readiness",
         "security": [
           {
@@ -63204,6 +63204,16 @@
               }
             ]
           },
+          "repair_defect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairDefect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participant_statement": {
             "anyOf": [
               {
@@ -63274,6 +63284,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/TransportTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repair_defect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairDefect"
               },
               {
                 "type": "null"
@@ -63361,7 +63381,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -63552,6 +63572,16 @@
               }
             ]
           },
+          "repair_defect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairDefect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participant_statement": {
             "anyOf": [
               {
@@ -63574,6 +63604,16 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "repair_defect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairDefect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participant_statement": {
             "anyOf": [
               {
@@ -63959,11 +63999,25 @@
             "title": "Can Issue"
           },
           "template_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Template Id"
           },
           "template_version_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Template Version Id"
           }
         },
@@ -88558,7 +88612,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|tn2|ttn1)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|tn2|ttn1)$",
             "title": "Doc Type"
           },
           "description": {
@@ -97709,6 +97763,84 @@
           "created_at"
         ],
         "title": "RegistrationCertificateItem"
+      },
+      "RepairDefect": {
+        "properties": {
+          "equipment": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Equipment"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "repairable",
+              "not_repairable",
+              "uneconomical",
+              "needs_diagnostics",
+              "operational"
+            ],
+            "title": "Verdict"
+          },
+          "finding": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Finding"
+          },
+          "recommendation": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Recommendation"
+          },
+          "restriction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restriction"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "equipment",
+          "verdict",
+          "finding",
+          "recommendation"
+        ],
+        "title": "RepairDefect"
       },
       "RepairDiagnosticLeadResponse": {
         "properties": {

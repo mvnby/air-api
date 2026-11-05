@@ -13,6 +13,7 @@ from modules.documents.domain import (
     WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
+from modules.documents.domain.repair_defect import RepairDefect
 from .participant_statement_schemas import ParticipantStatementPayload
 from services.envelope_branding_service import EnvelopeBranding
 
@@ -322,10 +323,13 @@ class ManagedDocumentDraftPayload(BaseModel):
     business_terms: BusinessDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
     transport_terms: "TransportTermsPayload | None" = None
+    repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
 
     @model_validator(mode="after")
     def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
+        if (self.document_type == "repair_defect_act") != (self.repair_defect is not None):
+            raise ValueError("Заключение требуется только для дефектного акта ремонта")
         if (self.document_type == "participant_statement") != (self.participant_statement is not None):
             raise ValueError("Реквизиты заявления участника обязательны только для заявления")
         if (
@@ -468,11 +472,13 @@ class DocumentCustomerReadiness(BaseModel):
 
 
 class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
-    template_id: int
-    template_version_id: int
+    # Null only for a first-use built-in form that has not been installed yet.
+    template_id: int | None
+    template_version_id: int | None
 
 
 class ManagedDocumentItem(BaseModel):
+    repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
     customer_readiness: DocumentCustomerReadiness | None = None
     maintenance_source_order_id: int | None = None

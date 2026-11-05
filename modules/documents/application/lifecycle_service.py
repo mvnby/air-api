@@ -202,6 +202,13 @@ class ManagedDocumentService:
         )
         if order is None:
             raise ManagedDocumentNotFoundError("Заказ не найден")
+        if selection.document_type == "repair_defect_act":
+            if order.workflow_type != "repair" or order.customer_id is None or selection.repair_defect is None:
+                raise ManagedDocumentConflictError("Для дефектного акта нужен заказ на ремонт с клиентом и заключением")
+            if template_id is None:
+                from .repair_defect_template import ensure_repair_defect_template
+                await ensure_repair_defect_template(session, scope=tenant_scope,
+                    legal_entity_id=selection.legal_entity_id, storage=template_storage)
         if selection.document_type == "participant_statement" and template_id is None:
             from .participant_statement_template import ensure_initial_participant_template
             await ensure_initial_participant_template(session, scope=tenant_scope,
@@ -684,7 +691,7 @@ class ManagedDocumentService:
         if for_update:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         document = (await session.execute(statement)).scalar_one_or_none()
-        if document is not None and for_update and document.doc_type in {"maintenance_defect_act", "participant_statement"}:
+        if document is not None and for_update and document.doc_type in {"maintenance_defect_act", "participant_statement", "repair_defect_act"}:
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)
         return document
 

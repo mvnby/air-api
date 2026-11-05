@@ -1,3 +1,4 @@
+import { REPAIR_DEFECT_DOCUMENT } from './repair-defect';
 import type { ManagedDocumentItem } from '../../../client';
 
 export const BUSINESS_NATIVE_DOCUMENT_TYPES = [
@@ -20,6 +21,7 @@ export const CONSUMER_NATIVE_DOCUMENT_TYPES = [
 export const NATIVE_DOCUMENT_TYPES = [
   ...BUSINESS_NATIVE_DOCUMENT_TYPES,
   ...CONSUMER_NATIVE_DOCUMENT_TYPES,
+  REPAIR_DEFECT_DOCUMENT,
 ] as const;
 
 export const NUMBER_POLICY_TYPES = [

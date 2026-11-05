@@ -15,6 +15,7 @@ import {
   CONSUMER_NATIVE_DOCUMENT_TYPES,
   documentTypeName,
 } from '../model/native-document-options';
+import { REPAIR_DEFECT_DOCUMENT } from '../model/repair-defect';
 import { CONTRACT_SCENARIOS } from '../model/business-document-terms';
 import { DOCUMENT_ROLE_OPTIONS } from '../model/document-constants';
 import type { DocumentRoleType } from '../model/document-types';
@@ -59,6 +60,7 @@ const supportsDocumentRoleType = computed(() => ['offer', 'invoice', 'contract',
 const documentTypeGroups = [
   { label: 'Для бизнеса', items: BUSINESS_NATIVE_DOCUMENT_TYPES },
   { label: 'Для частных клиентов', items: CONSUMER_NATIVE_DOCUMENT_TYPES },
+  { label: 'Ремонт', items: [REPAIR_DEFECT_DOCUMENT] },
 ];
 const documentTypeIcon = (type: string) => ({
   offer: 'description',

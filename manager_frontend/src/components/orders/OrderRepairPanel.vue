@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { FileText, LoaderCircle, RefreshCw, Sparkles, Star } from 'lucide-vue-next';
+import { getOrderDocumentAccess } from './order-document-access';
 import type { ManagerOrderDetailResponse, ManagerRepairComplaintPresetResponse } from '../../client';
 import { ManagerOrdersService, ManagerRepairComplaintsService } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
@@ -30,6 +32,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   toast: [payload: { message: string; type: 'success' | 'error' }];
   reload: [orderId: number];
+  'open-repair-act': [];
 }>();
 
 const expanded = defineModel<boolean>('expanded', { required: true });
@@ -171,7 +174,7 @@ const generateAiDraft = async () => {
       measurement_result: props.measurementResult,
     });
     emit('reload', props.order.id);
-    notify('Черновик дефектного акта заполнен и сохранен', 'success');
+    notify('Технические данные сохранены в заказе', 'success');
   } catch (error) {
     notify(`AI не смог подготовить черновик: ${getApiErrorMessage(error)}`, 'error');
   } finally {
@@ -204,6 +207,11 @@ watch(
     :summary="summary"
     tone="default"
   >
+    <button v-if="getOrderDocumentAccess(order.status).canCreate" type="button"
+      class="btn-mini mb-3 inline-flex min-h-11 max-w-full items-center justify-center gap-2"
+      data-testid="open-repair-client-act" @click="emit('open-repair-act')">
+      <FileText :size="17" class="shrink-0" aria-hidden="true" />Оформить дефектный акт
+    </button>
     <div class="grid gap-3 md:grid-cols-2">
       <div class="md:col-span-2 rounded-xl border border-brand-100 bg-brand-50/50 p-3">
         <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -212,7 +220,7 @@ watch(
             <p class="text-xs text-brand-700/80">Выберите типовую жалобу, чтобы заполнить формулировку и вероятный диагноз.</p>
           </div>
           <button type="button" data-testid="reload-repair-presets" class="btn-mini-outline justify-center whitespace-nowrap text-xs" :disabled="complaintsLoading" @click="loadComplaintPresets">
-            <span class="material-icons-round text-[15px]" :class="{ 'animate-spin': complaintsLoading }">refresh</span>
+            <RefreshCw :size="15" :class="{ 'animate-spin': complaintsLoading }" aria-hidden="true" />
             Обновить
           </button>
         </div>
@@ -228,7 +236,7 @@ watch(
             @click="applyComplaintPreset(preset)"
           >
             <span class="flex items-center gap-1 font-semibold">
-              <span v-if="preset.is_favorite" class="material-icons-round text-[14px] text-amber-500">star</span>
+              <Star v-if="preset.is_favorite" :size="14" class="text-amber-500" aria-hidden="true" />
               {{ preset.customer_phrase }}
             </span>
             <span v-if="preset.document_wording" class="mt-1 line-clamp-2 block max-w-[260px] opacity-75">{{ preset.document_wording }}</span>
@@ -242,13 +250,13 @@ watch(
       <div class="md:col-span-2 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
         <div class="mb-2 flex flex-col gap-2 lg:flex-row lg:items-end">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-semibold text-violet-950">AI-черновик по выбранной неисправности</p>
+            <p class="text-sm font-semibold text-violet-950">Описание неисправности для заказа</p>
             <p class="mt-1 truncate text-xs text-violet-700/80">{{ selectedAiDefect?.label || 'Базовая неисправность не выбрана' }}</p>
           </div>
           <button type="button" data-testid="generate-repair-ai" class="btn-mini h-[42px] justify-center whitespace-nowrap bg-violet-600 hover:bg-violet-700" :disabled="aiGenerating || !selectedAiDefect" @click="generateAiDraft">
-            <span v-if="aiGenerating" class="material-icons-round animate-spin text-[16px]">loop</span>
-            <span v-else class="material-icons-round text-[16px]">auto_awesome</span>
-            AI-черновик
+            <LoaderCircle v-if="aiGenerating" :size="16" class="animate-spin" aria-hidden="true" />
+            <Sparkles v-else :size="16" aria-hidden="true" />
+            Подготовить с ИИ
           </button>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

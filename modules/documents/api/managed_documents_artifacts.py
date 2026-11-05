@@ -673,6 +673,10 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
     )
     statement_values = ((document.render_snapshot or {}).get("values") or {})
     return ManagedDocumentItem(
+        repair_defect=(
+            (document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("repair_defect")
+            if document.doc_type == "repair_defect_act" else None
+        ),
         participant_statement=(
             {name: statement_values.get(f"participant.{name}", "") for name in
              ("procedure_reference", "lot", "buyer_name", "declaration_text")}

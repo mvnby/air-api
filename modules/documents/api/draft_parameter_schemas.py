@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .schemas import ConsumerDocumentTermsPayload, TransportTermsPayload
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
+from modules.documents.domain.repair_defect import RepairDefect
 from .participant_statement_schemas import ParticipantStatementPayload
 
 
@@ -14,6 +15,7 @@ class ManagedDocumentDraftParameters(BaseModel):
     consumer_terms: ConsumerDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
     transport_terms: TransportTermsPayload | None = None
+    repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
     revision: str
     template_version_id: int
@@ -34,6 +36,7 @@ class ManagedDocumentDraftParameterUpdate(BaseModel):
     consumer_terms: ConsumerDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
     transport_terms: TransportTermsPayload | None = None
+    repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
 
     @model_validator(mode="after")

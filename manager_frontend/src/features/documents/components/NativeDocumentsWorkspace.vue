@@ -21,6 +21,8 @@ import FacsimilePdfEditor from './FacsimilePdfEditor.vue';
 import { canEditDocumentFacsimile } from '../model/facsimile-placement';
 import { useDocumentFileActions } from '../composables/use-document-file-actions';
 import ActTermsPanel from './ActTermsPanel.vue';
+import RepairDefectFields from './RepairDefectFields.vue';
+import { REPAIR_DEFECT_DOCUMENT, repairDefectFormError } from '../model/repair-defect';
 import ContractActNumberConfirmation from './ContractActNumberConfirmation.vue';
 import type { ContractActConfirmation } from '../model/contract-act-number';
 import NativeActComposition from './NativeActComposition.vue';
@@ -89,6 +91,7 @@ const actComposition = useNativeActComposition(
 const workspace = useManagedDocumentWorkspace({
   actScope: () => actComposition.payload.value,
   customerContext: () => props.order.customer,
+  repairOrder: () => props.order,
   orderId: () => props.order.id,
   workflowType: () => props.workflowType || props.order.workflow_type,
   proposalId: () => proposalId.value,
@@ -128,11 +131,15 @@ const contractFileActions = useDocumentFileActions({
 });
 const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
 const documentGroups = computed(() => groupDocumentVersions(workspace.documents.value));
-const documentTypes = computed(() => documentAudience.value === 'business'
-  ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES);
+const isRepairOrder = computed(() => (props.workflowType || props.order.workflow_type) === 'repair');
+const documentTypes = computed(() => {
+  const byAudience = documentAudience.value === 'business' ? BUSINESS_NATIVE_DOCUMENT_TYPES : CONSUMER_NATIVE_DOCUMENT_TYPES;
+  return isRepairOrder.value ? [REPAIR_DEFECT_DOCUMENT, ...byAudience] : byAudience;
+});
+const hasInitialTemplate = computed(() => ['participant_statement', 'repair_defect_act'].includes(workspace.documentType.value));
 const documentTypeIcon = (type: string) => ({
   offer: FileText, invoice: ReceiptText, contract: Handshake, act: ClipboardCheck,
-  tn2: Truck, ttn1: Truck, b2c_supply_installation_act: House,
+  tn2: Truck, ttn1: Truck, repair_defect_act: Wrench, b2c_supply_installation_act: House,
   b2c_customer_equipment_installation_act: Hammer,
   b2c_maintenance_repair_act: Wrench, b2c_route_laying_act: Route,
 }[type] || FileText);
@@ -180,6 +187,7 @@ const issuerProfileUrl = computed(() => {
   return `/manager/customers/profile?${params}`;
 });
 const selectionError = computed(() => {
+  if (workspace.documentType.value === 'repair_defect_act') return repairDefectFormError(workspace.repairDefect.value);
   if (basisSupported.value && basis.loading.value) return 'Загружаем договоры клиента…';
   if (basisRequired.value && basis.loadError.value) return 'Повторите загрузку договоров клиента';
   if (basisRequired.value && !basis.selected.value) return basisOptions.value.length
@@ -199,7 +207,7 @@ const customerTypeLabel = computed(() => {
   if (props.order.customer?.type === 'individual_entrepreneur') return 'ИП';
   return 'физлицо';
 });
-const customerWarnings = computed(() => ['contract', 'invoice', 'act'].includes(workspace.documentType.value)
+const customerWarnings = computed(() => ['contract', 'invoice', 'act', 'repair_defect_act'].includes(workspace.documentType.value)
   ? (workspace.customerReadiness.value?.missing_fields || []).map((item) => item.label)
   : getCustomerDocumentWarnings(props.order.customer, workspace.documentType.value));
 const incompleteDraft = (document: Parameters<typeof workspace.issue>[0]) => document.status === 'draft'
@@ -212,7 +220,7 @@ const audienceMismatchWarning = computed(() => (
     : ''
 ));
 watch(workspace.documentType, (type) => {
-  documentAudience.value = isConsumerDocumentType(type) ? 'consumer' : 'business';
+  if (type !== 'repair_defect_act') documentAudience.value = isConsumerDocumentType(type) ? 'consumer' : 'business';
 });
 
 const setAudience = (audience: DocumentAudience) => {
@@ -226,9 +234,8 @@ watch(() => props.order.id, () => {
   contractSource.value = 'ours';
   const audience: DocumentAudience = customerIsConsumer.value ? 'consumer' : 'business';
   documentAudience.value = audience;
-  workspace.documentType.value = audience === 'consumer'
-    ? CONSUMER_NATIVE_DOCUMENT_TYPES[0].value
-    : 'offer';
+  workspace.documentType.value = isRepairOrder.value ? 'repair_defect_act'
+    : audience === 'consumer' ? CONSUMER_NATIVE_DOCUMENT_TYPES[0].value : 'offer';
   void workspace.loadWorkspace();
 }, { immediate: true });
 const onExternalContractRegistered = (document: ManagerOrderDocumentItem) => {
@@ -237,6 +244,9 @@ const onExternalContractRegistered = (document: ManagerOrderDocumentItem) => {
   contractSource.value = 'ours';
   emit('refresh');
 };
+watch(isRepairOrder, (enabled) => {
+  if (!enabled && workspace.documentType.value === 'repair_defect_act') setAudience(documentAudience.value);
+});
 watch(() => props.workflowType, (next, previous) => {
   if (!previous || !next || next === previous) return;
   if (workspace.businessTerms.value.contract_scenario === contractScenarioForWorkflow(previous)) {
@@ -383,8 +393,15 @@ watch([formRef, workspace.loading, workspace.templatesLoading, createFormRequest
   await nextTick();
   if (!createFormRequested.value || !formRef.value) return;
   // The list and selected template must finish layout before locating the form.
-  formRef.value.scrollIntoView({ behavior: 'instant', block: 'start' });
-  formRef.value.querySelector<HTMLButtonElement>('[data-testid="native-document-type"] button')?.focus({ preventScroll: true });
+  const verdict = workspace.documentType.value === 'repair_defect_act'
+    ? formRef.value.querySelector<HTMLSelectElement>('[data-testid="repair-verdict"]') : null;
+  if (verdict) {
+    verdict.scrollIntoView({ behavior: 'instant', block: 'center' });
+    verdict.focus({ preventScroll: true });
+  } else {
+    formRef.value.scrollIntoView({ behavior: 'instant', block: 'start' });
+    formRef.value.querySelector<HTMLButtonElement>('[data-testid="native-document-type"] button')?.focus({ preventScroll: true });
+  }
   createFormRequested.value = false;
 }, { flush: 'post' });
 const openCreateForm = () => { createFormRequested.value = true; };
@@ -392,6 +409,13 @@ defineExpose({
   openOffer: async () => {
     documentAudience.value = 'business';
     workspace.documentType.value = 'offer';
+    await nextTick();
+    openCreateForm();
+  },
+  openRepairDefectAct: async () => {
+    if (!isRepairOrder.value || !access.value.canCreate) return;
+    workspace.cancelReplacement();
+    workspace.documentType.value = 'repair_defect_act';
     await nextTick();
     openCreateForm();
   },
@@ -515,7 +539,7 @@ defineExpose({
         <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <FileText :size="32" class="shrink-0" aria-hidden="true" />
           <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
-          <p class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
+          <p v-if="!isRepairOrder" class="mt-1 text-xs text-slate-500">Начните с коммерческого предложения или счёта. Договор можно выбрать отдельно.</p>
         </div>
       </div>
       <div v-if="access.canSend && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
@@ -546,7 +570,7 @@ defineExpose({
       <div v-if="access.canCreate" ref="formRef" data-testid="native-document-create-form" class="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60">
         <div v-if="workspace.replacesDocumentId.value" class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
           <span>Готовим замену для документа CRM #{{ workspace.replacesDocumentId.value }}</span>
-          <button class="font-bold" type="button" @click="workspace.replacesDocumentId.value = null">Отменить</button>
+          <button class="font-bold" type="button" @click="workspace.cancelReplacement()">Отменить</button>
         </div>
 
         <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -586,10 +610,10 @@ defineExpose({
         <template v-else-if="workspace.legalEntities.value.length">
           <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" @attach-contract="contractSource = 'customer'" />
           <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
-            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (workspace.documentType.value === 'participant_statement' ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
+            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (hasInitialTemplate ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-3">
               <div class="min-w-0">
-                <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="workspace.documentType.value === 'participant_statement' && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+                <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="hasInitialTemplate && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
                 <button v-if="canManageDocumentSettings && access.canCreate && workspace.activeTemplateVersionId.value" type="button"
                   class="mt-1 min-h-8 text-left text-xs font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
                   data-testid="edit-selected-template" @click="editTemplate()">Редактировать шаблон</button>
@@ -637,6 +661,9 @@ defineExpose({
             <span v-else-if="selectedContract?.document_role_type && !workspace.documentRoleType.value" class="font-normal text-slate-600 dark:text-slate-300">{{ DOCUMENT_ROLE_OPTIONS.find((option) => option.value === selectedContract?.document_role_type)?.label }}</span>
           </label>
 
+          <RepairDefectFields v-if="workspace.documentType.value === 'repair_defect_act'" :key="order.id"
+            :terms="workspace.repairDefect.value" :order="workspace.replacesDocumentId.value ? undefined : order"
+            @update-terms="workspace.repairDefect.value = $event" />
           <NativeActComposition v-if="workspace.documentType.value === 'act'" :scope="actComposition" />
 
           <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">

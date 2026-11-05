@@ -22,7 +22,7 @@ from .template_selection import (
 )
 
 
-READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act"})
+READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act", "repair_defect_act"})
 CRITICAL_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",
@@ -153,15 +153,32 @@ async def check_selection_readiness(
     if order is None:
         raise ManagedDocumentNotFoundError("Заказ не найден")
     scenario, role = resolve_template_use_case(selection)
-    template, version = await select_active_native_template(
-        session,
-        tenant_scope=tenant_scope,
-        legal_entity_id=selection.legal_entity_id,
-        document_type=selection.document_type,
-        template_id=template_id,
-        contract_scenario=scenario,
-        business_role=role,
-    )
+    try:
+        template, version = await select_active_native_template(
+            session,
+            tenant_scope=tenant_scope,
+            legal_entity_id=selection.legal_entity_id,
+            document_type=selection.document_type,
+            template_id=template_id,
+            contract_scenario=scenario,
+            business_role=role,
+        )
+    except ManagedDocumentNotFoundError:
+        if selection.document_type != "repair_defect_act" or template_id is not None:
+            raise
+        from .initial_templates import check_initial_template_available
+        from modules.documents.infrastructure.renderers.repair_defect_template import template_bytes
+
+        await check_initial_template_available(
+            session, scope=tenant_scope, legal_entity_id=selection.legal_entity_id,
+            document_type=selection.document_type,
+        )
+        snapshot = await DocumentContextBuilder.build(session, tenant_scope=tenant_scope, selection=selection)
+        # First-use preflight reads the built-in form without installing or persisting a version.
+        readiness = await asyncio.to_thread(
+            lambda: snapshot_customer_readiness(snapshot, source=template_bytes(), document_type=selection.document_type)
+        )
+        return {**readiness, "template_id": None, "template_version_id": None}
     snapshot = await DocumentContextBuilder.build(
         session,
         tenant_scope=tenant_scope,

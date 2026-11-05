@@ -23,6 +23,7 @@ from modules.documents.domain import (
     PaymentScheduleItem,
     TransportTerms,
 )
+from modules.documents.domain.repair_defect import RepairDefect
 from modules.documents.domain.participant_statement import ParticipantStatement
 from .business_context import build_business_document_context
 from .consumer_context import build_consumer_document_context
@@ -64,6 +65,7 @@ def domain_terms(name, data):
         "act_terms": ActTerms,
         "transport_terms": TransportTerms,
         "participant_statement": ParticipantStatement,
+        "repair_defect": RepairDefect,
     }[name](**data)
 
 
@@ -192,6 +194,7 @@ class ManagedDocumentDraftMutationService:
             "consumer_terms": document.doc_type in B2C_NATIVE_DOCUMENT_TYPES,
             "act_terms": document.doc_type == "act",
             "transport_terms": document.doc_type in {"tn2", "ttn1"},
+            "repair_defect": document.doc_type == "repair_defect_act",
             "participant_statement": document.doc_type == "participant_statement",
         }
         if any(name in changes and not allowed for name, allowed in scopes.items()):
@@ -264,6 +267,8 @@ class ManagedDocumentDraftMutationService:
             values.update(
                 build_transport_document_context(terms["transport_terms"]).values
             )
+        if "repair_defect" in changed:
+            terms["repair_defect"].update_snapshot(snapshot)
         if "participant_statement" in changed:
             values.update(terms["participant_statement"].values())
         meta["draft_parameters"] = {

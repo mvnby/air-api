@@ -78,7 +78,12 @@ const openOffer = async () => {
   await nextTick();
   await nativeRef.value?.openOffer();
 };
-defineExpose({ openSend, openCreate, openNative, openOffer });
+const openRepairDefectAct = async () => {
+  activeProvider.value = 'native';
+  await nextTick();
+  await nativeRef.value?.openRepairDefectAct();
+};
+defineExpose({ openSend, openCreate, openNative, openOffer, openRepairDefectAct });
 </script>
 
 <template>

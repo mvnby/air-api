@@ -36,6 +36,15 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
                             ("lot", "Лот"), ("buyer_name", "Заказчик закупки"),
                             ("declaration_text", "Подтверждаемый текст заявления"))
     ),
+    *(
+        PlaceholderDescriptor(f"repair.{name}", label, "Дефектный акт ремонта")
+        for name, label in (
+            ("equipment", "Обследованное оборудование"), ("verdict", "Вывод о ремонте"),
+            ("finding", "Краткий установленный факт"), ("recommendation", "Рекомендуемые действия"),
+            ("restriction", "Ограничение эксплуатации"), ("cost", "Стоимость ремонта"), ("term", "Срок ремонта"),
+            ("estimate_note", "Общая пометка о неизвестных стоимости и сроке"),
+        )
+    ),
     PlaceholderDescriptor("maintenance.source_order", "Исходное ТО", "Замечания ТО"),
     PlaceholderDescriptor("document.issued_on", "Дата документа", "Документ"),
     PlaceholderDescriptor("document.issue_city", "Город документа", "Документ"),
@@ -282,6 +291,10 @@ CONDITIONAL_FLAGS += (
     ConditionDescriptor(
         "seller.is_not_vat_payer", "Продавец не платит НДС", "Продавец"
     ),
+    ConditionDescriptor("repair.has_estimate_note", "Показать общую пометку о стоимости и сроке", "Дефектный акт ремонта"),
+    ConditionDescriptor("repair.has_restriction", "Указано ограничение эксплуатации", "Дефектный акт ремонта"),
+    ConditionDescriptor("repair.has_cost", "Показать стоимость", "Дефектный акт ремонта"),
+    ConditionDescriptor("repair.has_term", "Показать срок", "Дефектный акт ремонта"),
     ConditionDescriptor("order.has_object_address", "Указан адрес объекта", "Заказ"),
     *(
         ConditionDescriptor(f"contract.is_{scenario}", f"Договор: {label}", "Договор")
@@ -381,7 +394,7 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
-    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement"})
+    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act"})
     | B2C_NATIVE_DOCUMENT_TYPES
 )
 
