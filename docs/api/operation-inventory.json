@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "31": "Manager paper waybill composition: read-only tenant and storefront selection, proposal-scoped source lines and revision validation; reviewed 2026-11-06",
     "30": "Read-only order request evidence: tenant/storefront order boundary, live system mailbox access, immutable original metadata, SHA-256 deduplication and explicit unavailable files; reviewed 2026-10-26",
     "29": "Optional bounded DeepSeek introduction wording from immutable draft attachment context, live company/staff/link access and expected version, no draft mutation/approval/send, preserved facts/signature/next steps and deterministic fallback; reviewed 2026-10-26",
     "28": "Read-only Manager KPI detail: shared overview predicates, exact authenticated tenant/storefront, timezone-aware bounded periods and pagination, current receivables/touchpoint semantics; private due-reminder task filter reviewed 2026-10-23",
@@ -181,6 +182,9 @@
       ["DELETE /api/manager/document-system/condition-presets/{preset_id}", "delete_manager_document_condition_preset", false, 2],
       ["GET /api/manager/document-system/condition-presets", "list_manager_document_condition_presets", false, 2],
       ["POST /api/manager/document-system/condition-presets", "create_manager_document_condition_preset", false, 2]
+    ],
+    "modules/documents/api/waybill_composition.py": [
+      ["GET /api/manager/document-system/orders/{order_id}/waybill-composition", "get_manager_waybill_composition", false, 31]
     ],
     "modules/documents/api/consumer_defaults.py": [
       ["GET /api/manager/document-system/orders/{order_id}/consumer-defaults", "get_manager_consumer_equipment_defaults", false, 2]

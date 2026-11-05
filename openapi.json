@@ -16616,6 +16616,71 @@
         }
       }
     },
+    "/api/manager/document-system/orders/{order_id}/waybill-composition": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Manager Waybill Composition",
+        "description": "Read the current tenant/storefront order's TN-2 or TTN-1 source lines, quantities and saved\nor catalog component prices. Pass the source revision with line choices on draft creation.\nNo order, document or number is created. Manager access is required. A missing or out-of-scope\norder returns 404, an unavailable proposal returns 400.",
+        "operationId": "get_manager_waybill_composition",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaybillCompositionSource"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/legal-entities/{legal_entity_id}/facsimiles/{kind}": {
       "post": {
         "tags": [
@@ -63611,6 +63676,16 @@
               }
             ]
           },
+          "waybill_composition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WaybillComposition-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "receipt_note": {
             "anyOf": [
               {
@@ -63670,6 +63745,16 @@
               }
             ],
             "title": "Scope Product Line Ids"
+          },
+          "waybill_composition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WaybillComposition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "repair_defect": {
             "anyOf": [
@@ -104557,6 +104642,224 @@
           "line_number"
         ],
         "title": "WaybillCargoMeasure"
+      },
+      "WaybillComponent": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Country",
+            "default": ""
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "quantity_per_parent": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity Per Parent"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^[0-9]{1,12}(\\.[0-9]{1,2})?$",
+            "title": "Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "unit",
+          "quantity_per_parent",
+          "unit_price"
+        ],
+        "title": "WaybillComponent"
+      },
+      "WaybillComposition-Input": {
+        "properties": {
+          "source_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/WaybillLineSelection"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_revision",
+          "lines"
+        ],
+        "title": "WaybillComposition"
+      },
+      "WaybillComposition-Output": {
+        "properties": {
+          "source_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/WaybillLineSelection"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_revision",
+          "lines"
+        ],
+        "title": "WaybillComposition"
+      },
+      "WaybillCompositionSource": {
+        "properties": {
+          "source_revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Revision"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/WaybillSourceLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_revision",
+          "lines"
+        ],
+        "title": "WaybillCompositionSource"
+      },
+      "WaybillLineSelection": {
+        "properties": {
+          "order_product_line_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order Product Line Id"
+          },
+          "whole_country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whole Country"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaybillComponent"
+                },
+                "type": "array",
+                "maxItems": 100,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_product_line_id"
+        ],
+        "title": "WaybillLineSelection"
+      },
+      "WaybillSourceLine": {
+        "properties": {
+          "order_product_line_id": {
+            "type": "integer",
+            "title": "Order Product Line Id"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaybillComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^[0-9]{1,12}(\\.[0-9]{1,2})?$",
+            "title": "Unit Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_product_line_id",
+          "components",
+          "product_id",
+          "title",
+          "country",
+          "quantity",
+          "unit_price"
+        ],
+        "title": "WaybillSourceLine"
       },
       "WebRebuildCompletePayload": {
         "properties": {

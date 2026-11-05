@@ -256,6 +256,12 @@ describe('NativeDocumentsWorkspace', () => {
   });
 
   it('prepares a corrected TN-2 without carrying transport details into its payload', async () => {
+    const revisionKey = 'd'.repeat(64);
+    vi.spyOn(ManagerDocumentSystemService, 'getManagerWaybillComposition').mockResolvedValue({
+      source_revision: revisionKey,
+      lines: [{ order_product_line_id: 20, product_id: 10, title: 'Кондиционер', country: '',
+        quantity: 1, unit_price: '500.00', components: null }],
+    });
     const original = { ...revision(91, 'issued', null, 'tn2'), official_number: 91, base_customer_contract_id: 91 };
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [original] });
     const wrapper = await mountWorkspace();
@@ -263,9 +269,16 @@ describe('NativeDocumentsWorkspace', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Создать исправленную редакцию')!.trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="transport-terms-panel"]').exists()).toBe(false);
-    await wrapper.get('[data-testid="create-native-draft"]').trigger('click'); await flushPromises();
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+    expect(create.attributes('disabled')).toBeDefined();
+    const composition = wrapper.get('[data-testid="native-waybill-composition"]');
+    await composition.findAll('button').find(button => button.text() === 'Состав проверен')!.trigger('click');
+    await flushPromises();
+    expect(create.attributes('disabled')).toBeUndefined();
+    await create.trigger('click'); await flushPromises();
     const [, payload] = vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mock.lastCall!;
     expect(payload.document_type).toBe('tn2');
+    expect(payload.waybill_composition?.source_revision).toBe(revisionKey);
     expect(payload.replaces_document_id).toBe(91);
     expect(payload).not.toHaveProperty('transport_terms');
   });

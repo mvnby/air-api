@@ -48,6 +48,7 @@ import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { RegistrationCertificateItem } from '../models/RegistrationCertificateItem';
 import type { TemplateExternalEditSyncPayload } from '../models/TemplateExternalEditSyncPayload';
 import type { TemplateExternalEditSyncResponse } from '../models/TemplateExternalEditSyncResponse';
+import type { WaybillCompositionSource } from '../models/WaybillCompositionSource';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -205,6 +206,35 @@ export class ManagerDocumentSystemService {
             query: {
                 'proposal_id': proposalId,
                 'issue_date': issueDate,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Waybill Composition
+     * Read the current tenant/storefront order's TN-2 or TTN-1 source lines, quantities and saved
+     * or catalog component prices. Pass the source revision with line choices on draft creation.
+     * No order, document or number is created. Manager access is required. A missing or out-of-scope
+     * order returns 404, an unavailable proposal returns 400.
+     * @param orderId
+     * @param proposalId
+     * @returns WaybillCompositionSource Successful Response
+     * @throws ApiError
+     */
+    public static getManagerWaybillComposition(
+        orderId: number,
+        proposalId?: (number | null),
+    ): CancelablePromise<WaybillCompositionSource> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/orders/{order_id}/waybill-composition',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'proposal_id': proposalId,
             },
             errors: {
                 422: `Validation Error`,

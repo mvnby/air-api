@@ -56,6 +56,7 @@ type ManagedWorkspaceInput = {
   orderId: () => number;
   customerContext?: () => unknown;
   repairOrder?: () => ManagerOrderDetailResponse;
+  waybillSelection?: () => ManagedDocumentDraftPayload['waybill_composition'];
   actScope?: () => Pick<ManagedDocumentDraftPayload,
     'scope_customer_branch_id' | 'scope_title' | 'scope_address' | 'scope_service_line_ids' | 'scope_service_line_quantities'>;
   workflowType: () => string | null | undefined;
@@ -589,6 +590,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   watch(selectedTemplateId, () => void loadTemplateVersions(), { flush: 'sync' });
 
   const draftPayload = computed(() => ({
+    waybill_composition: ['tn2', 'ttn1'].includes(documentType.value) ? input.waybillSelection?.() : undefined,
     ...(documentType.value === 'act' ? input.actScope?.() : {}),
     scope_product_line_ids: isCustomerEquipmentWorkAct(documentType.value) ? input.selectedMaterialIds() ?? undefined : undefined,
     legal_entity_id: selectedLegalEntityId.value,

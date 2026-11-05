@@ -12,6 +12,15 @@ const draft = { id: 863, order_id: 590, proposal_id: 586, legal_entity_id: 5, do
   provider: 'native', date: '2026-11-06', created_at: '2026-11-06', artifacts: [], template_version_id: 101 };
 const fixture = createFixtureServer(port, async (req, res, { state, url, body, json }) => {
   const endpoint = url.pathname;
+  if (endpoint.endsWith('/waybill-composition')) {
+    assert.equal(url.searchParams.get('proposal_id'), '586');
+    json(res, {source_revision: 'c'.repeat(64), lines: [{order_product_line_id: 10, product_id: 10,
+      title: 'Система кондиционирования', country: '', quantity: 2, unit_price: '1500.00', components: [
+        {title: 'Внутренний блок системы кондиционирования с расширенным названием модели', country: '', unit: 'шт.', quantity_per_parent: 2, unit_price: '400.00'},
+        {title: 'Наружный блок', country: '', unit: 'шт.', quantity_per_parent: 1, unit_price: '700.00'},
+      ]}]});
+    return true;
+  }
   if (endpoint.endsWith('/orders/590/request-context')) json(res, { sources: [], files: [], warnings: [] });
   else if (endpoint.endsWith('/orders/590/documents/drafts')) {
     state.creates.push(await body(req));

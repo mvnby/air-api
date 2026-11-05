@@ -58,7 +58,8 @@ from .party_roles import resolve_party_roles
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 from modules.documents.domain.roles import PARTY_ROLE_DOCUMENT_TYPES, ROLE_FORMS
 from .consumer_equipment import resolve_consumer_equipment_defaults
-from .logistics_rows import build_logistics_rows
+from modules.documents.domain.waybill_composition import WaybillComposition
+from .logistics_rows import build_logistics_rows, waybill_composition_source
 from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
 from .draft_parameters import json_terms
@@ -90,6 +91,7 @@ class DocumentContextSelection:
     business_terms: BusinessDocumentTerms | None = None
     act_terms: ActTerms | None = None
     transport_terms: TransportTerms | None = None
+    waybill_composition: WaybillComposition | None = None
     maintenance_preparation_id: int | None = None
     participant_statement: ParticipantStatement | None = None
     repair_defect: RepairDefect | None = None
@@ -105,6 +107,19 @@ class DocumentContextBuilder:
     CLOSING_TYPES = frozenset({"act", "tn2", "ttn1"})
 
     @classmethod
+    async def waybill_source(cls, session, *, order_id: int, tenant_scope: TenantScope, proposal_id: int | None):
+        from .errors import ManagedDocumentNotFoundError
+
+        order = await cls._load_order(session, order_id=order_id, tenant_scope=tenant_scope)
+        if order is None:
+            raise ManagedDocumentNotFoundError("Заказ не найден")
+        _, products, _ = cls._select_proposal_lines(order, proposal_id)
+        try:
+            return waybill_composition_source(products)
+        except ValueError as exc:
+            raise DocumentContextError("Проверьте названия, количество и цены товаров выбранного предложения") from exc
+
+    @classmethod
     async def build(
         cls,
         session: AsyncSession,
@@ -116,6 +131,8 @@ class DocumentContextBuilder:
         template_storage: TemplateSourceStorage | None = None,
     ) -> dict[str, Any]:
         document_type = str(selection.document_type or "").strip().lower()
+        if selection.waybill_composition is not None and document_type not in WAYBILL_DOCUMENT_TYPES:
+            raise DocumentContextError("Состав накладной доступен только для ТН-2 и ТТН-1")
         if document_type not in cls.NATIVE_TYPES:
             raise DocumentContextError(
                 "Тип документа пока не поддерживается нативным генератором"
@@ -224,11 +241,13 @@ class DocumentContextBuilder:
         installation_descriptions = await frozen_installation_descriptions(
             session, [item for item, _ in service_lines],
         )
-        rows = (
-            build_logistics_rows(product_links)
-            if document_type in {"tn2", "ttn1"}
-            else line_rows(product_links, service_lines, installation_descriptions)
-        )
+        if document_type in {"tn2", "ttn1"}:
+            try:
+                rows = build_logistics_rows(product_links, selection.waybill_composition)
+            except ValueError as exc:
+                raise DocumentContextError(str(exc)) from exc
+        else:
+            rows = line_rows(product_links, service_lines, installation_descriptions)
         vat_label = "с НДС" if legal_entity.is_vat_payer else "без НДС"
         for row in rows:
             row["line.vat_label"] = vat_label
@@ -499,6 +518,8 @@ class DocumentContextBuilder:
             # A product count is not a package count. Unmeasured cargo has no weight total.
             values.update(dict.fromkeys(("totals.seats", "totals.seats_in_words",
                                          "totals.weight", "totals.weight_in_words"), ""))
+        if selection.waybill_composition is not None:
+            snapshot["meta"]["waybill_composition"] = selection.waybill_composition.model_dump(mode="json")
         if selection.repair_defect is not None:
             # An order quote or sold part is not an expert's repair estimate.
             snapshot["table_rows"] = {}

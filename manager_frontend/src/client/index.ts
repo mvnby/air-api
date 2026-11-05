@@ -998,6 +998,12 @@ export type { UpdateMaintenanceObservation } from './models/UpdateMaintenanceObs
 export type { ValidationError } from './models/ValidationError';
 export type { WaybillCargoLine } from './models/WaybillCargoLine';
 export type { WaybillCargoMeasure } from './models/WaybillCargoMeasure';
+export type { WaybillComponent } from './models/WaybillComponent';
+export type { WaybillComposition_Input } from './models/WaybillComposition_Input';
+export type { WaybillComposition_Output } from './models/WaybillComposition_Output';
+export type { WaybillCompositionSource } from './models/WaybillCompositionSource';
+export type { WaybillLineSelection } from './models/WaybillLineSelection';
+export type { WaybillSourceLine } from './models/WaybillSourceLine';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
 export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';
 export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';
