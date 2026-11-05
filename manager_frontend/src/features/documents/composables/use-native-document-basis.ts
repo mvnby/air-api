@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import {
   ManagerContractsService,
   type DocumentLegalEntityItem,
@@ -143,9 +143,13 @@ export function useNativeDocumentBasis(input: BasisInput) {
     input.baseCustomerContractId.value = item?.contract?.id || null;
   }, { immediate: true, flush: 'sync' });
 
+  const reload = () => { retry.value++; };
+  const reloadOnReturn = () => window.addEventListener('focus', reload, { once: true });
+  onScopeDispose(() => window.removeEventListener('focus', reload));
+
   return {
     required, supported, options, selected, value, loading, loadError, missingIssuer,
-    reload: () => { retry.value++; },
+    reload, reloadOnReturn,
     preferRegistered: (id: number) => { registered.value = `document:${id}`; chosen.value = ''; },
   };
 }

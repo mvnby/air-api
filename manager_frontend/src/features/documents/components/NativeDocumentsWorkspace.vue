@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
 import { ClipboardCheck, Download, Ellipsis, Eye, FileText, Hammer, Handshake, House, LoaderCircle, PenLine, ReceiptText, Route, Send, Truck, Wrench } from 'lucide-vue-next';
 import { DOCUMENT_ROLE_OPTIONS, EXTERNAL_CONTRACT_FILE_ACCEPT } from '../model/document-constants';
 import { ManagerDocsService, type ManagedDocumentItem, type ManagerOrderDetailResponse, type ManagerOrderDocumentItem } from '../../../client';
@@ -179,13 +179,6 @@ const issuerProfileUrl = computed(() => {
   if (basis.missingIssuer.value.length === 1) params.set('editContractId', String(basis.missingIssuer.value[0]!.id));
   return `/manager/customers/profile?${params}`;
 });
-const refreshContractsOnReturn = ref(false);
-const onReturnToOrder = () => {
-  if (refreshContractsOnReturn.value) { refreshContractsOnReturn.value = false; basis.reload(); }
-};
-onMounted(() => window.addEventListener('focus', onReturnToOrder));
-onScopeDispose(() => window.removeEventListener('focus', onReturnToOrder));
-
 const selectionError = computed(() => {
   if (basisSupported.value && basis.loading.value) return 'Загружаем договоры клиента…';
   if (basisRequired.value && basis.loadError.value) return 'Повторите загрузку договоров клиента';
@@ -627,7 +620,7 @@ defineExpose({
 
           <p v-if="basisSupported && basis.missingIssuer.value.length" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
             {{ basis.missingIssuer.value.length === 1 ? `У договора № ${basis.missingIssuer.value[0]!.number} не указано наше юрлицо.` : 'У нескольких договоров клиента не указано наше юрлицо.' }}
-            <a class="font-semibold text-brand-700 underline dark:text-brand-300" :href="issuerProfileUrl" target="_blank" rel="noopener noreferrer" data-testid="verify-contract-issuer" @click="refreshContractsOnReturn = true">Сверить в карточке клиента</a>
+            <a class="font-semibold text-brand-700 underline dark:text-brand-300" :href="issuerProfileUrl" target="_blank" rel="noopener noreferrer" data-testid="verify-contract-issuer" @click="basis.reloadOnReturn">Сверить в карточке клиента</a>
           </p>
           <div v-if="basisSupported && basis.loadError.value" role="status" class="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-amber-800 dark:text-amber-300">
             Не удалось загрузить договоры клиента.
