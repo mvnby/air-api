@@ -1,7 +1,9 @@
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import {
   ManagerContractsService,
+  type DocumentLegalEntityItem,
   type ManagedDocumentItem,
+  type ManagerCustomerContractItemResponse,
   type ManagerOrderDetailResponse,
   type ManagerOrderDocumentItem,
   type OrderCustomerContractBrief,
@@ -13,11 +15,13 @@ import { documentTypeName, officialDocumentTitle } from '../model/native-documen
 export const formatDocumentDate = (value: string | null | undefined) =>
   value ? value.slice(0, 10).split('-').reverse().join('.') : '—';
 
+type RegisteredContract = OrderCustomerContractBrief & Pick<ManagerCustomerContractItemResponse, 'source_document_id'>;
+
 type BasisOption = {
   value: string;
   label: string;
   documentId?: number;
-  contract?: OrderCustomerContractBrief;
+  contract?: RegisteredContract;
   isContract: boolean;
 };
 
@@ -27,6 +31,8 @@ type BasisInput = {
   orderDocuments: Ref<ManagerOrderDocumentItem[]>;
   documentType: Ref<string>;
   issueDate: Ref<string>;
+  legalEntityId: Ref<number | null>;
+  legalEntities: Ref<DocumentLegalEntityItem[]>;
   baseDocumentId: Ref<number | null>;
   baseCustomerContractId: Ref<number | null>;
 };
@@ -34,7 +40,7 @@ type BasisInput = {
 export function useNativeDocumentBasis(input: BasisInput) {
   const required = computed(() => ['act', 'tn2', 'ttn1'].includes(input.documentType.value));
   const supported = computed(() => required.value || input.documentType.value === 'invoice');
-  const contracts = ref<OrderCustomerContractBrief[]>([]);
+  const contracts = ref<RegisteredContract[]>([]);
   const loading = ref(false);
   const loadError = ref('');
   const chosen = ref('');
@@ -43,7 +49,7 @@ export function useNativeDocumentBasis(input: BasisInput) {
   const customerId = computed(() => input.order().customer?.id);
 
   watch([
-    customerId, () => input.order().id, () => managerSession.auth.value?.tenant_id,
+    customerId, () => input.order().id, input.legalEntityId, () => managerSession.auth.value?.tenant_id,
     () => managerSession.auth.value?.storefront_id,
   ], () => { chosen.value = ''; registered.value = ''; }, { flush: 'sync' });
 
@@ -67,17 +73,27 @@ export function useNativeDocumentBasis(input: BasisInput) {
     }
   }, { immediate: true });
 
-  const options = computed<BasisOption[]>(() => {
-    const result: BasisOption[] = [];
+  const registeredContracts = computed(() => {
     const linked = input.order().customer_contract;
-    const byId = new Map<number, OrderCustomerContractBrief>();
+    const byId = new Map<number, RegisteredContract>();
     if (linked && linked.customer_id === customerId.value) byId.set(linked.id, linked);
     for (const contract of contracts.value) {
       if (contract.customer_id === customerId.value) byId.set(contract.id, contract);
     }
+    return [...byId.values()];
+  });
+  const inTerm = computed(() => {
     const date = input.issueDate.value;
-    for (const contract of byId.values()) {
-      if (contract.status !== 'active' || !date || date < contract.valid_from.slice(0, 10) || date > contract.valid_until.slice(0, 10)) continue;
+    return registeredContracts.value.filter(contract => contract.status === 'active' && Boolean(date)
+      && date >= contract.valid_from.slice(0, 10) && date <= contract.valid_until.slice(0, 10));
+  });
+  const multipleIssuers = computed(() => input.legalEntities.value.filter(item => item.status === 'active').length > 1);
+  const missingIssuer = computed(() => multipleIssuers.value ? inTerm.value.filter(contract => !contract.legal_entity_id) : []);
+  const options = computed<BasisOption[]>(() => {
+    const result: BasisOption[] = [];
+    const sourceIds = new Set(registeredContracts.value.map(item => item.source_document_id).filter(id => id != null));
+    for (const contract of inTerm.value) {
+      if (contract.legal_entity_id ? contract.legal_entity_id !== input.legalEntityId.value : multipleIssuers.value) continue;
       result.push({
         value: `customer-contract:${contract.id}`, contract, isContract: true,
         label: `Открытый договор № ${contract.number} · ${formatDocumentDate(contract.valid_from)}–${formatDocumentDate(contract.valid_until)}`,
@@ -85,6 +101,7 @@ export function useNativeDocumentBasis(input: BasisInput) {
     }
     const nativeIds = new Set(input.documents.value.map((item) => item.id));
     for (const item of input.documents.value) {
+      if (sourceIds.has(item.id) || (item.legal_entity_id && item.legal_entity_id !== input.legalEntityId.value)) continue;
       if (!['issued', 'sent', 'signed'].includes(item.status)) continue;
       if (!['contract', 'offer'].includes(item.doc_type) && !(item.doc_type === 'invoice' && item.business_role === 'offer')) continue;
       result.push({
@@ -93,7 +110,7 @@ export function useNativeDocumentBasis(input: BasisInput) {
       });
     }
     for (const item of input.orderDocuments.value) {
-      if (nativeIds.has(item.id) || !['contract', 'offer'].includes(item.doc_type)) continue;
+      if (nativeIds.has(item.id) || sourceIds.has(item.id) || !['contract', 'offer'].includes(item.doc_type)) continue;
       result.push({
         value: `document:${item.id}`, documentId: item.id, isContract: item.doc_type === 'contract',
         label: `${documentTypeName(item.doc_type)} № ${item.number} от ${formatDocumentDate(item.date)}`,
@@ -111,6 +128,8 @@ export function useNativeDocumentBasis(input: BasisInput) {
     const previous = items.find((item) => item.value === registered.value)
       || items.find((item) => item.contract && item.contract.id === input.order().customer_contract_id);
     if (previous) return previous;
+    // Losing eligibility must not silently replace the order's agreed contract.
+    if (input.order().customer_contract_id || missingIssuer.value.length) return undefined;
     // With a choice between an unbound customer contract and another basis, let the manager decide.
     if (items.length > 1 && items.some((item) => item.contract)) return undefined;
     return items[0];
@@ -124,9 +143,13 @@ export function useNativeDocumentBasis(input: BasisInput) {
     input.baseCustomerContractId.value = item?.contract?.id || null;
   }, { immediate: true, flush: 'sync' });
 
+  const reload = () => { retry.value++; };
+  const reloadOnReturn = () => window.addEventListener('focus', reload, { once: true });
+  onScopeDispose(() => window.removeEventListener('focus', reload));
+
   return {
-    required, supported, options, selected, value, loading, loadError,
-    reload: () => { retry.value++; },
+    required, supported, options, selected, value, loading, loadError, missingIssuer,
+    reload, reloadOnReturn,
     preferRegistered: (id: number) => { registered.value = `document:${id}`; chosen.value = ''; },
   };
 }

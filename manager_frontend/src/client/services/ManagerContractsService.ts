@@ -107,8 +107,8 @@ export class ManagerContractsService {
     /**
      * Patch Manager Customer Contract
      * Patch supplied metadata of an open contract belonging to the current-tenant customer.
-     * Number/date/expiry/document-role changes also attempt placeholder replacement in its
-     * Google file; this is not immutable native document versioning. Missing customer/contract
+     * Confirming an active tenant issuer and the party roles updates only the CRM register.
+     * Number/date/expiry changes also attempt placeholder replacement in its Google file; this is not immutable native document versioning. Missing customer/contract
      * returns 404; empty number or unsupported status returns 400. No expected_version
      * precondition is provided.
      *
@@ -141,10 +141,10 @@ export class ManagerContractsService {
     }
     /**
      * Delete Manager Customer Contract
-     * Delete an open-contract record of the current-tenant customer, clear orders’ references
-     * to it and attempt Google file deletion. Provider cleanup is best effort, so success does
-     * not prove the remote file was removed. Missing customer/contract returns 404, including
-     * a repeat after deletion. Archiving is the alternative when the record should remain.
+     * Delete an unused open contract belonging to the current-tenant customer. Orders or
+     * documents referencing it return 409 before provider cleanup. Archive a used contract
+     * to retain its history. Google file removal is best effort after the database commit.
+     * Missing customer/contract returns 404, including a repeat after deletion.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).

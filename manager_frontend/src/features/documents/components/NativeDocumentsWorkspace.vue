@@ -155,6 +155,7 @@ const googleEditor = useGoogleDocumentEditor({
 const basis = useNativeDocumentBasis({
   order: () => props.order, documents: workspace.documents, orderDocuments,
   documentType: workspace.documentType, issueDate: workspace.issueDate,
+  legalEntityId: workspace.selectedLegalEntityId, legalEntities: workspace.legalEntities,
   baseDocumentId: workspace.baseDocumentId, baseCustomerContractId: workspace.baseCustomerContractId,
 });
 const { required: basisRequired, supported: basisSupported, value: selectedBasisValue, options: basisOptions } = basis;
@@ -168,8 +169,19 @@ watch([() => workspace.documentType.value === 'act', () => props.order.customer?
   if (active) void actComposition.loadBranches();
 }, { immediate: true });
 
+const issuerProfileUrl = computed(() => {
+  const params = new URLSearchParams({ customerId: String(props.order.customer?.id), section: 'documents' });
+  const current = new URLSearchParams(window.location.search);
+  for (const key of ['company', 'site']) {
+    const value = current.get(key);
+    if (value) params.set(key, value);
+  }
+  if (basis.missingIssuer.value.length === 1) params.set('editContractId', String(basis.missingIssuer.value[0]!.id));
+  return `/manager/customers/profile?${params}`;
+});
 const selectionError = computed(() => {
   if (basisSupported.value && basis.loading.value) return 'Загружаем договоры клиента…';
+  if (basisRequired.value && basis.loadError.value) return 'Повторите загрузку договоров клиента';
   if (basisRequired.value && !basis.selected.value) return basisOptions.value.length
     ? 'Выберите документ-основание' : 'Нет подходящего документа-основания на выбранную дату';
   if (actNeedsRole.value && !workspace.documentRoleType.value) return 'Выберите названия сторон по оригиналу договора';
@@ -606,6 +618,10 @@ defineExpose({
             <span v-if="basis.loading.value" class="font-normal text-slate-500">Загружаем договоры клиента…</span>
           </label>
 
+          <p v-if="basisSupported && basis.missingIssuer.value.length" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+            {{ basis.missingIssuer.value.length === 1 ? `У договора № ${basis.missingIssuer.value[0]!.number} не указано наше юрлицо.` : 'У нескольких договоров клиента не указано наше юрлицо.' }}
+            <a class="font-semibold text-brand-700 underline dark:text-brand-300" :href="issuerProfileUrl" target="_blank" rel="noopener noreferrer" data-testid="verify-contract-issuer" @click="basis.reloadOnReturn">Сверить в карточке клиента</a>
+          </p>
           <div v-if="basisSupported && basis.loadError.value" role="status" class="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-amber-800 dark:text-amber-300">
             Не удалось загрузить договоры клиента.
             <button type="button" class="font-semibold underline" @click="basis.reload">Повторить</button>

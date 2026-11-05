@@ -893,13 +893,22 @@ async def test_manager_customer_contract_upload_and_delete(async_client, db, mon
         f"/api/manager/customers/{customer.id}/contracts/{uploaded['id']}",
         headers=headers,
     )
+    assert delete_resp.status_code == 409
+    assert delete_resp.json()["detail"]["error_code"] == "customer_contract_in_use"
+    assert captured["deleted"] == []
+    await db.refresh(linked_order)
+    assert linked_order.customer_contract_id == uploaded["id"]
+
+    listed = await async_client.get(f"/api/manager/customers/{customer.id}/contracts", headers=headers)
+    assert listed.json()["items"][0]["can_delete"] is False
+    linked_order.customer_contract_id = None
+    await db.commit()
+    delete_resp = await async_client.delete(
+        f"/api/manager/customers/{customer.id}/contracts/{uploaded['id']}", headers=headers,
+    )
     assert delete_resp.status_code == 200
-    assert delete_resp.json()["message"] == "Contract deleted"
     assert captured["deleted"] == ["uploaded-contract-file"]
     assert await db.get(CustomerContract, uploaded["id"]) is None
-
-    await db.refresh(linked_order)
-    assert linked_order.customer_contract_id is None
 
 
 @pytest.mark.asyncio

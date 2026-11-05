@@ -10,7 +10,7 @@ from modules.documents.application.context_builder import (
     DocumentContextBuilder, DocumentContextError, DocumentContextSelection,
 )
 from modules.documents.application.errors import ManagedDocumentConflictError
-from modules.documents.application.open_contract_basis import validate_act_basis_for_issue
+from modules.documents.application.open_contract_basis import validate_saved_basis_for_issue
 from modules.documents.domain import ActTerms
 from services.customer_contract_service import CustomerContractService
 from tests.integration.test_document_context_builder import _seed_order
@@ -65,16 +65,16 @@ async def test_partial_act_for_an_existing_client_contract_checks_site_dates_and
         with pytest.raises(DocumentContextError, match="срок"):
             await build(replace(choice, issue_date=outside))
 
-    draft = OrderDocument(order_id=order.id, doc_type="act", base_customer_contract_id=contract.id,
+    draft = OrderDocument(order_id=order.id, legal_entity_id=issuer.id, doc_type="act", base_customer_contract_id=contract.id,
                           date=datetime(2027, 4, 25), render_snapshot=snapshot)
-    await validate_act_basis_for_issue(db, document=draft, scope=SCOPE)
+    await validate_saved_basis_for_issue(db, document=draft, scope=SCOPE)
     snapshot["meta"]["document_role_source"] = "basis"
     with pytest.raises(ManagedDocumentConflictError, match="названия сторон"):
-        await validate_act_basis_for_issue(db, document=draft, scope=SCOPE)
+        await validate_saved_basis_for_issue(db, document=draft, scope=SCOPE)
     contract.document_role_type = "executor_customer"
     await db.flush()
-    await validate_act_basis_for_issue(db, document=draft, scope=SCOPE)
+    await validate_saved_basis_for_issue(db, document=draft, scope=SCOPE)
     contract.status = "archived"
     await db.flush()
     with pytest.raises(ManagedDocumentConflictError, match="недоступен"):
-        await validate_act_basis_for_issue(db, document=draft, scope=SCOPE)
+        await validate_saved_basis_for_issue(db, document=draft, scope=SCOPE)

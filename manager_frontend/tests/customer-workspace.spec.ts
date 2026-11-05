@@ -1,6 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ManagerContractsService, ManagerEquipmentService, ManagerService } from '../src/client';
+import { ManagerContractsService, ManagerDocsService, ManagerDocumentSystemService, ManagerEquipmentService, ManagerService } from '../src/client';
 import { api } from '../src/api';
 import * as uiFeedback from '../src/services/ui-feedback';
 import CustomerProfileView from '../src/views/CustomerProfileView.vue';
@@ -8,7 +8,7 @@ import App from '../src/App.vue';
 import CustomerDetailsPanel from '../src/components/customers/CustomerDetailsPanel.vue';
 import CustomerContactsPanel from '../src/components/customers/CustomerContactsPanel.vue';
 import CustomerIntakeDialog from '../src/components/customers/CustomerIntakeDialog.vue';
-import { clearManagerSession } from '../src/services/manager-session';
+import { clearManagerSession, managerSession } from '../src/services/manager-session';
 import { managerCompaniesApi } from '../src/services/manager-companies';
 import { storefrontSettingsApi } from '../src/features/settings/storefront-settings-api';
 
@@ -61,6 +61,8 @@ beforeEach(() => {
   vi.spyOn(ManagerService, 'getManagerCustomerReconciliation').mockResolvedValue({
     opening_balance: 0, closing_balance: 0, documents: [], payments: [], warnings: [], ready_for_generation: false,
   } as never);
+  vi.spyOn(ManagerDocsService, 'getDocTemplates').mockResolvedValue({ items: [] });
+  vi.spyOn(ManagerDocumentSystemService, 'listManagerDocumentLegalEntities').mockResolvedValue({ items: [] });
   vi.spyOn(ManagerContractsService, 'getManagerCustomerContracts').mockResolvedValue({ items: [] } as never);
   vi.spyOn(uiFeedback, 'confirmDialog').mockResolvedValue(false);
 });
@@ -72,6 +74,75 @@ afterEach(() => {
 });
 
 describe('CustomerProfileView workspace', () => {
+  it('shows source links only when permitted and edits a legacy contract without replacing its file', async () => {
+    managerSession.auth.value = { tenant_id: 1, storefront_id: 1, capabilities: ['crm.manage'] } as never;
+    vi.spyOn(ManagerService, 'getManagerCustomerDocs').mockResolvedValue({ items: [] } as never);
+    const legacy = { id: 21, customer_id: 7, number: 'ОД-001', status: 'active', valid_from: '2020-04-25', valid_until: '2099-04-25',
+      can_delete: false, legal_entity_id: null, document_role_type: null, edit_url: 'https://docs.google.com/document/d/original/edit' };
+    const native = { ...legacy, id: 22, number: 'РД-001', source_kind: 'crm', edit_url: null, source_order_id: 115, source_document_id: 19, legal_entity_id: 8, document_role_type: 'executor_customer' };
+    const contracts = [legacy, native, { ...native, id: 23, source_document_id: null, source_order_id: null }, { ...legacy, id: 24, can_delete: true, valid_until: '2021-04-25' }];
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: contracts } as never);
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [
+      { id: 8, legal_name: 'ИП Исполнитель', status: 'active' }, { id: 9, legal_name: 'Архивное юрлицо', status: 'disabled' },
+    ] } as never);
+    const patch = vi.spyOn(ManagerContractsService, 'patchManagerCustomerContract').mockResolvedValue({} as never);
+    const wrapper = mountProfile('?customerId=7&company=1&site=mvn'); await flushPromises();
+    await wrapper.get('.customer-tabs').findAll('button').find(button => button.text() === 'Документы')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="contract-row-21"]').exists()).toBe(true));
+    const row = wrapper.get('[data-testid="contract-row-21"]');
+    expect(row.text()).toContain('Роли не указаны');
+    expect(row.find('[aria-label="Удалить договор"]').exists()).toBe(false);
+    expect(row.get('a').attributes('href')).toBe(legacy.edit_url);
+    const fromCrm = wrapper.get('[data-testid="contract-row-22"]');
+    const target = new URL(fromCrm.get('a').attributes('href')!, window.location.origin);
+    expect(target.pathname).toBe('/manager/orders/115');
+    expect(target.searchParams.get('section')).toBe('documents');
+    expect(target.searchParams.get('company')).toBe('1');
+    expect(fromCrm.text()).not.toContain('Изменить стороны');
+    const scopedNative = wrapper.get('[data-testid="contract-row-23"]');
+    expect(scopedNative.text()).toContain('Договор CRM');
+    expect(scopedNative.find('a').exists()).toBe(false);
+    expect(scopedNative.text()).not.toContain('Изменить стороны');
+    expect(wrapper.get('[data-testid="contract-row-24"]').text()).toContain('Срок истёк');
+    expect(wrapper.get('[data-testid="contract-row-24"]').find('[aria-label="Удалить договор"]').exists()).toBe(true);
+    await row.findAll('button').find(button => button.text() === 'Изменить стороны')!.trigger('click');
+    expect(row.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+    const [issuers, roles] = row.findAll('select');
+    expect(issuers!.text()).not.toContain('Архивное юрлицо');
+    await issuers!.setValue('8'); await roles!.setValue('executor_customer');
+    await row.get('form').trigger('submit'); await flushPromises();
+    expect(patch).toHaveBeenCalledWith(7, 21, { legal_entity_id: 8, document_role_type: 'executor_customer' });
+  });
+
+  it('opens the requested legacy parties editor directly from an order', async () => {
+    managerSession.auth.value = { capabilities: ['crm.manage'] } as never;
+    vi.spyOn(ManagerService, 'getManagerCustomerDocs').mockResolvedValue({ items: [] } as never);
+    const contract = { customer_id: 7, number: 'Открытый', status: 'active', valid_from: '2020-01-01', valid_until: '2099-01-01', source_kind: 'google' };
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: [
+      { ...contract, id: 17 }, { ...contract, id: 18 },
+    ] } as never);
+    const wrapper = mountProfile('?customerId=7&section=documents&editContractId=18');
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="contract-row-18"] form').exists()).toBe(true));
+    expect(wrapper.find('[data-testid="contract-row-17"] form').exists()).toBe(false);
+  });
+
+  it('opens the existing order-creation flow for a first CRM framework contract', async () => {
+    managerSession.auth.value = { capabilities: ['crm.manage'] } as never;
+    vi.mocked(api.getManagerCustomerDetail).mockResolvedValue({ ...customer, order_count: 0 } as never);
+    vi.spyOn(ManagerService, 'getManagerCustomerDocs').mockResolvedValue({ items: [] } as never);
+    const wrapper = mountProfile(); await flushPromises();
+    await wrapper.get('.customer-tabs').findAll('button').find(button => button.text() === 'Документы')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="customer-contract-register"]').exists()).toBe(true));
+    const panel = wrapper.get('[data-testid="customer-contract-register"]');
+    expect(panel.text()).toContain('Рамочный договор');
+    await panel.findAll('button').find(button => button.text() === 'Создать заказ')!.trigger('click');
+    const modal = wrapper.getComponent({ name: 'CreateOrderModal' });
+    expect(modal.props('customerId')).toBe(7);
+    modal.vm.$emit('created', 77); await flushPromises();
+    expect(window.location.pathname).toBe('/manager/orders/77');
+    expect(new URLSearchParams(window.location.search).get('section')).toBe('documents');
+  });
+
   it('opens envelope printing for the current customer', async () => {
     const wrapper = mountProfile(); await flushPromises();
     await wrapper.findAll('button').find(button => button.text() === 'Печать конверта')!.trigger('click');

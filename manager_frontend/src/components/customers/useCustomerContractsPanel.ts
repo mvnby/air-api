@@ -1,7 +1,8 @@
-import { computed, ref, onMounted, type Ref } from 'vue';
-import { notify } from '../../services/ui-feedback';
-import { confirmDialog } from "../../services/ui-feedback";
-import { ManagerContractsService, ManagerDocsService, type DocumentTemplateItem, type ManagerCustomerContractItemResponse } from "../../client";
+import { computed, ref, watch, type Ref } from 'vue';
+import { confirmDialog, notify } from '../../services/ui-feedback';
+import { managerSession } from '../../services/manager-session';
+import { getRoleLabel } from '../../features/documents/model/document-formatters';
+import { ManagerContractsService, ManagerDocsService, ManagerDocumentSystemService, type DocumentLegalEntityItem, type DocumentTemplateItem, type ManagerCustomerContractItemResponse } from "../../client";
 import { getApiErrorMessage } from "../../utils/api-errors";
 
 export function useCustomerContractsPanel(customerId: Ref<number>) {
@@ -11,6 +12,27 @@ const error = ref('');
 const contracts = ref<ManagerCustomerContractItemResponse[]>([]);
 
 const contractsLoading = ref(false);
+const issuers = ref<DocumentLegalEntityItem[]>([]);
+const issuersLoading = ref(false);
+const issuersError = ref('');
+const scopeKey = computed(() => [customerId.value, managerSession.auth.value?.tenant_id, managerSession.auth.value?.storefront_id].join('/'));
+let listRequest = 0;
+let issuerRequest = 0;
+
+const loadIssuers = async () => {
+  const request = ++issuerRequest;
+  const scope = scopeKey.value;
+  issuersLoading.value = true;
+  issuersError.value = '';
+  try {
+    const result = await ManagerDocumentSystemService.listManagerDocumentLegalEntities();
+    if (request === issuerRequest && scope === scopeKey.value) issuers.value = result.items;
+  } catch (e) {
+    if (request === issuerRequest && scope === scopeKey.value) issuersError.value = `Не удалось загрузить юрлица: ${getApiErrorMessage(e)}`;
+  } finally {
+    if (request === issuerRequest && scope === scopeKey.value) issuersLoading.value = false;
+  }
+};
 
 const contractSaving = ref(false);
 
@@ -20,38 +42,13 @@ const showContractForm = ref(false);
 
 const showContractUploadForm = ref(false);
 
-type DocumentRoleType = 'seller_buyer' | 'executor_customer' | 'contractor_customer' | 'seller_payer' | 'executor_payer';
-
-const DOCUMENT_ROLE_OPTIONS: Array<{ value: DocumentRoleType; label: string }> = [
-  { value: 'seller_buyer', label: 'Продавец / Покупатель' },
-  { value: 'seller_payer', label: 'Продавец / Плательщик' },
-  { value: 'executor_customer', label: 'Исполнитель / Заказчик' },
-  { value: 'executor_payer', label: 'Исполнитель / Плательщик' },
-  { value: 'contractor_customer', label: 'Подрядчик / Заказчик' },
-];
-
 const contractTemplates = ref<DocumentTemplateItem[]>([]);
 
 const openContractTemplates = computed(() => contractTemplates.value.filter((template) => template.is_open_contract));
 
-const normalizeRoleType = (value: unknown): DocumentRoleType => {
-  const raw = String(value || '').trim();
-  if (raw === 'executor_customer' || raw === 'contractor_customer' || raw === 'seller_payer' || raw === 'executor_payer') return raw;
-  return 'seller_buyer';
-};
-
-const getRoleLabel = (value?: string | null) => (
-  DOCUMENT_ROLE_OPTIONS.find((option) => option.value === normalizeRoleType(value))?.label || 'Продавец / Покупатель'
-);
-
 const getTemplateRoleLabel = (templateId?: string | null) => {
   const template = contractTemplates.value.find((item) => item.id === templateId);
   return getRoleLabel(template?.document_role_type);
-};
-
-const formatDateOnly = (iso?: string | null) => {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('ru-RU');
 };
 
 const toInputDate = (date: Date) => {
@@ -88,26 +85,32 @@ const setToast = notify;
 
 const loadCustomerContracts = async () => {
   if (!customerId.value) return;
+  const request = ++listRequest;
+  const scope = scopeKey.value;
   contractsLoading.value = true;
   error.value = "";
   try {
     const res = await ManagerContractsService.getManagerCustomerContracts(customerId.value);
-    contracts.value = res.items;
+    if (request === listRequest && scope === scopeKey.value) {
+      contracts.value = res.items;
+      if (contracts.value.length && !issuersLoading.value && !issuers.value.length) void loadIssuers();
+    }
   } catch (e) {
-    error.value = `Не удалось загрузить договоры: ${getApiErrorMessage(e)}`;
+    if (request === listRequest && scope === scopeKey.value) error.value = `Не удалось загрузить договоры: ${getApiErrorMessage(e)}`;
   } finally {
-    contractsLoading.value = false;
+    if (request === listRequest && scope === scopeKey.value) contractsLoading.value = false;
   }
 };
 
 const loadContractTemplates = async () => {
+  const scope = scopeKey.value;
   try {
     const res = await ManagerDocsService.getDocTemplates(
       'contract',
       undefined,
       customerId.value,
     );
-    contractTemplates.value = res.items;
+    if (scope === scopeKey.value) contractTemplates.value = res.items;
   } catch (e) {
     console.warn('Failed to load contract templates', e);
   }
@@ -222,10 +225,12 @@ const uploadContract = async () => {
 };
 
 const archiveContract = async (contract: ManagerCustomerContractItemResponse) => {
-  if (!customerId.value) return;
+  const id = customerId.value;
+  if (!id || contract.customer_id !== id) return;
   if (!await confirmDialog({ title: 'Архивировать договор?', description: contract.number, confirmText: 'Архивировать', variant: 'warning' })) return;
+  if (customerId.value !== id) return;
   try {
-    await ManagerContractsService.archiveManagerCustomerContract(customerId.value, contract.id);
+    await ManagerContractsService.archiveManagerCustomerContract(id, contract.id);
     await loadCustomerContracts();
     setToast('Договор архивирован');
   } catch (e) {
@@ -234,21 +239,41 @@ const archiveContract = async (contract: ManagerCustomerContractItemResponse) =>
 };
 
 const deleteContract = async (contract: ManagerCustomerContractItemResponse) => {
-  if (!customerId.value) return;
+  const id = customerId.value;
+  if (!id || contract.customer_id !== id || !contract.can_delete) return;
   if (!await confirmDialog({
     title: 'Удалить договор?',
     description: `${contract.number} будет удалён из CRM и Google Drive.`,
     confirmText: 'Удалить договор',
     variant: 'danger',
   })) return;
+  if (customerId.value !== id) return;
   try {
-    await ManagerContractsService.deleteManagerCustomerContract(customerId.value, contract.id);
+    await ManagerContractsService.deleteManagerCustomerContract(id, contract.id);
     await loadCustomerContracts();
     setToast('Договор удален');
   } catch (e) {
     setToast(`Не удалось удалить договор: ${getApiErrorMessage(e)}`);
   }
 };
-onMounted(async () => { await Promise.all([loadCustomerContracts(), loadContractTemplates()]); if (new URLSearchParams(window.location.search).get('openContract') === '1') openContractForm(); });
-return { contracts, openContractUploadForm, openContractForm, showContractForm, createContract, contractForm, syncContractValidUntil, openContractTemplates, getTemplateRoleLabel, contractSaving, showContractUploadForm, uploadContract, contractUploadForm, syncUploadContractValidUntil, onContractUploadFileChange, contractUploadSaving, contractsLoading, formatDateOnly, getRoleLabel, archiveContract, deleteContract, setToast, buildDefaultContractForm, loadCustomerContracts, toInputDate, contractTemplates, DOCUMENT_ROLE_OPTIONS, normalizeRoleType, error };
+watch(scopeKey, async (scope) => {
+  issuerRequest++;
+  issuers.value = [];
+  issuersLoading.value = false;
+  issuersError.value = '';
+  contracts.value = [];
+  contractTemplates.value = [];
+  showContractForm.value = false;
+  showContractUploadForm.value = false;
+  await Promise.all([loadCustomerContracts(), loadContractTemplates()]);
+  if (scope !== scopeKey.value) return;
+  if (new URLSearchParams(window.location.search).get('openContract') === '1') openContractForm();
+}, { immediate: true });
+return {
+  contracts, contractsLoading, error, loadCustomerContracts, issuers, issuersLoading, issuersError, loadIssuers,
+  openContractUploadForm, openContractForm, showContractForm, createContract, contractForm,
+  syncContractValidUntil, openContractTemplates, getTemplateRoleLabel, contractSaving, showContractUploadForm,
+  uploadContract, contractUploadForm, syncUploadContractValidUntil, onContractUploadFileChange, contractUploadSaving,
+  archiveContract, deleteContract,
+};
 }

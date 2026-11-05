@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Optional, List
 from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from models import Customer, CustomerBranch, CustomerContract, CustomerType, Doc
 from models.document import DocumentLegalEntity, DocumentNumberReservation
 from models.tenancy import TenantScope
 from modules.documents.application.contract_act_numbers import allocate_contract_act_number
+from modules.documents.application.framework_contracts import google_framework_basis
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES
 from services.documents.factory import DocumentFactory
@@ -772,51 +773,42 @@ class DocumentService:
         order_id: int,
         doc_type: str,
         base_document_id: Optional[int],
+        issue_date: date | None = None,
     ) -> tuple[Optional[OrderDocument], Optional[CustomerContract]]:
         if doc_type not in DocumentService.CLOSING_DOC_TYPES:
             return None, None
-
-        order = await session.get(Order, order_id)
+        # CRM issue locks its order before the reusable contract row. Use the same
+        # order for a Google issue that will insert an act referencing this order.
+        order = await session.scalar(
+            select(Order).where(Order.id == order_id).with_for_update().execution_options(populate_existing=True)
+        )
         if not order:
             raise ValueError("Order not found")
-
+        contract = await session.get(CustomerContract, order.customer_contract_id) if order.customer_contract_id else None
+        document = None
         if base_document_id == 0:
-            if not order.customer_contract_id:
+            if contract is None:
                 raise ValueError("Открытый договор-основание не выбран")
-            base_customer_contract = await session.get(CustomerContract, order.customer_contract_id)
-            if not base_customer_contract:
-                raise ValueError("Открытый договор-основание не найден")
-            return None, base_customer_contract
-
-        if base_document_id is not None:
-            base_document = await session.get(OrderDocument, base_document_id)
-            if not base_document or base_document.order_id != order_id:
+        elif base_document_id is not None:
+            document = await session.get(OrderDocument, base_document_id)
+            if not document or document.order_id != order_id:
                 raise ValueError("Документ-основание не найден в этом заказе")
-            if base_document.doc_type not in DocumentService.BASE_DOC_TYPES:
+            if document.doc_type not in DocumentService.BASE_DOC_TYPES:
                 raise ValueError("Документ-основание должен быть договором, счетом или офертой")
-            return base_document, None
-
-        query = (
-            select(OrderDocument)
-            .where(
-                OrderDocument.order_id == order_id,
-                OrderDocument.doc_type.in_(DocumentService.BASE_DOC_TYPES),
+            contract = None
+        else:
+            candidates = select(OrderDocument).where(
+                OrderDocument.order_id == order_id, OrderDocument.doc_type.in_(DocumentService.BASE_DOC_TYPES),
             )
-            .order_by(OrderDocument.created_at.desc())
+            if contract is not None and contract.source_document_id is not None:
+                candidates = candidates.where(OrderDocument.id != contract.source_document_id)
+            documents = (await session.scalars(candidates.order_by(OrderDocument.created_at.desc()).limit(2))).all()
+            if len(documents) + int(contract is not None) > 1:
+                raise ValueError("Выберите документ-основание для акта или накладной")
+            document = documents[0] if documents else None
+        return await google_framework_basis(
+            session, order=order, document=document, contract=contract, issue_date=issue_date or date.today(),
         )
-        result = await session.execute(query)
-        candidates = list(result.scalars().all())
-        base_customer_contract = None
-        if order.customer_contract_id:
-            base_customer_contract = await session.get(CustomerContract, order.customer_contract_id)
-
-        if len(candidates) + (1 if base_customer_contract else 0) == 0:
-            return None, None
-        if len(candidates) + (1 if base_customer_contract else 0) > 1:
-            raise ValueError("Выберите документ-основание для акта или накладной")
-        if candidates:
-            return candidates[0], None
-        return None, base_customer_contract
 
     @staticmethod
     async def build_document_basis_lookup(
@@ -1063,11 +1055,12 @@ class DocumentService:
     ) -> OrderDocument:
         """Создает новый документ в Google Drive и сохраняет в БД"""
 
+        effective_doc_date = contract_date or datetime.now()
+        if effective_doc_date.tzinfo is not None:
+            effective_doc_date = effective_doc_date.replace(tzinfo=None)
         base_document, base_customer_contract = await DocumentService._resolve_base_document(
-            session,
-            order_id=order_id,
-            doc_type=doc_type,
-            base_document_id=base_document_id,
+            session, order_id=order_id, doc_type=doc_type, base_document_id=base_document_id,
+            issue_date=effective_doc_date.date(),
         )
 
         if doc_type in DocumentService.CLOSING_DOC_TYPES:
@@ -1099,9 +1092,6 @@ class DocumentService:
             raise ValueError(f"Unknown document type: {doc_type}")
 
         # 2. Генерируем номер документа
-        effective_doc_date = contract_date or datetime.now()
-        if effective_doc_date.tzinfo is not None:
-            effective_doc_date = effective_doc_date.replace(tzinfo=None)
         contract_act_number = None
         if doc_type == "act" and base_customer_contract is not None:
             contract_act_number = await allocate_contract_act_number(
@@ -1148,6 +1138,10 @@ class DocumentService:
             base_customer_contract=base_customer_contract,
         )
         if doc_type == "act":
+            if base_customer_contract is not None and base_customer_contract.source_document_id is not None:
+                replacements["{{document_role_type}}"] = DocumentRoleService.normalize_role_type(
+                    strategy.order.document_role_type or base_customer_contract.document_role_type
+                )
             act_number = contract_act_number or await DocumentService._get_act_number_for_document_basis(
                 session,
                 strategy.order,
@@ -1218,7 +1212,7 @@ class DocumentService:
                 google_service.replace_placeholders(file_id, replacements)
                 if doc_type in {"act", "invoice"} and strategy.order:
                     role_replacements = DocumentRoleService.build_word_replacements(
-                        DocumentRoleService.effective_role_type(strategy.order)
+                        replacements.get("{{document_role_type}}") or DocumentRoleService.effective_role_type(strategy.order)
                     )
                     if role_replacements:
                         google_service.replace_placeholders(file_id, role_replacements)

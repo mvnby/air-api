@@ -260,7 +260,10 @@ async def confirm_legacy_document(
     if expected_amount not in compact_source and f"{payload.amount:.2f}" not in compact_source:
         raise LegacyDocumentReviewError("Подтверждённая сумма не найдена в оригинале")
     if payload.contract_id is not None:
-        contract = await session.get(CustomerContract, payload.contract_id)
+        contract = await session.scalar(
+            select(CustomerContract).where(CustomerContract.id == payload.contract_id)
+            .with_for_update(read=True)
+        )
         if contract is None or contract.customer_id != customer_id:
             raise LegacyDocumentReviewError("Договор не принадлежит этому контрагенту")
         if not re.search(rf"№\s*{re.escape(contract.number)}(?![\w/-])", source, re.I):

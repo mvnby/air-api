@@ -885,7 +885,9 @@ class OrderDocument(SQLModel, table=True):
             "foreign_keys": "OrderDocument.base_document_id",
         }
     )
-    base_customer_contract: Optional["CustomerContract"] = Relationship()
+    base_customer_contract: Optional["CustomerContract"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "OrderDocument.base_customer_contract_id"}
+    )
     document_template: Optional["DocumentTemplate"] = Relationship()
     scope_customer_branch: Optional["CustomerBranch"] = Relationship()
 

@@ -820,6 +820,45 @@ describe('NativeDocumentsWorkspace', () => {
     expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
   });
 
+  it('filters registry contracts by issuer, deduplicates their order documents and routes unresolved issuers to the customer', async () => {
+    const seller = { tenant_id: 1, status: 'active', requisites: {}, created_at: NOW, updated_at: NOW };
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({ items: [
+      { ...seller, id: 5, display_name: 'Первый', is_default: true },
+      { ...seller, id: 7, display_name: 'Второй', is_default: false },
+    ] } as never);
+    const contract = { ...baseOrder.customer_contract!, created_at: NOW, legal_entity_id: 5, source_document_id: 901 };
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: [
+      contract, { ...contract, id: 92, number: 'Другой исполнитель', legal_entity_id: 7, source_document_id: 902 },
+      { ...contract, id: 93, number: 'Не указан исполнитель', legal_entity_id: null, source_document_id: null },
+      { ...contract, id: 94, number: 'Архивный договор', status: 'archived', source_document_id: 904 },
+    ] } as never);
+    const native = [901, 902, 904].map((id) => ({ ...revision(id, 'issued'), legal_entity_id: id === 902 ? 7 : 5 }));
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: native });
+    const order = { ...baseOrder, customer_contract: null, customer_contract_id: null, documents:
+      native.map(item => ({ id: item.id, doc_type: 'contract', number: item.display_number, date: NOW })) };
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    const selector = wrapper.get<HTMLSelectElement>('[data-testid="native-document-basis"]');
+    expect(selector.findAll('option').map(o => o.element.value)).toEqual(['', 'customer-contract:91']);
+    expect(selector.element.value).toBe('');
+    await selector.setValue('customer-contract:91');
+    const link = wrapper.get('[data-testid="verify-contract-issuer"]');
+    const url = new URL(link.attributes('href')!, window.location.origin);
+    expect(url.searchParams.get('customerId')).toBe('11');
+    expect(url.searchParams.get('section')).toBe('documents');
+    expect(url.searchParams.get('editContractId')).toBe('93');
+    await wrapper.get('[data-testid="native-legal-entity"]').setValue('7');
+    expect(selector.findAll('option').map(o => o.element.value)).toEqual(['', 'customer-contract:92']);
+    await link.trigger('click');
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: [
+      { ...contract, id: 93, legal_entity_id: 7, source_document_id: null },
+    ] } as never);
+    window.dispatchEvent(new Event('focus')); await flushPromises();
+    expect(wrapper.find('[data-testid="verify-contract-issuer"]').exists()).toBe(false);
+    expect(selector.text()).toContain(contract.number);
+  });
+
   it('discards a late contract list after switching customers or accounts', async () => {
     const first = deferred<{ items: never[] }>();
     const lookup = vi.mocked(ManagerContractsService.getManagerCustomerContracts)

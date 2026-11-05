@@ -1649,6 +1649,11 @@ class ManagerWarrantyDecisionPayload(BaseModel):
 
 
 class ManagerCustomerContractItemResponse(BaseModel):
+    source_kind: Literal["google", "crm"] = "google"
+    can_delete: bool = False
+    legal_entity_id: Optional[int] = None
+    source_document_id: Optional[int] = None
+    source_order_id: Optional[int] = None
     id: int
     customer_id: int
     number: str
@@ -1675,6 +1680,7 @@ class ManagerCustomerContractCreatePayload(BaseModel):
 
 
 class ManagerCustomerContractUpdatePayload(BaseModel):
+    legal_entity_id: Optional[int] = Field(default=None, gt=0)
     number: Optional[str] = None
     template_id: Optional[str] = None
     document_role_type: Optional[str] = None
