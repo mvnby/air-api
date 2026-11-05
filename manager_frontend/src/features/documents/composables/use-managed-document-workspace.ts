@@ -47,6 +47,7 @@ import {
   type TransportTerms,
 } from '../model/transport-terms';
 import { newRepairDefectForm, repairDefectPayload } from '../model/repair-defect';
+import { hasInitialDocumentForm } from '../model/native-document-options';
 import { openNativeDocumentPreview } from '../integrations/native-document-preview';
 
 type ManagedWorkspaceInput = {
@@ -98,6 +99,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
   const repairDefect = ref(newRepairDefectForm(input.repairOrder?.()));
+  const receiptNote = ref('');
+  const warrantyEquipmentId = ref<number | null>(null);
+  watch([() => input.orderId(), () => input.proposalId(), documentType], () => {
+    receiptNote.value = '';
+    warrantyEquipmentId.value = null;
+  }, { flush: 'sync' });
   const participantStatement = ref({ procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' });
   const contractActPrompt = ref<{ documentId: number; previous: PreviousContractAct } | null>(null);
   const participantStatementConfirmations = ref<Record<number, boolean>>({});
@@ -343,7 +350,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       const actTermsError = actTermsValidationError(actTerms.value);
       if (actTermsError) return actTermsError;
     }
-    if (isConsumerDocumentType(documentType.value)) {
+    if (isConsumerDocumentType(documentType.value) || documentType.value === 'retail_receipt') {
       const requisites = legalEntities.value.find(
         (item) => item.id === selectedLegalEntityId.value,
       )?.requisites;
@@ -358,9 +365,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         || !statement.buyer_name.trim() || !statement.declaration_text.trim()) {
         return 'Заполните процедуру, лот, заказчика и текст заявления';
       }
-      if (!selectedTemplateId.value) return '';
     }
-    if (documentType.value === 'repair_defect_act' && !selectedTemplateId.value) return '';
+    if (hasInitialDocumentForm(documentType.value) && !selectedTemplateId.value) return '';
     if (!selectedTemplateId.value) return 'Нет шаблона для этого типа';
     if (!selectedTemplateHasActiveVersion.value) return 'У шаблона нет активной DOCX-версии';
     if (['act', 'tn2', 'ttn1'].includes(documentType.value) && !baseDocumentId.value && !baseCustomerContractId.value) {
@@ -574,6 +580,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     ...(documentType.value === 'act' ? input.actScope?.() : {}),
     legal_entity_id: selectedLegalEntityId.value,
     repair_defect: documentType.value === 'repair_defect_act' ? repairDefectPayload(repairDefect.value) : undefined,
+    receipt_note: documentType.value === 'retail_receipt' ? receiptNote.value.trim() || null : undefined,
+    warranty_equipment_id: documentType.value === 'warranty_certificate' ? warrantyEquipmentId.value : undefined,
     participant_statement: documentType.value === 'participant_statement'
       ? { ...participantStatement.value } : undefined,
     document_type: documentType.value,
@@ -623,7 +631,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
-      if (['contract', 'invoice', 'act', 'repair_defect_act'].includes(payload.document_type)) {
+      if (['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(payload.document_type)) {
         const readiness = await ManagerDocumentSystemService.checkManagerManagedDocumentReadiness(orderId, payload);
         if (!isCurrent()) return;
         if (contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) {
@@ -650,16 +658,17 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       resetTransportTerms();
       if (documentType.value === 'repair_defect_act') {
         repairDefect.value = newRepairDefectForm(input.repairOrder?.());
-        void loadTemplates();
       }
       if (documentType.value === 'participant_statement') {
         participantStatement.value.declaration_text = '';
-        void loadTemplates();
       }
+      if (hasInitialDocumentForm(documentType.value)) void loadTemplates();
+      receiptNote.value = '';
+      warrantyEquipmentId.value = null;
       await loadDocuments(isCurrent);
       if (!isCurrent()) return;
       input.refresh();
-      input.notify('Черновик создан. Данные заказа зафиксированы, но официальный номер ещё не занят.');
+      input.notify('Черновик создан');
     } catch (error) {
       if (isCurrent()) input.notify(`Не удалось создать черновик: ${getApiErrorMessage(error)}`, 'error');
     } finally {
@@ -669,7 +678,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
 
   const checkDocumentReadiness = async (document: ManagedDocumentItem, action = beginIssueAction(document)) => {
     if (!action.canIssue()) return false;
-    if (document.status !== 'draft' || !['contract', 'invoice', 'act', 'repair_defect_act'].includes(document.doc_type)) return true;
+    if (document.status !== 'draft' || !['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(document.doc_type)) return true;
     busy.value = true;
     try {
       const readiness = await ManagerDocumentSystemService.getManagerManagedDocumentReadiness(document.id);
@@ -774,6 +783,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const cancelReplacement = () => {
     if (!replacesDocumentId.value) return;
     replacesDocumentId.value = null;
+    receiptNote.value = '';
+    warrantyEquipmentId.value = null;
     repairDefect.value = newRepairDefectForm(input.repairOrder?.());
   };
 
@@ -794,6 +805,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
     preferredTemplateId = document.document_template_id || null;
     documentType.value = document.doc_type;
+    receiptNote.value = document.receipt_note || '';
+    warrantyEquipmentId.value = document.warranty_equipment_id || null;
     selectedLegalEntityId.value = document.legal_entity_id || selectedLegalEntityId.value;
     businessRole.value = document.business_role === 'offer' ? 'offer' : 'payment_request';
     documentRoleType.value = document.document_role_type || null;
@@ -897,6 +910,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     selectedLegalEntityId,
     selectedGoodsWarrantyDefault,
     selectedTemplateId,
+    receiptNote, warrantyEquipmentId,
     participantStatement,
     participantStatementConfirmations,
     repairDefect,

@@ -35,6 +35,8 @@ export type ManagedDocumentDraftPayload = {
     act_terms?: (ActTermsPayload | null);
     transport_terms?: (TransportTermsPayload | null);
     repair_defect?: (RepairDefect | null);
+    receipt_note?: (string | null);
+    warranty_equipment_id?: (number | null);
     participant_statement?: (ParticipantStatementPayload | null);
 };
 

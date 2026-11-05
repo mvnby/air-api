@@ -49,8 +49,9 @@ async def check_managed_document_readiness(
     auth: AuthenticatedUser = Depends(require_manager_access),
 ):
     """Read the selected native version and scoped order facts without creating a draft
-    or reserving a number. A first-use repair defect act checks the built-in form in
-    memory and returns null template/version IDs until the first draft installs it.
+    or reserving a number. Repair defect acts, retail receipts, and warranty certificates
+    check their initial form in memory and return null template/version IDs until
+    the first draft installs that form.
     Reports only applicable placeholders surviving the frozen
     party conditions. Creating a draft and issuing it repeat server-side checks;
     this response is advisory and does not authorize issuance. Returns 404 for

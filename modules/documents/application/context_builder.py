@@ -92,6 +92,8 @@ class DocumentContextSelection:
     maintenance_preparation_id: int | None = None
     participant_statement: ParticipantStatement | None = None
     repair_defect: RepairDefect | None = None
+    receipt_note: str | None = None
+    warranty_equipment_id: int | None = None
 
 
 class DocumentContextBuilder:
@@ -142,6 +144,10 @@ class DocumentContextBuilder:
             raise DocumentContextError("Подготовьте дефектный акт через выбранные замечания ТО")
         if (document_type == "repair_defect_act") != (selection.repair_defect is not None):
             raise DocumentContextError("Заключение требуется только для дефектного акта ремонта")
+        if selection.receipt_note is not None and (document_type != "retail_receipt" or len(selection.receipt_note) > 1500):
+            raise DocumentContextError("Недопустимое примечание к товарному чеку")
+        if (document_type == "warranty_certificate") != (selection.warranty_equipment_id is not None):
+            raise DocumentContextError("Для гарантийного талона выберите оборудование")
         if (document_type == "participant_statement") != (selection.participant_statement is not None):
             raise DocumentContextError("Реквизиты заявления участника обязательны только для заявления")
         business_role = cls._business_role(document_type, selection.business_role)
@@ -499,6 +505,12 @@ class DocumentContextBuilder:
             }
             snapshot["meta"]["draft_parameters"] = {"repair_defect": json_terms(selection.repair_defect)}
             selection.repair_defect.update_snapshot(snapshot)
+        if document_type in {"retail_receipt", "warranty_certificate"}:
+            from .sale_documents import fill_sale_snapshot
+            try:
+                await fill_sale_snapshot(session, selection=selection, order=order, product_links=product_links, snapshot=snapshot)
+            except ValueError as exc:
+                raise DocumentContextError(str(exc)) from exc
         if document_type == "participant_statement":
             try:
                 snapshot["values"].update(selection.participant_statement.values())

@@ -1,6 +1,9 @@
 import { REPAIR_DEFECT_DOCUMENT } from './repair-defect';
 import type { ManagedDocumentItem } from '../../../client';
 
+const warrantyCertificate = { value: 'warranty_certificate', label: 'Гарантийный талон' } as const;
+export const hasInitialDocumentForm = (type: string) => ['participant_statement', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
+
 export const BUSINESS_NATIVE_DOCUMENT_TYPES = [
   { value: 'offer', label: 'Коммерческое предложение' },
   { value: 'participant_statement', label: 'Заявление участника' },
@@ -9,6 +12,7 @@ export const BUSINESS_NATIVE_DOCUMENT_TYPES = [
   { value: 'act', label: 'Акт' },
   { value: 'tn2', label: 'Товарная накладная ТН-2' },
   { value: 'ttn1', label: 'Товарно-транспортная ТТН-1' },
+  warrantyCertificate,
 ] as const;
 
 export const CONSUMER_NATIVE_DOCUMENT_TYPES = [
@@ -16,11 +20,13 @@ export const CONSUMER_NATIVE_DOCUMENT_TYPES = [
   { value: 'b2c_customer_equipment_installation_act', label: 'Заказ-акт: монтаж оборудования клиента' },
   { value: 'b2c_maintenance_repair_act', label: 'Заказ-акт: обслуживание и ремонт' },
   { value: 'b2c_route_laying_act', label: 'Заказ-акт: закладка трассы' },
+  { value: 'retail_receipt', label: 'Товарный чек' },
+  warrantyCertificate,
 ] as const;
 
 export const NATIVE_DOCUMENT_TYPES = [
   ...BUSINESS_NATIVE_DOCUMENT_TYPES,
-  ...CONSUMER_NATIVE_DOCUMENT_TYPES,
+  ...CONSUMER_NATIVE_DOCUMENT_TYPES.filter(item => item.value !== warrantyCertificate.value),
   REPAIR_DEFECT_DOCUMENT,
 ] as const;
 
