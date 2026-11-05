@@ -5,7 +5,9 @@
 import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
+import type { RepairDefect } from './RepairDefect';
 export type ManagedDocumentItem = {
+    repair_defect?: (RepairDefect | null);
     participant_statement?: (ParticipantStatementPayload | null);
     customer_readiness?: (DocumentCustomerReadiness | null);
     maintenance_source_order_id?: (number | null);

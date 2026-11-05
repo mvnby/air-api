@@ -62,6 +62,7 @@ TERM_GROUPS = (
     "act_terms",
     "transport_terms",
     "participant_statement",
+    "repair_defect",
 )
 
 
@@ -196,6 +197,8 @@ def read_draft_parameters(document) -> dict:
         result["transport_terms"] = saved.get("transport_terms") or _fields(
             values, TRANSPORT_FIELDS
         )
+    if document.doc_type == "repair_defect_act":
+        result["repair_defect"] = saved["repair_defect"]
     if document.doc_type == "participant_statement":
         result["participant_statement"] = saved.get("participant_statement") or _fields(
             values, PARTICIPANT_FIELDS

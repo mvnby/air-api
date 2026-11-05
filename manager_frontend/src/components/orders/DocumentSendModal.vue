@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { ManagerDocumentSystemService, ManagerMailService } from '../../client';
 import type { ManagerOrderDetailResponse } from '../../client';
+import { documentTypeName } from '../../features/documents/model/native-document-options';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { listCertificates, type RegistrationCertificate } from '../../features/documents/registration-certificates';
 import { mailApi, mailCommandKey, type MailAccount, type MailMessage } from '../../services/mail-workspace-api';
@@ -87,7 +88,7 @@ const activeTemplate = computed(() => (
 const documentsRequired = computed(() => activeTemplate.value?.requires_documents !== false);
 
 const documentLabel = (doc: SendableOrderDocument) => {
-  const typeLabel = DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type || 'Документ';
+  const typeLabel = DOC_TYPE_LABELS[doc.doc_type] || documentTypeName(doc.doc_type) || 'Документ';
   return `${typeLabel} ${doc.number || doc.display_number || `#${doc.id}`}`;
 };
 

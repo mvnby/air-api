@@ -15,8 +15,8 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'updateManagerManagedDocumentDraftParameters').mockResolvedValue(document);
 });
 afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); vi.restoreAllMocks(); });
-const mountEditor = async () => {
-  const wrapper = mount(DraftParametersEditor, { props: { document } });
+const mountEditor = async (selected = document) => {
+  const wrapper = mount(DraftParametersEditor, { props: { document: selected } });
   wrappers.push(wrapper); await flushPromises(); return wrapper;
 };
 
@@ -30,6 +30,25 @@ describe('saved draft parameters', () => {
       issue_date: '2026-10-01', expected_revision: 'a'.repeat(64), reset_editable_copy: false,
     });
     expect(wrapper.emitted('saved')).toEqual([[false]]);
+  });
+
+  it('edits frozen repair facts and clears the former repair quote after a different verdict', async () => {
+    const terms = { equipment: 'Блок S/N 200', verdict: 'repairable' as const, finding: 'Утечка', recommendation: 'Заменить теплообменник',
+      cost: '210 BYN', term: '3 дня', restriction: 'До ремонта отключить' };
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentDraftParameters).mockResolvedValue({
+      issue_date: '2026-11-05', repair_defect: terms, revision: 'b'.repeat(64), template_version_id: 3, has_editable_copy: false,
+    });
+    const wrapper = await mountEditor({ ...document, doc_type: 'repair_defect_act' });
+    const field = (id: string) => wrapper.get<HTMLInputElement>(`[data-testid="repair-${id}"]`);
+    expect(field('cost').element.value).toBe('210 BYN');
+    await field('verdict').setValue('uneconomical');
+    expect(field('cost').element.value).toBe('');
+    await field('recommendation').setValue('Заменить блок');
+    await wrapper.get('form').trigger('submit'); await flushPromises();
+    expect(ManagerDocumentSystemService.updateManagerManagedDocumentDraftParameters).toHaveBeenCalledWith(77, {
+      repair_defect: { ...terms, verdict: 'uneconomical', recommendation: 'Заменить блок', cost: null, term: null },
+      expected_revision: 'b'.repeat(64), reset_editable_copy: false,
+    });
   });
 
   it('requires explicit confirmation before rebuilding an edited working copy', async () => {

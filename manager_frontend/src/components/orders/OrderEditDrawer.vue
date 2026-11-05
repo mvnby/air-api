@@ -501,6 +501,14 @@ const beforeDocumentGenerate = async () => {
   return orderSaving.beforeDocumentGenerate();
 };
 
+const openRepairDefectAct = async () => {
+  const orderId = props.order?.id;
+  if (!orderId || await beforeDocumentGenerate() === false) return;
+  if (!props.modelValue || props.order?.id !== orderId || workflowType.value !== 'repair') return;
+  await openWorkspaceTargetDirect('documents');
+  if (props.modelValue && props.order?.id === orderId) await documentsWorkspaceRef.value?.openRepairDefectAct();
+};
+
 let documentRefreshGeneration = 0;
 const documentRefreshTimers = new Set<number>();
 const invalidateDocumentRefresh = () => {
@@ -881,7 +889,7 @@ defineExpose({ prepareToLeave });
                   <component :is="component" :order="order" :form="drawerForm" :sections="expandedDrawerSections" :navigation="workspaceNavigation" :view-model="orderWorkspace" :products="productLines" :object-address="compactObjectAddress"
                     :disabled="demoReadOnly || initializing || installationAttaching || sourceApplying || proposalActionLoading || responsibilityBusy" :assignment-busy="workerAssignmentBusy" :pay-busy="workerPayBusy" :pay-revision="workerPayRevision"
                     :before-action="orderSaving.flush" :equipment-ref="setEquipmentPanel" :field-error="getFieldError"
-                    @assignment-busy="setWorkerAssignmentBusy" @pay-busy="workerPayBusy = $event" @reload="emit('reload', $event)" @open="openWorkspaceTarget($event, true)" @toast="setToast($event.message, $event.type)" @copy="copyText($event.value, $event.label)" />
+                    @open-repair-act="openRepairDefectAct" @assignment-busy="setWorkerAssignmentBusy" @pay-busy="workerPayBusy = $event" @reload="emit('reload', $event)" @open="openWorkspaceTarget($event, true)" @toast="setToast($event.message, $event.type)" @copy="copyText($event.value, $event.label)" />
                 </template>
               </OrderAsyncPanel>
             </section>

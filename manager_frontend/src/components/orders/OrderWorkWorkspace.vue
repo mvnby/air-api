@@ -41,6 +41,7 @@ const emit = defineEmits<{
   'pay-busy': [value: boolean];
   reload: [orderId: number];
   open: [target: OrderWorkspaceTarget];
+  'open-repair-act': [];
   toast: [value: {message: string; type?: 'success' | 'error'}];
   copy: [value: {value: string | null | undefined; label: string}];
 }>();
@@ -113,7 +114,7 @@ const getFieldError = props.fieldError;
       v-model:measurement-required="measurementRequired" v-model:assessment-date="assessmentDate" v-model:negotiation-status="negotiationStatus" v-model:auto-execution-on-payment="autoExecutionOnPayment" v-model:details-expanded="expandedDrawerSections.planningDetails" v-model:measurer-id="measurerId" v-model:measurement-result="measurementResult" v-model:installation-date="installationDate" v-model:installer-id="installerId"
       :workflow-type="workflowType" :executor-options="executorOptions" :customer-branch-id="customerBranchId" :new-branch-address="newBranchAddress" :measurement-error="getFieldError('measurement_date')" :installation-error="getFieldError('installation_date')"
     />
-    <OrderRepairPanel v-if="isRepairWorkflow && order" v-model:expanded="expandedDrawerSections.repair" v-model:repair-meta="repairMeta" :order="order" :order-title="orderTitle" :measurement-result="measurementResult" :customer-branch-id="customerBranchId" :object-address="compactObjectAddress" @toast="emit('toast', $event)" @reload="emit('reload', $event)" />
+    <OrderRepairPanel v-if="isRepairWorkflow && order" v-model:expanded="expandedDrawerSections.repair" v-model:repair-meta="repairMeta" :order="order" :order-title="orderTitle" :measurement-result="measurementResult" :customer-branch-id="customerBranchId" :object-address="compactObjectAddress" @open-repair-act="emit('open-repair-act')" @toast="emit('toast', $event)" @reload="emit('reload', $event)" />
     <OrderExecutionPanel v-if="status === 'execution'" v-model:expanded="expandedDrawerSections.execution" v-model:execution-status="executionStatus" v-model:execution-without-payment="executionWithoutPayment" v-model:execution-without-payment-reason="executionWithoutPaymentReason" v-model:auto-close-on-payment="autoCloseOnPayment" :workflow-type="workflowType" />
     </div>
 </template>
