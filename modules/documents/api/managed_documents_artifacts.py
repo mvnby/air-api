@@ -677,6 +677,8 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
             (document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("repair_defect")
             if document.doc_type == "repair_defect_act" else None
         ),
+        receipt_note=statement_values.get("receipt.note") if document.doc_type == "retail_receipt" else None,
+        warranty_equipment_id=((document.render_snapshot or {}).get("meta") or {}).get("warranty_equipment_id"),
         participant_statement=(
             {name: statement_values.get(f"participant.{name}", "") for name in
              ("procedure_reference", "lot", "buyer_name", "declaration_text")}

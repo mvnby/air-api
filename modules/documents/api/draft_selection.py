@@ -22,6 +22,8 @@ def selection_from_payload(order_id: int, payload: ManagedDocumentDraftPayload) 
         repair_defect=payload.repair_defect,
         participant_statement=(ParticipantStatement(**payload.participant_statement.model_dump())
             if payload.participant_statement is not None else None),
+        receipt_note=payload.receipt_note,
+        warranty_equipment_id=payload.warranty_equipment_id,
         proposal_id=payload.proposal_id,
         base_document_id=payload.base_document_id,
         base_customer_contract_id=payload.base_customer_contract_id,

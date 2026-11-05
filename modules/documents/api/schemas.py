@@ -324,12 +324,18 @@ class ManagedDocumentDraftPayload(BaseModel):
     act_terms: ActTermsPayload | None = None
     transport_terms: "TransportTermsPayload | None" = None
     repair_defect: RepairDefect | None = None
+    receipt_note: str | None = Field(default=None, max_length=1500)
+    warranty_equipment_id: int | None = Field(default=None, gt=0)
     participant_statement: ParticipantStatementPayload | None = None
 
     @model_validator(mode="after")
     def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
         if (self.document_type == "repair_defect_act") != (self.repair_defect is not None):
             raise ValueError("Заключение требуется только для дефектного акта ремонта")
+        if self.receipt_note is not None and self.document_type != "retail_receipt":
+            raise ValueError("Примечание к чеку доступно только для товарного чека")
+        if (self.document_type == "warranty_certificate") != (self.warranty_equipment_id is not None):
+            raise ValueError("Для гарантийного талона выберите оборудование")
         if (self.document_type == "participant_statement") != (self.participant_statement is not None):
             raise ValueError("Реквизиты заявления участника обязательны только для заявления")
         if (
@@ -479,6 +485,8 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 
 class ManagedDocumentItem(BaseModel):
     repair_defect: RepairDefect | None = None
+    receipt_note: str | None = None
+    warranty_equipment_id: int | None = None
     participant_statement: ParticipantStatementPayload | None = None
     customer_readiness: DocumentCustomerReadiness | None = None
     maintenance_source_order_id: int | None = None
