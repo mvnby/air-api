@@ -202,7 +202,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
                 <p v-if="display.description" class="break-words text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400"><LineFormattedText :text="display.description" /></p>
                 <span v-if="line.installation_estimate_revision_id" class="text-[11px] font-medium text-slate-500">По расчёту</span>
               </div>
-              <span class="order-line-quantity text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Кол-во</span>{{ display.quantity }} {{ line.unit || "шт." }}</span>
+              <span class="order-line-quantity text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Кол-во</span>{{ display.quantity }}<template v-if="line.unit"> {{ line.unit }}</template></span>
               <span class="text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Цена</span><OrderMoney :value="display.price" /></span>
               <span class="text-xs font-semibold text-slate-900 dark:text-slate-100"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Итого</span><OrderMoney :value="display.quantity * display.price" /></span>
               <span v-if="compactShowCosts" class="order-line-cost text-xs text-slate-600 dark:text-slate-300"><span class="order-line-mobile-label mb-1 font-medium text-slate-500">Себест.</span><span v-if="line.installation_estimate_revision_id">—</span><OrderMoney v-else :value="line.cost" /></span>
@@ -220,7 +220,7 @@ const updatePreferredMode = (mode: ServiceDescriptionMode) => {
             <p class="break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"><LineFormattedText :text="display.title || 'Новая услуга'" /></p>
             <p v-if="display.description" class="mt-1 break-words text-xs font-normal leading-relaxed text-slate-500"><LineFormattedText :text="display.description" /></p>
             <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{{ display.quantity }} {{ line.unit || "шт." }} × <OrderMoney :value="display.price" /> <span v-if="line.installation_estimate_revision_id" class="ml-1 text-slate-500">По расчёту</span></span>
+              <span>{{ display.quantity }}<template v-if="line.unit"> {{ line.unit }}</template> × <OrderMoney :value="display.price" /> <span v-if="line.installation_estimate_revision_id" class="ml-1 text-slate-500">По расчёту</span></span>
               <span class="font-semibold text-slate-800 dark:text-slate-200"><OrderMoney :value="display.quantity * display.price" /></span>
             </div>
             <div class="mt-1 flex gap-1"><button type="button" data-order-usage="order_service_edit" class="btn-mini-outline h-8 text-xs" @click="editLine(index, displayIndex)">Редактировать</button><button type="button" data-order-usage="order_service_remove" class="h-8 px-2 text-xs text-red-600" @click="emit('remove', index, displayIndex)">Удалить</button></div>
