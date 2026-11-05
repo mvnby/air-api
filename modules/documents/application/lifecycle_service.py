@@ -62,6 +62,7 @@ from .issuance_artifacts import (
     render_and_store_issued_artifacts,
 )
 from .open_contract_basis import validate_saved_basis_for_issue
+from .waybill_paper import check_waybill_tax_profile, prepare_stock_files
 from .replacement_guard import lock_replacement_target
 from .template_selection import (
     load_document_template_version,
@@ -424,6 +425,7 @@ class ManagedDocumentService:
             tenant_scope=tenant_scope,
             document=document,
         )
+        check_waybill_tax_profile(document.render_snapshot, version.placeholder_schema, document.doc_type)
         editable_source: bytes | None = None
         required_placeholder_counts: dict[str, int] | None = None
         source_artifact = next(
@@ -463,6 +465,11 @@ class ManagedDocumentService:
             policy_key=policy_key,
         )
         issued_on = document.official_date or document.date.date()
+        prepared_files = await prepare_stock_files(
+            document=document, template=template, version=version, issued_on=issued_on,
+            editable_source=editable_source, required_placeholder_counts=required_placeholder_counts,
+            template_storage=template_storage, pdf_converter=pdf_converter,
+        )
         period_key = policy.period_key(
             issued_on,
             basis_key=cls._basis_numbering_key(document),
@@ -536,6 +543,7 @@ class ManagedDocumentService:
                 template_storage=template_storage,
                 artifact_storage=artifact_storage,
                 pdf_converter=pdf_converter,
+                prepared_files=prepared_files,
             )
         except Exception as exc:
             raise ManagedDocumentGenerationError(

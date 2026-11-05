@@ -205,7 +205,13 @@ class ManagedDocumentDraftMutationService:
         current = read_draft_parameters(document)
         if document.doc_type == "ttn1" and isinstance(changes.get("transport_terms"), dict):
             # Older clients send only the vehicle fields. Keep newer route facts unless explicitly changed.
-            changes = {**changes, "transport_terms": {**(current.get("transport_terms") or {}), **changes["transport_terms"]}}
+            previous = current.get("transport_terms") or {}
+            incoming = changes["transport_terms"]
+            merged = {**previous, **incoming}
+            if ("freight_payer" in incoming and incoming["freight_payer"] != previous.get("freight_payer")
+                    and "freight_payer_unp" not in incoming):
+                merged["freight_payer_unp"] = None
+            changes = {**changes, "transport_terms": merged}
         changed = {
             key: value for key, value in changes.items() if value != current.get(key)
         }

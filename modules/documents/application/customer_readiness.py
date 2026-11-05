@@ -10,6 +10,7 @@ from modules.documents.domain.party import INDIVIDUAL, INDIVIDUAL_ENTREPRENEUR, 
 from modules.documents.domain.placeholder_catalog import SCALAR_PLACEHOLDERS
 from modules.documents.infrastructure.renderers import NativeDocxRenderer
 from .context_builder import DocumentContextBuilder
+from .waybill_paper import check_waybill_tax_profile
 from .errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
 from .template_selection import (
     resolve_template_use_case,
@@ -113,6 +114,8 @@ def snapshot_customer_readiness(
 async def source_customer_readiness(
     snapshot, *, template, version, template_storage, document_type
 ):
+    if document_type in {"tn2", "ttn1"}:
+        check_waybill_tax_profile(snapshot, version.placeholder_schema, document_type)
     if document_type not in READINESS_DOCUMENT_TYPES:
         return {"checked": False, "missing_fields": [], "can_issue": True}
     if template_storage is None:

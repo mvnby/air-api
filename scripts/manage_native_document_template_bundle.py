@@ -82,10 +82,19 @@ class TemplateSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class BundleTarget:
+    tenant_slug: str
+    tenant_id: int
+    default_legal_entity_id: int
+    is_vat_payer: bool
+
+
+@dataclass(frozen=True, slots=True)
 class BundleSpec:
     bundle_id: str
     description: str | None
     templates: tuple[TemplateSpec, ...]
+    target: BundleTarget | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +111,16 @@ def load_bundle(path: Path) -> BundleSpec:
     if not isinstance(payload, dict):
         raise BundleError("Манифест должен быть JSON-объектом")
     bundle_id = _required_text(payload.get("bundle_id"), "bundle_id", 120)
+    target = None
+    if "target" in payload:
+        data = payload["target"]
+        if (not isinstance(data, dict) or set(data) != {"tenant_slug", "tenant_id", "default_legal_entity_id", "is_vat_payer"}
+                or type(data["tenant_id"]) is not int or data["tenant_id"] <= 0
+                or type(data["default_legal_entity_id"]) is not int or data["default_legal_entity_id"] <= 0
+                or type(data["is_vat_payer"]) is not bool):
+            raise BundleError("Укажите точный tenant, основного продавца и режим НДС адресного пакета")
+        target = BundleTarget(_required_text(data["tenant_slug"], "target.tenant_slug", 64), data["tenant_id"],
+                              data["default_legal_entity_id"], data["is_vat_payer"])
     raw_templates = payload.get("templates")
     if not isinstance(raw_templates, list) or not raw_templates:
         raise BundleError("Манифест должен содержать непустой список templates")
@@ -116,6 +135,7 @@ def load_bundle(path: Path) -> BundleSpec:
         bundle_id=bundle_id,
         description=_optional_text(payload.get("description"), 1000),
         templates=templates,
+        target=target,
     )
 
 
@@ -141,6 +161,34 @@ def prepare_sources(bundle: BundleSpec, source_dir: Path) -> dict[str, PreparedS
     return prepared
 
 
+async def _verify_bundle_target(session, bundle, tenant_id, legal_entity_id):
+    if bundle.target is None:
+        return
+    target = bundle.target
+    eligible = await session.scalar(
+        select(DocumentLegalEntity.id).join(Tenant, Tenant.id == DocumentLegalEntity.tenant_id)
+        .where(Tenant.id == tenant_id, Tenant.slug == target.tenant_slug, Tenant.status == "active",
+               DocumentLegalEntity.id == legal_entity_id, DocumentLegalEntity.status == "active",
+               DocumentLegalEntity.is_default.is_(True), DocumentLegalEntity.is_vat_payer.is_(target.is_vat_payer))
+    )
+    if eligible is None or tenant_id != target.tenant_id or legal_entity_id != target.default_legal_entity_id:
+        raise BundleError("Пакет предназначен для другого продавца или налогового режима")
+
+
+async def _protect_existing_target_template(session, bundle, spec, template):
+    if bundle.target is None or template is None:
+        return
+    if not template.is_active:
+        raise BundleError(f"Шаблон {spec.key} отключён владельцем. Выберите другую форму")
+    active = await session.scalar(
+        select(DocumentTemplateVersion).where(
+            DocumentTemplateVersion.template_id == template.id, DocumentTemplateVersion.status == "active"
+        )
+    )
+    if active and active.checksum_sha256 != spec.checksum_sha256 and active.change_note != f"Пакет {bundle.bundle_id}":
+        raise BundleError(f"У шаблона {spec.key} есть пользовательская версия. Сверьте её перед установкой пакета")
+
+
 async def inspect_bundle(
     session: AsyncSession,
     *,
@@ -148,6 +196,7 @@ async def inspect_bundle(
     legal_entity_id: int,
     bundle: BundleSpec,
 ) -> tuple[TenantScope, list[dict[str, Any]]]:
+    await _verify_bundle_target(session, bundle, tenant_id, legal_entity_id)
     scope = await _tenant_scope(session, tenant_id=tenant_id)
     issuer = (
         await session.execute(
@@ -168,6 +217,7 @@ async def inspect_bundle(
             legal_entity_id=legal_entity_id,
             spec=spec,
         )
+        await _protect_existing_target_template(session, bundle, spec, template)
         active_checksum = None
         if template is not None:
             active_checksum = (
@@ -208,6 +258,7 @@ async def apply_bundle(
 ) -> list[dict[str, Any]]:
     from modules.documents.api.router import get_private_attachment_storage
 
+    await _verify_bundle_target(session, bundle, scope.tenant_id, legal_entity_id)
     storage = PrivateTemplateSourceStorage(get_private_attachment_storage())
     results: list[dict[str, Any]] = []
     for spec in bundle.templates:
@@ -247,6 +298,7 @@ async def _apply_bundle_item(
         legal_entity_id=legal_entity_id,
         spec=spec,
     )
+    await _protect_existing_target_template(session, bundle, spec, template)
     created = template is None
     if template is None:
         template = await NativeTemplateVersionService.create_template(

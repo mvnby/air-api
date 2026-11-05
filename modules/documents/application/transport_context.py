@@ -26,6 +26,7 @@ def build_transport_document_context(
     route_fields = (
         "trip_sheet_number",
         "freight_payer",
+        "freight_payer_unp",
         "loading_point",
         "unloading_point",
     )

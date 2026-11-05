@@ -19,6 +19,9 @@ export const serializeTransportTerms = (terms: TransportTerms): TransportTerms =
 });
 
 export function transportTermsError(terms: TransportTerms): string {
+  if (terms.freight_payer_unp && !/^[0-9]{9}$/.test(terms.freight_payer_unp)) {
+    return 'УНП плательщика должен содержать 9 цифр';
+  }
   for (const { key, label } of handlingStages) {
     const op: TransportOperation | null | undefined = terms[key];
     if (op?.arrived_at && op.departed_at && op.departed_at < op.arrived_at) {
