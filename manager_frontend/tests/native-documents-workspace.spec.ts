@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
   ManagerDocsService,
+  ManagerContractsService,
+  ManagerService,
   CancelablePromise,
   OpenAPI,
   type ManagedDocumentItem,
@@ -39,8 +41,9 @@ const baseOrder = {
     id: 91,
     customer_id: 11,
     number: '44-ЭА/2026',
-    valid_from: '2026-08-01',
-    valid_until: '2027-07-31',
+    valid_from: '2020-08-01',
+    valid_until: '2099-07-31',
+    document_role_type: 'executor_customer',
     status: 'active',
   },
   documents: [],
@@ -53,6 +56,7 @@ const baseOrder = {
     is_archived: false,
     sort_order: 0,
     created_at: NOW,
+    service_lines: [{ id: 45, proposal_id: 7, service_title: 'Диагностика', quantity: 3, price: 100, line_total: 300 }],
   }],
   product_lines: [],
   service_lines: [],
@@ -77,6 +81,8 @@ const deferred = <T>() => {
 beforeEach(() => {
   confirmDialog.mockReset().mockResolvedValue(true);
   openNativeDocumentPreview.mockReset().mockResolvedValue(undefined);
+  vi.spyOn(ManagerContractsService, 'getManagerCustomerContracts').mockResolvedValue({ items: [] });
+  vi.spyOn(ManagerService, 'getManagerCustomerBranches').mockResolvedValue({ items: [] });
   vi.spyOn(googleDocumentEditorApi, 'getConnectionStatus').mockResolvedValue({
     connected: false,
     provider: 'google_drive',
@@ -723,6 +729,106 @@ describe('NativeDocumentsWorkspace', () => {
     );
   });
 
+  it('uses an unbound open contract, verified roles, selected site and partial works of the current proposal', async () => {
+    const openContract = { ...baseOrder.customer_contract!, id: 92, number: 'ОД-2026-001', created_at: NOW, document_role_type: undefined };
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: [
+      openContract,
+      { ...openContract, id: 93, number: 'Архивный', status: 'archived' },
+      { ...openContract, id: 94, number: 'Истёкший', valid_until: '2020-01-01' },
+      { ...openContract, id: 95, number: 'Будущий', valid_from: '2099-01-01' },
+      { ...openContract, id: 96, number: 'Чужой', customer_id: 99 },
+    ] });
+    vi.mocked(ManagerService.getManagerCustomerBranches).mockResolvedValue({ items: [
+      { id: 31, customer_id: 11, name: 'Магазин', delivery_address: 'Витебск, ул. Кирова, 2' },
+    ] });
+    const otherLine = { id: 46, proposal_id: 7, service_title: 'ТО кондиционера', quantity: 5, price: 20, line_total: 100 };
+    const proposal = baseOrder.proposals![0]!;
+    const order = { ...baseOrder, customer_contract_id: null, customer_contract: null,
+      service_lines: [{ ...otherLine, id: 48, proposal_id: 8, service_title: 'Другая смета' }],
+      proposals: [{ ...proposal, service_lines: [...proposal.service_lines!, otherLine] }],
+    };
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    const basis = wrapper.get<HTMLSelectElement>('[data-testid="native-document-basis"]');
+    expect(basis.findAll('option')).toHaveLength(2);
+    expect(basis.element.value).toBe('customer-contract:92');
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+    expect(create.attributes('disabled')).toBeDefined();
+    await wrapper.get('[data-testid="native-document-party-roles"]').setValue('executor_customer');
+    await wrapper.get('[data-testid="act-site"]').setValue('31');
+    const composition = wrapper.get('[data-testid="native-act-composition"]');
+    expect(composition.text()).not.toContain('Другая смета');
+    await composition.get('input[type="checkbox"][aria-label="Диагностика"]').setValue(false);
+    await composition.get('input[aria-label="Количество: ТО кондиционера"]').setValue('2');
+    await wrapper.setProps({ order: { ...order, proposals: structuredClone(order.proposals) } });
+    await create.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+      base_customer_contract_id: 92, document_role_type: 'executor_customer', proposal_id: 7,
+      scope_customer_branch_id: 31, scope_title: 'Магазин', scope_address: 'Витебск, ул. Кирова, 2',
+      scope_service_line_ids: [46], scope_service_line_quantities: { 46: 2 },
+    }));
+    await composition.get('input[type="checkbox"][aria-label="ТО кондиционера"]').setValue(false);
+    expect(create.attributes('title')).toContain('Выберите хотя бы одну');
+    expect(create.attributes('disabled')).toBeDefined();
+  });
+
+  it('asks which unbound open contract to use and preserves a manual choice across reloads', async () => {
+    const item = { ...baseOrder.customer_contract!, document_role_type: 'executor_customer', created_at: NOW };
+    vi.mocked(ManagerContractsService.getManagerCustomerContracts).mockResolvedValue({ items: [
+      item, { ...item, id: 92, number: 'Второй' },
+    ] });
+    const order = { ...baseOrder, customer_contract_id: null, customer_contract: null };
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    const field = wrapper.get<HTMLSelectElement>('[data-testid="native-document-basis"]');
+    expect(field.element.value).toBe('');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+    await field.setValue('customer-contract:92');
+    await wrapper.setProps({ order: { ...order, documents: [] } });
+    expect(field.element.value).toBe('customer-contract:92');
+    await wrapper.get('[data-testid="native-document-issue-date"]').setValue('2100-01-01');
+    expect(field.element.value).toBe('');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('discards a late contract list after switching customers or accounts', async () => {
+    const first = deferred<{ items: never[] }>();
+    const lookup = vi.mocked(ManagerContractsService.getManagerCustomerContracts)
+      .mockReturnValueOnce(first.promise as never)
+      .mockResolvedValue({ items: [] });
+    const order = { ...baseOrder, customer_contract_id: null, customer_contract: null };
+    const wrapper = await mountWorkspace(undefined, order);
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    const nextOrder = { ...order, customer: { ...order.customer!, id: 12 } };
+    await wrapper.setProps({ order: nextOrder });
+    await flushPromises();
+    expect(lookup).toHaveBeenLastCalledWith(12);
+    managerSession.auth.value = { tenant_id: 2, storefront_id: 4 } as never;
+    await flushPromises();
+    const before = lookup.mock.calls.length;
+    first.resolve({ items: [{ ...baseOrder.customer_contract, number: 'Предыдущий клиент' }] as never[] });
+    await flushPromises();
+    expect(lookup).toHaveBeenCalledTimes(before);
+    expect(wrapper.get('[data-testid="native-document-basis"]').text()).not.toContain('Предыдущий клиент');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('never takes works from another proposal if the selected proposal has no works', async () => {
+    const first = baseOrder.proposals![0]!;
+    const wrapper = await mountWorkspace(undefined, {
+      ...baseOrder, proposals: [first, { ...first, id: 8, service_lines: [], is_selected: false }],
+      service_lines: first.service_lines,
+    });
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await wrapper.setProps({ activeProposalId: 8 });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="native-act-composition"]').text()).toContain('нет работ');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeDefined();
+  });
+
   it('requires remarks text when an act is created with customer remarks', async () => {
     const wrapper = await mountWorkspace();
 
@@ -1032,6 +1138,42 @@ describe('Selected native customer requirements', () => {
     await clickIssue(wrapper);
     expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
     expect(ManagerDocumentSystemService.issueManagerManagedDocument).toHaveBeenCalledWith(77);
+  });
+
+  it('requires the printed number from the exact last legacy act and rechecks after a newer act appears', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments)
+      .mockResolvedValue({ items: [{ ...issueDraft, doc_type: 'act', base_customer_contract_id: 91 } as never] });
+    const conflict = (id: number, minimum = 0) => ({ status: 409, body: { detail: {
+      minimum_previous_number: minimum,
+      error_code: 'contract_act_number_confirmation_required',
+      previous_act: { id, order_id: 635, number: 'А-2026-086', url: 'https://drive.google.com/open?id=test-source' },
+    } } });
+    const issue = vi.mocked(ManagerDocumentSystemService.issueManagerManagedDocument)
+      .mockRejectedValueOnce(conflict(99)).mockRejectedValueOnce(conflict(100, 22));
+    const wrapper = await mountWorkspace();
+    await clickIssue(wrapper);
+    const panel = wrapper.get('[data-testid="contract-act-number-confirmation"]');
+    const input = panel.get<HTMLInputElement>('input');
+    expect(input.element.value).toBe('');
+    expect(panel.get('a').attributes('href')).toBe('https://drive.google.com/open?id=test-source');
+    expect(panel.get('[type="submit"]').attributes('disabled')).toBeDefined();
+    await input.setValue('0');
+    expect(panel.get('[type="submit"]').text()).toContain('№1');
+    await input.setValue('21');
+    expect(panel.get('[type="submit"]').text()).toContain('№22');
+    await panel.trigger('submit');
+    await flushPromises();
+    expect(issue).toHaveBeenLastCalledWith(77, false, 21, 99);
+    expect(input.element.value).toBe('');
+    expect(panel.text()).toContain('Появился более поздний акт');
+    await input.setValue('21');
+    expect(panel.get('[type="submit"]').attributes('disabled')).toBeDefined();
+    expect(panel.text()).toContain('уже использован №22');
+    await input.setValue('22');
+    await panel.trigger('submit');
+    await flushPromises();
+    expect(issue).toHaveBeenLastCalledWith(77, false, 22, 100);
+    expect(wrapper.find('[data-testid="contract-act-number-confirmation"]').exists()).toBe(false);
   });
 
   it.each(['contract', 'act'].flatMap((documentType) =>

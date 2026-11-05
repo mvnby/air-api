@@ -109,7 +109,10 @@ async def resolve_party_roles(
             return role, "basis_scenario"
         return _role(order.document_role_type) or DEFAULT_DOCUMENT_ROLE_TYPE, "basis_default"
     if base_contract is not None:
-        return _role(base_contract.document_role_type) or DEFAULT_DOCUMENT_ROLE_TYPE, "basis"
+        contract_role = _role(base_contract.document_role_type)
+        if selection.document_type == "act" and contract_role is None:
+            raise ValueError("Сверьте названия сторон с открытым договором и выберите их для акта")
+        return contract_role or DEFAULT_DOCUMENT_ROLE_TYPE, "basis"
     order_role = _role(order.document_role_type)
     if order_role:
         return order_role, "order"

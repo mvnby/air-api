@@ -61,7 +61,7 @@ def document_identity(doc: OrderDocument) -> dict[str, Any]:
         value_date = doc.official_date
         official_number = f"{doc.official_series or ''}{doc.official_number or ''}".strip()
         source = "official" if value_date and official_number else "unverified_managed"
-        number = official_number or doc.number
+        number = str(doc.contract_act_number) if doc.contract_act_number is not None else official_number or doc.number
         amount = _snapshot_amount(doc)
         amount_source = "frozen_snapshot" if amount is not None else None
         contract_id = doc.base_customer_contract_id or ((doc.render_snapshot or {}).get("meta") or {}).get("base_customer_contract_id")

@@ -55,21 +55,21 @@ export const useActDocumentScope = (input: ActScopeInput) => {
   const loadBranches = async () => {
     const currentRequest = ++requestId;
     const customerId = input.order().customer?.id;
+    customerBranches.value = [];
     if (!customerId) {
-      customerBranches.value = [];
       reset();
       return;
     }
     try {
       const response = await ManagerService.getManagerCustomerBranches(customerId);
       if (currentRequest !== requestId || input.order().customer?.id !== customerId) return;
-      customerBranches.value = response.items || [];
+      customerBranches.value = response.items.filter((branch) => branch.customer_id === customerId);
       if (selectedBranchId.value && !customerBranches.value.some((item) => item.id === selectedBranchId.value)) {
         selectedBranchId.value = null;
       }
     } catch (error) {
-      console.warn('Failed to load customer branches', error);
-      customerBranches.value = [];
+      if (currentRequest !== requestId || input.order().customer?.id !== customerId) return;
+      input.notify(`Не удалось загрузить объекты клиента: ${getApiErrorMessage(error)}`, 'error');
     }
   };
   const onBranchChange = () => {
@@ -134,6 +134,7 @@ export const useActDocumentScope = (input: ActScopeInput) => {
     selectAllServices,
     selectedBranchId,
     selectedServiceLineIds,
+    selectedServiceLineQuantities,
     selectedServiceLines,
     setQuantity,
     title,

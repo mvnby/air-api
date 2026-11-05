@@ -37,6 +37,7 @@ from modules.documents.infrastructure.template_source_storage import (
     TemplateSourceStorage,
 )
 
+from .contract_act_numbers import allocate_contract_act_number
 from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
 from .customer_readiness import (
     source_customer_readiness,
@@ -57,6 +58,7 @@ from .issuance_artifacts import (
     assign_official_identity,
     render_and_store_issued_artifacts,
 )
+from .open_contract_basis import validate_act_basis_for_issue
 from .replacement_guard import lock_replacement_target
 from .template_selection import (
     load_document_template_version,
@@ -335,6 +337,9 @@ class ManagedDocumentService:
         verified_remote_revision: str | None = None,
         participant_statement_confirmed: bool = False,
         participant_statement_confirmed_by: str | None = None,
+        confirmed_previous_act_number: int | None = None,
+        confirmed_previous_act_by: str | None = None,
+        expected_previous_act_id: int | None = None,
     ) -> IssuedDocumentResult:
         document = await cls._get_scoped_document(
             session,
@@ -369,6 +374,7 @@ class ManagedDocumentService:
             )
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
+        await validate_act_basis_for_issue(session, document=document, scope=tenant_scope)
         readiness = await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
@@ -434,6 +440,16 @@ class ManagedDocumentService:
             issued_on,
             basis_key=cls._basis_numbering_key(document),
         )
+        if (document.doc_type == "act" and document.base_customer_contract_id
+                and document.contract_act_number is None and document.official_number is None):
+            document.contract_act_number = await allocate_contract_act_number(
+                session, contract_id=document.base_customer_contract_id,
+                issuing_document=document,
+                confirmed_by=confirmed_previous_act_by,
+                storefront_id=tenant_scope.storefront_id,
+                confirmed_previous_act_number=confirmed_previous_act_number,
+                expected_previous_act_id=expected_previous_act_id,
+            )
         reservation = await DocumentNumberingRepository.reserve(
             session,
             scope=DocumentNumberScope(
@@ -481,6 +497,7 @@ class ManagedDocumentService:
                 document_id=document_id,
                 document_type=document.doc_type,
                 official_full_number=reservation.number_text,
+                contract_act_number=document.contract_act_number,
                 template=template,
                 version=version,
                 snapshot=snapshot,

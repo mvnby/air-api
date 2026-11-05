@@ -165,3 +165,12 @@ hidden cost, and keep its field mounted while clearing and typing a correction.
 Independent acceptance covers eight fresh/restored paths and two typed repairs.
 Evidence: [saved mobile row](screenshots/catalog-cost-saved-320.png) and
 [actionable cost error](screenshots/catalog-cost-invalid-320.png).
+
+## Open-contract work act
+
+With the same production build and Playwright environment variables, run
+`node manager_frontend/tests/visual/order-usability/open-contract-act.cjs`.
+The synthetic order covers selection of an unbound customer contract, explicit
+party labels, branch and partial work quantities, and first-issue confirmation
+of the previous printed number. The browser checks the resulting act and its
+separate accounting number at 320, 390 and 1440 px. The default port is 5228.

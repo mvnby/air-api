@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     ForeignKeyConstraint,
@@ -106,11 +107,18 @@ for _field in ("phone", "email"):
 
 class CustomerContract(SQLModel, table=True):
     __tablename__ = "customer_contract"
+    __table_args__ = (
+        CheckConstraint("last_act_number >= 0", name="ck_customer_contract_last_act_number"),
+    )
 
     id: Optional[int] = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="customer.id", index=True)
 
     number: str = Field(index=True)
+    last_act_number: Optional[int] = Field(default=None)
+    act_number_confirmation_pending: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=text("false"))
+    )
     valid_from: datetime = Field(default_factory=datetime.now, index=True)
     valid_until: datetime = Field(index=True)
     status: str = Field(default="active", sa_column=Column(String, index=True))

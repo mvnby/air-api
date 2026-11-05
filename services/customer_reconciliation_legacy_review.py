@@ -126,6 +126,22 @@ def _candidate_number(text: str, doc_type: str) -> str | None:
     return next(iter(numbers)) if len(numbers) == 1 else None
 
 
+async def read_open_contract_act_number(file_id: str | None, contract_number: str) -> int:
+    """Read a historical Google act heading and verify its contract reference."""
+    message = "Не удалось сверить последний номер акта по договору. Откройте выпуск акта в Документах CRM и подтвердите номер по оригиналу."
+    if not file_id:
+        raise LegacyDocumentReviewError(message)
+    try:
+        source = await asyncio.to_thread(_text_from_google, file_id)
+    except Exception as exc:
+        raise LegacyDocumentReviewError(message) from exc
+    number = _candidate_number(source, "act") or ""
+    contract_ref = rf"\bдоговор(?:у|а|ом)?\s*№\s*{re.escape(contract_number)}(?![\w/-])"
+    if not re.fullmatch(r"[1-9][0-9]{0,8}", number) or not re.search(contract_ref, source, re.I):
+        raise LegacyDocumentReviewError(message)
+    return int(number)
+
+
 def _candidate_date(text: str, doc_type: str) -> str | None:
     values = {
         value for _, heading in _document_headings(text, doc_type)
