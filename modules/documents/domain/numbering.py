@@ -109,6 +109,22 @@ DEFAULT_NUMBER_POLICIES: dict[str, EffectiveDocumentNumberPolicy] = {
 }
 
 
+# Only these default annual series are still issued from both Manager and Google.
+NATIVE_TYPE_FOR_GOOGLE_SERIES = {
+    "act": "act",
+    "retail_receipt": "retail_receipt",
+    "warranty_certificate": "warranty_certificate",
+    "service_act": "b2c_supply_installation_act",
+}
+
+
+def google_number_history_type(document_type: str, series: str) -> str:
+    for google_type, native_type in NATIVE_TYPE_FOR_GOOGLE_SERIES.items():
+        if native_type == document_type and series == DEFAULT_NUMBER_POLICIES[native_type].series:
+            return google_type
+    return document_type
+
+
 def numbering_policy_key(document_type: str, business_role: str | None = None) -> str:
     normalized = str(document_type or "").strip().lower()
     if normalized == "invoice" and str(business_role or "").strip().lower() == "offer":

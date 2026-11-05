@@ -16,7 +16,7 @@ from models import (
     Order,
     OrderDocument,
 )
-from modules.documents.domain.numbering import DocumentNumberScope
+from modules.documents.domain.numbering import NATIVE_TYPE_FOR_GOOGLE_SERIES, DocumentNumberScope
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +62,7 @@ class DocumentNumberingRepository:
             raise ValueError("Minimum width must be positive")
 
         dialect_name = cls._dialect_name(session)
-        if dialect_name == "postgresql" and legacy_document_type in {"act", "retail_receipt", "warranty_certificate"}:
+        if dialect_name == "postgresql" and legacy_document_type in NATIVE_TYPE_FOR_GOOGLE_SERIES:
             # Google issuance and native issuance share the annual CRM namespace.
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key)::bigint)"),
