@@ -12,6 +12,7 @@ from models.document import DocumentLegalEntity, DocumentNumberReservation
 from models.tenancy import TenantScope
 from modules.documents.application.contract_act_numbers import allocate_contract_act_number
 from modules.documents.application.framework_contracts import google_framework_basis
+from modules.documents.domain.numbering import NATIVE_TYPE_FOR_GOOGLE_SERIES
 from services.google_service import get_google_service
 from services.documents.base import TEMPLATES, DOC_NAMES
 from services.documents.factory import DocumentFactory
@@ -1097,8 +1098,10 @@ class DocumentService:
             contract_act_number = await allocate_contract_act_number(
                 session, contract_id=base_customer_contract.id,
             )
-        numbering_tenant_id = order.tenant_id if doc_type == "act" else None
-        if doc_type in {"retail_receipt", "warranty_certificate"}:
+        numbering_tenant_id = None
+        if doc_type == "act":
+            numbering_tenant_id = order.tenant_id
+        elif doc_type in NATIVE_TYPE_FOR_GOOGLE_SERIES:
             numbering_tenant_id = await session.scalar(select(Order.tenant_id).where(Order.id == order_id))
         doc_number = await DocumentService._get_next_number(
             session, doc_type, base_date=effective_doc_date, tenant_id=numbering_tenant_id,
@@ -1326,15 +1329,19 @@ class DocumentService:
                 {"lock_key": f"order_document_number:{number_prefix}"},
             )
 
-        numbers = await session.scalars(
-            select(OrderDocument.number)
-            .where(OrderDocument.number.like(f"{number_prefix}%"))
-            .order_by(OrderDocument.id.desc())
-        )
-        shared_annual_series = doc_type in {"act", "retail_receipt", "warranty_certificate"}
+        native_number_type = NATIVE_TYPE_FOR_GOOGLE_SERIES.get(doc_type)
+        query = select(OrderDocument.number).where(OrderDocument.number.like(f"{number_prefix}%"))
+        if doc_type == "service_act" and tenant_id is not None:
+            # Google records have no issuer; they belong to the order tenant's default issuer.
+            query = query.join_from(OrderDocument, Order).where(
+                Order.tenant_id == tenant_id,
+                OrderDocument.doc_type == doc_type,
+                OrderDocument.internal_reference.is_(None),
+            )
+        numbers = await session.scalars(query.order_by(OrderDocument.id.desc()))
         next_num = 1
         for number in numbers:
-            if shared_annual_series:
+            if native_number_type is not None:
                 suffix = str(number).removeprefix(number_prefix)
                 if suffix.isascii() and suffix.isdecimal():
                     next_num = max(next_num, int(suffix) + 1)
@@ -1345,7 +1352,7 @@ class DocumentService:
                 except ValueError:
                     continue
 
-        if shared_annual_series and tenant_id is not None:
+        if native_number_type is not None and tenant_id is not None:
             # A reserved native issue already owns its annual CRM number, even
             # while DOCX/PDF generation is still in progress.
             native_floor = await session.scalar(
@@ -1354,7 +1361,7 @@ class DocumentService:
                 .where(
                     DocumentLegalEntity.is_default.is_(True),
                     DocumentNumberReservation.tenant_id == tenant_id,
-                    DocumentNumberReservation.document_type == doc_type,
+                    DocumentNumberReservation.document_type == native_number_type,
                     DocumentNumberReservation.series == f"{prefix}-",
                     DocumentNumberReservation.period_key == str(current_year),
                 )

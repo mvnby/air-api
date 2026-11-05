@@ -25,6 +25,7 @@ from modules.documents.domain import (
     numbering_policy_key,
     transition_document,
 )
+from modules.documents.domain.numbering import google_number_history_type
 from modules.documents.infrastructure.artifact_storage import (
     DocumentArtifactStorage,
     StoredDocumentArtifact,
@@ -498,7 +499,7 @@ class ManagedDocumentService:
                 period_key, value
             ),
             legacy_document_type=(
-                document.doc_type
+                google_number_history_type(document.doc_type, policy.series)
                 if policy.period_mode == "calendar_year"
                 and await cls._is_default_issuer(
                     session,
