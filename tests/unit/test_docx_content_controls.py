@@ -236,7 +236,7 @@ def test_controls_cannot_hide_missing_customer_requirements_or_duplicate_officia
     readiness = snapshot_customer_readiness(
         {"values": {"customer.full_name": ""}}, source=source, document_type="invoice",
     )
-    assert readiness["can_issue"] is False
+    assert readiness["can_issue"]
     assert any(item["field"] == "customer.full_name" for item in readiness["missing_fields"])
     schema = {"fields": ["document.official_full_number"]}
     counts = official_placeholder_counts(source=source, placeholder_schema=schema)

@@ -16,7 +16,9 @@ from modules.documents.infrastructure.renderers import (
     RenderContext,
 )
 
+from modules.documents.infrastructure.renderers.legacy_customer_marker import remove_legacy_customer_marker
 from .artifact_helpers import build_render_inputs
+from .customer_readiness import READINESS_DOCUMENT_TYPES
 
 
 DEFERRED_OFFICIAL_FIELDS = frozenset(
@@ -57,6 +59,7 @@ def finalize_editable_draft(
     placeholder_schema: Mapping[str, object],
     official_values: Mapping[str, object],
     required_placeholder_counts: Mapping[str, int] | None = None,
+    document_type: str,
 ) -> bytes:
     """Validate retained official markers and render the final numbered DOCX."""
     renderer = NativeDocxRenderer()
@@ -73,7 +76,7 @@ def finalize_editable_draft(
     template = RenderTemplateVersion(
         template_key="editable-draft",
         version=1,
-        source=source,
+        source=remove_legacy_customer_marker(source) if document_type in READINESS_DOCUMENT_TYPES else source,
         field_catalog=expected,
         filename="editable-draft.docx",
     )

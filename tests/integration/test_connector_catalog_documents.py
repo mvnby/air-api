@@ -168,7 +168,7 @@ async def test_catalog_document_old_grant_does_not_gain_write_scope(catalog_docu
 
 
 @pytest.mark.asyncio
-async def test_catalog_document_missing_customer_name_rolls_back_invoice(catalog_document_db, tmp_path):
+async def test_catalog_invoice_for_known_customer_keeps_missing_name_as_advice(catalog_document_db, tmp_path):
     db = catalog_document_db
     actor, inputs, storage, _, _ = await setup(db, tmp_path, document_type="invoice")
     customer = await db.get(Customer, inputs.customer_id)
@@ -176,10 +176,17 @@ async def test_catalog_document_missing_customer_name_rolls_back_invoice(catalog
     customer.full_legal_name = ""
     db.add(customer)
     await db.commit()
-    with pytest.raises(ManagedDocumentError):
-        await ConnectorCatalogDocumentService.prepare(db, actor, inputs, template_storage=storage)
-    assert (await db.execute(select(func.count(OrderDocument.id)))).scalar_one() == 0
-    assert (await db.execute(select(func.count(OrderProposal.id)))).scalar_one() == 1
+
+    result = await ConnectorCatalogDocumentService.prepare(db, actor, inputs, template_storage=storage)
+    draft = await db.get(OrderDocument, result.value.document_id)
+    assert draft.status == "draft" and draft.official_number is None
+    assert result.value.customer_id == customer.id
+    advice = draft.render_snapshot["meta"]["customer_readiness"]
+    assert advice["checked"] and advice["can_issue"]
+    missing = {item["field"]: item["critical"] for item in advice["missing_fields"]}
+    assert missing["customer.full_name"] is False
+    assert (await db.execute(select(func.count(OrderDocument.id)))).scalar_one() == 1
+    assert (await db.execute(select(func.count(OrderProposal.id)))).scalar_one() == 2
 
 
 @pytest.mark.asyncio

@@ -95,6 +95,7 @@ async def render_and_store_issued_artifacts(
     if editable_source is not None:
         rendered_content = finalize_editable_draft(
             source=source,
+            document_type=document_type,
             placeholder_schema=version.placeholder_schema or {},
             official_values=official_values,
             required_placeholder_counts=required_placeholder_counts,

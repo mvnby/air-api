@@ -15,6 +15,7 @@ from core.database import get_session
 from core.manager_api_errors import manager_http_error
 from core.security import AuthenticatedUser, require_manager_access
 from modules.documents.application.contract_act_numbers import ContractActNumberConfirmationRequired
+from modules.documents.application.customer_readiness import CHECKED_CUSTOMER_FIELDS
 from modules.documents.application.errors import (
     ManagedDocumentConflictError,
     ManagedDocumentError,
@@ -242,7 +243,6 @@ async def create_managed_document_draft(
             selection=selection_from_payload(order_id, payload),
             template_id=payload.template_id,
             replaces_document_id=payload.replaces_document_id,
-            allow_incomplete_customer=payload.allow_incomplete_customer,
             template_storage=PrivateTemplateSourceStorage(_legacy_private_storage()),
         )
     except ManagedDocumentNotFoundError as exc:
@@ -759,6 +759,14 @@ def _cached_customer_readiness(document):
     if not isinstance(meta, dict):
         return None
     try:
-        return DocumentCustomerReadiness.model_validate(meta.get("customer_readiness"))
+        readiness = DocumentCustomerReadiness.model_validate(meta.get("customer_readiness"))
+        # A historical snapshot may cache the retired issue veto. Return today's
+        # advisory policy without modifying frozen facts or stored artifacts.
+        if (readiness.checked and readiness.missing_fields
+                and all(item.field in CHECKED_CUSTOMER_FIELDS for item in readiness.missing_fields)):
+            readiness.can_issue = True
+            for field in readiness.missing_fields:
+                field.critical = False
+        return readiness
     except ValidationError:
         return None

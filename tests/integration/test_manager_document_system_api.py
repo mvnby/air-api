@@ -803,7 +803,7 @@ async def test_document_system_templates_are_hidden_from_another_tenant(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("document_type", ["contract", "act"])
-async def test_selected_customer_readiness_blocks_issue_before_google_and_numbering(
+async def test_selected_customer_readiness_reports_advice_and_existing_draft_can_issue(
     async_client, db, monkeypatch, document_type
 ):
     import importlib
@@ -871,54 +871,41 @@ async def test_selected_customer_readiness_blocks_issue_before_google_and_number
     customer.name = customer.full_legal_name = ""
     db.add(customer)
     await db.commit()
-    refusal = await async_client.post(
+    missing = await async_client.post(
+        f"{BASE}/orders/{order.id}/documents/readiness", headers=headers, json=payload
+    )
+    assert missing.status_code == 200 and missing.json()["can_issue"]
+    advice = missing.json()["missing_fields"]
+    assert advice == [{"field": "customer.full_name", "label": "Полное наименование клиента", "critical": False}]
+    draft = await async_client.post(
         f"{BASE}/orders/{order.id}/documents/drafts", headers=headers, json=payload
     )
-    assert refusal.status_code == 409 and "Полное наименование клиента" in refusal.text
-    draft = await async_client.post(
-        f"{BASE}/orders/{order.id}/documents/drafts",
-        headers=headers,
-        json={**payload, "allow_incomplete_customer": True},
-    )
     assert draft.status_code == 200, draft.text
-    assert not draft.json()["customer_readiness"]["can_issue"]
+    assert draft.json()["customer_readiness"]["missing_fields"] == advice
     doc_id = draft.json()["id"]
     saved = await db.get(OrderDocument, doc_id)
     patched = deepcopy(saved.render_snapshot)
-    patched["meta"]["customer_readiness"] = "malformed"
+    patched["meta"]["customer_readiness"] = {
+        "checked": True, "can_issue": False, "missing_fields": [{**advice[0], "critical": True}]
+    }
     saved.render_snapshot = patched
     db.add(saved)
     await db.commit()
     listing = await async_client.get(
         f"{BASE}/orders/{order.id}/documents", headers=headers
     )
-    assert (
-        listing.status_code == 200
-        and next(item for item in listing.json()["items"] if item["id"] == doc_id)[
-            "customer_readiness"
-        ]
-        is None
-    )
-    checked = await async_client.get(
-        f"{BASE}/documents/{doc_id}/readiness", headers=headers
-    )
-    assert checked.status_code == 200 and not checked.json()["can_issue"]
-    provider_calls = []
-
-    async def no_provider(*args, **kwargs):
-        provider_calls.append(True)
-        raise AssertionError(
-            "incomplete snapshot must be rejected before edit-provider setup"
-        )
-
-    monkeypatch.setattr(
-        document_router, "get_google_document_edit_provider", no_provider
-    )
+    assert listing.status_code == 200
+    listed = next(item for item in listing.json()["items"] if item["id"] == doc_id)
+    assert listed["customer_readiness"] == {"checked": True, "can_issue": True, "missing_fields": advice}
+    checked = await async_client.get(f"{BASE}/documents/{doc_id}/readiness", headers=headers)
+    assert checked.status_code == 200 and checked.json() == listed["customer_readiness"]
+    monkeypatch.setattr(document_router, "_pdf_converter", lambda: _FakePdfConverter())
     issue = await async_client.post(f"{BASE}/documents/{doc_id}/issue", headers=headers)
-    assert issue.status_code == 409 and "Полное наименование клиента" in issue.text
-    assert provider_calls == []
-    assert not (await db.execute(select(DocumentNumberReservation))).scalars().all()
-    assert not (await db.execute(select(DocumentArtifact))).scalars().all()
+    assert issue.status_code == 200, issue.text
+    assert issue.json()["status"] == "issued"
+    assert issue.json()["customer_readiness"] == listed["customer_readiness"]
+    assert len((await db.execute(select(DocumentNumberReservation))).scalars().all()) == 1
+    assert {a.kind for a in (await db.execute(select(DocumentArtifact))).scalars()} == {"rendered_docx", "pdf"}
     other_tenant, _storefront, user = await _create_tenant_owner(
         db, slug="readiness-other", username="readiness-other-owner"
     )

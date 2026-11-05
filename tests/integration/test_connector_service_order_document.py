@@ -144,7 +144,7 @@ async def test_missing_customer_data_reports_fields_and_outdated_input_rejected(
     db.add(customer)
     await db.flush()
     result = await prepare_service_order_contract(db, actor, inputs, template_storage=storage)
-    assert not result.customer_ready_and_current and not result.readiness.can_issue
+    assert result.customer_ready_and_current and result.readiness.can_issue
     assert any(field.field == "customer.full_name" for field in result.readiness.missing_fields)
     line.price = Decimal("1100.00")
     db.add(line)

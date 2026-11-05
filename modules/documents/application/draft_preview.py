@@ -16,7 +16,7 @@ from modules.documents.infrastructure.template_source_storage import (
 )
 
 from .artifact_helpers import build_render_inputs, stored_artifact
-from .customer_readiness import source_customer_readiness, mark_incomplete_docx
+from .customer_readiness import source_customer_readiness
 from .editable_draft import (
     DEFERRED_OFFICIAL_FIELDS,
     finalize_editable_draft,
@@ -57,7 +57,7 @@ class ManagedDocumentDraftPreviewService:
             tenant_scope=tenant_scope,
             document=document,
         )
-        readiness = await source_customer_readiness(
+        await source_customer_readiness(
             document.render_snapshot,
             template=template,
             version=version,
@@ -83,6 +83,7 @@ class ManagedDocumentDraftPreviewService:
             editable = await artifact_storage.read(stored_artifact(source_artifact))
             rendered_docx = finalize_editable_draft(
                 source=editable,
+                document_type=document.doc_type,
                 placeholder_schema=schema,
                 official_values=displayed_values,
             )
@@ -106,9 +107,6 @@ class ManagedDocumentDraftPreviewService:
             rendered_docx = (
                 NativeDocxRenderer().render(render_template, render_context).content
             )
-        rendered_docx = await asyncio.to_thread(
-            mark_incomplete_docx, rendered_docx, readiness
-        )
         filename = f"draft-{document.internal_reference or document.id}.docx"
         pdf = await asyncio.to_thread(
             pdf_converter.convert_docx,

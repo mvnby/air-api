@@ -8,11 +8,10 @@ from docx.enum.section import WD_SECTION_START
 
 from modules.documents.application.artifact_helpers import build_render_inputs
 from modules.documents.application.customer_readiness import (
-    INCOMPLETE_DRAFT_MARKER,
     check_saved_document_readiness,
-    mark_incomplete_docx,
     snapshot_customer_readiness,
 )
+from modules.documents.infrastructure.renderers.legacy_customer_marker import LEGACY_CUSTOMER_MARKER, remove_legacy_customer_marker
 from modules.documents.domain.party import party_conditions
 from modules.documents.infrastructure.renderers import NativeDocxRenderer
 
@@ -98,11 +97,12 @@ def test_only_effective_frozen_signing_branch_is_required(
         frozen, source=source, document_type=document_type
     )
     assert fields(result) == expected
-    assert result["can_issue"] is not bool(expected)
+    assert result["can_issue"]
+    assert all(not field["critical"] for field in result["missing_fields"])
     assert frozen == original
 
 
-@pytest.mark.parametrize("empty", [None, "", "  ", "________________ (поле)"])
+@pytest.mark.parametrize("empty", [None, "", "  ", "________________ (поле)", "____. __ — ---", "—", "- (до заполнения)"])
 def test_missing_facts_in_body_table_header_footer_and_optional_contacts(empty):
     document = source_document("{{ customer.full_name }}")
     document.add_table(rows=1, cols=1).cell(0, 0).text = "{{ customer.unp }}"
@@ -117,7 +117,7 @@ def test_missing_facts_in_body_table_header_footer_and_optional_contacts(empty):
         "customer.legal_address",
         "customer.email",
     }
-    assert not result["can_issue"]
+    assert result["can_issue"]
     assert (
         next(
             item
@@ -138,7 +138,6 @@ def test_empty_card_does_not_block_template_without_required_customer_fields(
         frozen, source=source, document_type=document_type
     )
     assert result["can_issue"] and fields(result) == {"customer.email"}
-    assert mark_incomplete_docx(source, result) == source
     assert (
         snapshot_customer_readiness(frozen, source=source, document_type="offer")[
             "checked"
@@ -157,7 +156,7 @@ def test_historical_literal_basis_is_a_present_fact_without_provenance_guessing(
 
 
 @pytest.mark.parametrize("document_type", ["contract", "act"])
-def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant(
+def test_actual_render_ignores_old_veto_and_keeps_facts_and_header_variants(
     document_type,
 ):
     document = source_document(
@@ -174,7 +173,7 @@ def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant(
     frozen = snapshot(
         **{"customer.full_name": "ООО Клиент", "customer.legal_address": ""}
     )
-    frozen["meta"]["customer_readiness"] = {"can_issue": True, "missing_fields": []}
+    frozen["meta"]["customer_readiness"] = {"can_issue": False, "missing_fields": []}
     original = deepcopy(frozen)
     version = SimpleNamespace(
         version=1,
@@ -192,15 +191,12 @@ def test_actual_render_ignores_cache_keeps_facts_and_marks_every_header_variant(
     assert frozen == original
     assert "ООО Клиент" in " ".join(p.text for p in rendered.paragraphs)
     assert "____" in context.values["customer.legal_address"]
-    assert rendered.paragraphs[0].text == INCOMPLETE_DRAFT_MARKER
-    for sec in rendered.sections:
-        for header in (sec.header, sec.first_page_header, sec.even_page_header):
-            assert (
-                sum(p.text == INCOMPLETE_DRAFT_MARKER for p in header.paragraphs) == 1
-            )
-    marked_again = Document(BytesIO(mark_incomplete_docx(output, {"can_issue": False})))
-    assert sum(p.text == INCOMPLETE_DRAFT_MARKER for p in marked_again.paragraphs) == 1
-    assert document.sections[0].header.paragraphs[0].text == "Обычный колонтитул"
+    assert rendered.paragraphs[0].text == "Клиент: ООО Клиент"
+    assert rendered.sections[0].header.paragraphs[0].text == "Обычный колонтитул"
+    assert rendered.sections[0].first_page_header.paragraphs[0].text == "Первый колонтитул"
+    assert rendered.sections[0].even_page_header.paragraphs[0].text == "Чётный колонтитул"
+    assert rendered.sections[1].header.paragraphs[0].text == "Следующий раздел"
+    assert remove_legacy_customer_marker(output) is output
 
 
 @pytest.mark.asyncio
@@ -244,9 +240,18 @@ async def test_issue_readiness_recomputes_old_stale_malformed_cache_from_exact_s
     result = await check_saved_document_readiness(
         None, tenant_scope=None, document=doc, template_storage=Storage()
     )
-    assert not result["can_issue"] and fields(result) == {"customer.full_name"}
+    assert result["can_issue"] and fields(result) == {"customer.full_name"}
     assert calls[0]["version"] == 4 and calls[0]["storage_key"] == "frozen-key"
     assert frozen["meta"]["customer_readiness"] == metadata
+
+
+@pytest.mark.parametrize("missing", [[], [{"field": "source.invalid", "label": "Ошибка источника", "critical": True}]])
+def test_unrelated_or_unexplained_cached_failure_is_not_a_handwriting_warning(missing):
+    from modules.documents.api.managed_documents_artifacts import _cached_customer_readiness
+
+    cached = {"checked": True, "can_issue": False, "missing_fields": missing}
+    document = SimpleNamespace(render_snapshot={"meta": {"customer_readiness": cached}})
+    assert _cached_customer_readiness(document).model_dump() == cached
 
 
 @pytest.mark.asyncio
@@ -265,7 +270,7 @@ async def test_issued_document_readiness_never_reads_or_refreshes_existing_artif
     "status,guarded",
     [("draft", True), ("issued", False), ("sent", False), ("signed", False)],
 )
-async def test_docx_download_preserves_marker_after_external_edit_without_rewriting_storage(
+async def test_docx_download_removes_only_retired_stamp_from_working_copy(
     monkeypatch, status, guarded
 ):
     from modules.documents.application import artifact_helpers as helpers
@@ -285,7 +290,15 @@ async def test_docx_download_preserves_marker_after_external_edit_without_rewrit
 
     monkeypatch.setattr(readiness, "check_saved_document_readiness", check)
     artifact = SimpleNamespace(kind="source_docx", order_document_id=7)
-    content = source_bytes(source_document("Внешняя правка без пометки"))
+    legacy = source_document(LEGACY_CUSTOMER_MARKER, "Внешняя правка")
+    legacy.sections[0].different_first_page_header_footer = True
+    legacy.settings.odd_and_even_pages_header_footer = True
+    for header in (legacy.sections[0].header, legacy.sections[0].first_page_header, legacy.sections[0].even_page_header):
+        p = header.paragraphs[0]
+        p.add_run(LEGACY_CUSTOMER_MARKER[:9])
+        p.add_run(LEGACY_CUSTOMER_MARKER[9:])
+        p.add_run("Ручная подпись").italic = True
+    content = source_bytes(legacy)
     assert (
         await helpers.requires_guarded_draft_download(
             None, tenant_scope=None, artifact=artifact
@@ -300,11 +313,13 @@ async def test_docx_download_preserves_marker_after_external_edit_without_rewrit
         template_storage=None,
     )
     if guarded:
-        assert Document(BytesIO(output)).paragraphs[0].text == INCOMPLETE_DRAFT_MARKER
-        assert (
-            Document(BytesIO(content)).paragraphs[0].text
-            == "Внешняя правка без пометки"
-        )
+        copy = Document(BytesIO(output))
+        assert [p.text for p in copy.paragraphs] == ["Внешняя правка"]
+        for header in (copy.sections[0].header, copy.sections[0].first_page_header, copy.sections[0].even_page_header):
+            assert header.paragraphs[0].text == "Ручная подпись"
+            assert header.paragraphs[0].runs[-1].italic
+        assert Document(BytesIO(content)).paragraphs[0].text == LEGACY_CUSTOMER_MARKER
+        assert remove_legacy_customer_marker(output) is output
     else:
         assert output is content
 
@@ -316,12 +331,12 @@ def test_old_snapshot_without_party_metadata_does_not_silently_exempt_signer_pos
         source=source_bytes(source_document("{{ customer.signer_position }}")),
         document_type="contract",
     )
-    assert not result["can_issue"] and fields(result) == {"customer.signer_position"}
+    assert result["can_issue"] and fields(result) == {"customer.signer_position"}
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("edited", [False, True])
-async def test_actual_draft_preview_reapplies_marker_to_native_and_unmarked_edited_source(
+async def test_actual_draft_preview_includes_handwriting_line_or_preserved_legacy_edits(
     monkeypatch, edited
 ):
     from modules.documents.application import draft_preview as preview
@@ -367,16 +382,14 @@ async def test_actual_draft_preview_reapplies_marker_to_native_and_unmarked_edit
 
     class Artifacts:
         async def read(self, stored):
-            return source_bytes(source_document("Ручная правка без пометки"))
+            return source_bytes(source_document(LEGACY_CUSTOMER_MARKER, "Ручная правка, поле ________________"))
 
     class Pdf:
         def convert_docx(self, content, *, filename):
             output = Document(BytesIO(content))
-            assert output.paragraphs[0].text == INCOMPLETE_DRAFT_MARKER
-            assert (
-                output.sections[0].header.paragraphs[0].text == INCOMPLETE_DRAFT_MARKER
-            )
-            assert ("Ручная правка" in output.paragraphs[1].text) is edited
+            body = " ".join(p.text for p in output.paragraphs)
+            assert LEGACY_CUSTOMER_MARKER not in body and "____" in body
+            assert ("Ручная правка" in body) is edited
             return b"%PDF-fake"
 
     pdf, name = await preview.ManagedDocumentDraftPreviewService.render_pdf(
@@ -411,7 +424,7 @@ def test_disabled_word_story_fields_are_not_requirements_but_enabled_stories_are
     result = snapshot_customer_readiness(
         frozen, source=source, document_type="contract"
     )
-    assert result["can_issue"] is not enabled
+    assert result["can_issue"]
     assert fields(result) == ({"customer.acting_basis"} if enabled else set())
     # Security/authoring discovery still inventories every Word story.
     assert "customer.acting_basis" in NativeDocxRenderer().discover_placeholders(source)
@@ -434,7 +447,7 @@ def test_later_enabled_section_includes_inherited_first_header_nested_table():
     result = snapshot_customer_readiness(
         frozen, source=source_bytes(document), document_type="contract"
     )
-    assert not result["can_issue"] and fields(result) == {"customer.acting_basis"}
+    assert result["can_issue"] and fields(result) == {"customer.acting_basis"}
 
 
 @pytest.mark.parametrize(

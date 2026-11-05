@@ -167,11 +167,11 @@ async function chooseB(f) {
 async function openIncompleteDocument(f) {
  f.documents.push({id:77,order_id:477,proposal_id:25,legal_entity_id:5,doc_type:'contract',status:'draft',provider:'native',
   internal_reference:'draft77',display_number:'draft77',date:'2026-10-20',created_at:'2026-10-20T08:00:00Z',artifacts:[],
-  customer_readiness:{checked:true,can_issue:false,missing_fields:[{key:'legal_address',label:'Юридический адрес клиента',critical:true}]}});
+  customer_readiness:{checked:true,can_issue:false,missing_fields:[{field:'customer.legal_address',label:'Юридический адрес клиента',critical:true}]}});
  await f.workspace.getByRole('button',{name:'Документы',exact:true}).click();
- const warning=f.page.getByTestId('native-draft-missing-fields');
+ const warning=f.page.getByTestId('native-manual-fields');
  await warning.getByText(/Юридический адрес клиента/).waitFor();
- return warning.getByRole('button',{name:'Заполнить карточку',exact:true});
+ return warning.getByRole('button',{name:'Открыть карточку клиента',exact:true});
 }
 (async()=>{
  browser=await chromium.launch({headless:true});
