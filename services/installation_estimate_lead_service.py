@@ -41,6 +41,7 @@ from services.private_attachment_storage_service import (
     VariantScopedPrivateAttachmentStorage,
     get_private_attachment_storage,
 )
+from schemas_website_context import append_submission_context, submission_context_meta
 from services.public_write_fingerprint_service import (
     PublicWriteAttachmentFingerprint,
     PublicWriteFingerprintService,
@@ -225,6 +226,7 @@ class InstallationEstimateLeadService:
                 initial_status=OrderStatus.NEW_LEAD,
                 comment=comment,
                 order_technical_meta={
+                    **submission_context_meta(payload.submission_context),
                     "service_type": "pre_install",
                     "object_type": payload.object_type,
                     "marketing_source": "site",
@@ -241,6 +243,7 @@ class InstallationEstimateLeadService:
                 },
                 commit=False,
                 tenant_scope=tenant_scope,
+                notify_incoming=False,
             )
             order.title = "Предварительная оценка монтажа по фото"
             order.workflow_type = "sales_installation"
@@ -286,6 +289,7 @@ class InstallationEstimateLeadService:
                     email=payload.email,
                     address=payload.address,
                     description=payload.description,
+                    submission_context=payload.submission_context,
                     attachment_count=len(uploads),
                     photo_categories=tuple(
                         PHOTO_CATEGORIES[category][1] for category in category_counts
@@ -406,7 +410,7 @@ class InstallationEstimateLeadService:
             for category, count in category_counts.items()
         )
         lines.append(f"Фото: {photo_summary}")
-        return "\n".join(lines)
+        return append_submission_context("\n".join(lines), payload.submission_context)
 
     @staticmethod
     def _clean_filename(value: Any) -> str:

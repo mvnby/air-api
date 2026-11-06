@@ -516,6 +516,7 @@ class EmailLeadIntakeService:
             customer_inn=inn,
             customer_full_legal_name=company_name if customer_type == "company" else None,
             tenant_scope=tenant_scope,
+            order_technical_meta={"email_source_text": raw_body[:180_000], "email_subject": subject},
             commit=False,
         )
 

@@ -13,6 +13,12 @@ from models import (
     StaffUser,
     Storefront,
     TenantMembership,
+    Tenant,
+)
+from services.communications.incoming_contracts import (
+    TENANT_INCOMING_CREATED_EVENT,
+    TENANT_INCOMING_TEMPLATE_KEY,
+    TenantIncomingCreatedPayloadV1,
 )
 from services.communications.audience_resolver import CommunicationAudienceResolver
 from services.communications.canary_errors import CommunicationsCanarySafetyError
@@ -214,6 +220,14 @@ async def prepare_website_provider_boundary(
     """
 
     target = scope.website_canary_target
+    if (target is None and scope.mode == "all"
+            and claim.template_key == TENANT_INCOMING_TEMPLATE_KEY):
+        payload = TenantIncomingCreatedPayloadV1.model_validate(claim.render_context_dict())
+        target = WebsiteCanaryTarget(
+            event_id=claim.event_id, event_type=TENANT_INCOMING_CREATED_EVENT,
+            tenant_id=payload.tenant_id, storefront_id=payload.storefront_id,
+            recipient_key=claim.recipient_key,
+        )
     if target is None:
         async def authorize_unscoped_delivery(
             _delivery: CommunicationDelivery,
@@ -300,6 +314,18 @@ async def prepare_website_provider_boundary(
         ):
             _reject()
 
+        if target.event_type == TENANT_INCOMING_CREATED_EVENT:
+            # Generic events use this final fence in all mode as well as
+            # canary mode; recheck active tenant/storefront under the locks.
+            tenant = (await session.execute(_lock(
+                select(Tenant).where(Tenant.id == target.tenant_id), session
+            ))).scalar_one_or_none()
+            storefront = (await session.execute(_lock(
+                select(Storefront).where(Storefront.id == target.storefront_id,
+                                         Storefront.tenant_id == target.tenant_id), session
+            ))).scalar_one_or_none()
+            if tenant is None or tenant.status != "active" or storefront is None or storefront.status != "active":
+                _reject()
         destination = await lock_exact_website_recipient(session, target=target)
         if destination != delivery.destination:
             _reject()

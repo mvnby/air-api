@@ -86,3 +86,64 @@ def test_manager_preview_keeps_purchase_cents_and_demo_hides_cost():
     assert result.manager_response().purchase_cost_total_byn == 957.9
     assert result.manager_response().margin_byn == 842.1
     assert result.manager_response(show_commercial=False).purchase_cost_total_byn is None
+
+
+async def test_multi_split_lead_forwards_context_and_preserves_configuration(monkeypatch, tenant_scope):
+    from types import SimpleNamespace
+
+    from api_contracts.multi_split import MultiSplitLeadPayload
+    from services.communications.tenant_website_event_service import TenantWebsiteEventService
+    from services.lead_service import LeadService
+    from services.multi_split_configuration_service import MultiSplitConfigurationService
+    from services.multi_split_lead_service import MultiSplitLeadService
+    from services.public_write_idempotency_service import PublicWriteIdempotencyService
+
+    captured = {}
+    payload = MultiSplitLeadPayload.model_validate({
+        "configuration": {"outdoor_product_id": 42, "rooms": [{"name": "Кухня", "indoor_product_id": 11}]},
+        "name": "Иван", "phone": "+375291112233", "consent": True, "message": "Original message",
+        "submission_context": {"page_path": "/multi-split", "form_id": "multi_split", "product_id": 42},
+    })
+    preview = MultiSplitPreviewResponse(
+        status="requires_specialist", explanation="Проверка нужна", composition_complete=False,
+        equipment_total_byn=1234, components=[MultiSplitComponent(
+            product_id=11, title="Блок", product_kind="indoor_unit", quantity=1,
+            unit_price_byn=1234, total_price_byn=1234, availability="in_stock_now",
+        )],
+    )
+
+    async def fake_preview(_session, *, request, **_kwargs):
+        assert request is payload.configuration
+        return MultiSplitPreviewResult(public=preview, products={}, metrics={}, profile=None)
+
+    async def fake_create_lead(_session, lead_payload, **kwargs):
+        captured["lead"] = lead_payload
+        assert kwargs["notify_incoming"] is False
+        return {"id": 7, "status": "new"}
+
+    async def fake_enqueue(_session, **kwargs):
+        captured["event"] = kwargs
+
+    async def execute(_session, *, operation, **_kwargs):
+        return SimpleNamespace(value=(await operation()).value)
+
+    async def flush():
+        pass
+
+    monkeypatch.setattr(MultiSplitConfigurationService, "preview", fake_preview)
+    monkeypatch.setattr(LeadService, "create_lead", fake_create_lead)
+    monkeypatch.setattr(TenantWebsiteEventService, "enqueue_contact_lead", fake_enqueue)
+    monkeypatch.setattr(PublicWriteIdempotencyService, "execute", execute)
+    session = SimpleNamespace(add=lambda row: captured.update(configuration=row), flush=flush)
+    result = await MultiSplitLeadService.create(
+        session, tenant_scope=tenant_scope, payload=payload, idempotency_key="multi-context-test-001",
+    )
+    assert result.lead_id == 7
+    assert captured["lead"].submission_context == payload.submission_context
+    assert "Original message" in captured["lead"].request_text
+    assert "Форма: Подбор мультисплита" in captured["lead"].request_text
+    assert "Страница: /multi-split" in captured["lead"].request_text
+    assert "оборудование 1234 BYN" in captured["lead"].request_text
+    assert captured["event"]["submission_context"] == payload.submission_context
+    assert captured["configuration"].component_snapshot == [item.model_dump() for item in preview.components]
+    assert captured["configuration"].verification_status == "requires_specialist"

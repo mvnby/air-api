@@ -6,6 +6,7 @@ from typing import Dict, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from schemas_website_context import append_submission_context, submission_context_meta
 from models import LeadSource, Order, OrderStatus
 from services.communications.tenant_website_event_service import (
     TenantWebsiteEventService,
@@ -157,9 +158,13 @@ class RepairDiagnosticIntakeService:
             items=[],
             lead_source=LeadSource.SITE,
             initial_status=OrderStatus.NEW_LEAD,
-            comment=RepairDiagnosticService._build_order_comment(payload, uploads),
+            comment=append_submission_context(
+                RepairDiagnosticService._build_order_comment(payload, uploads), payload.submission_context,
+            ),
+            order_technical_meta=submission_context_meta(payload.submission_context) or None,
             tenant_scope=tenant_scope,
             commit=False,
+            notify_incoming=False,
         )
         order.workflow_type = "repair"
         order.title = f"Ремонт кондиционера: {SYMPTOM_LABELS[payload.symptom]}"

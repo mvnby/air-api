@@ -140,7 +140,8 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     tenant_scope,
 ):
     storage = FakePrivateStorage()
-    payload = _payload()
+    context = {"page_path": "/services/installation", "form_id": "installation_estimate"}
+    payload = _payload(submission_context=context)
     uploads = [_upload()]
 
     created = await InstallationEstimateLeadService.create_lead(
@@ -173,6 +174,9 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     assert order.tenant_id == tenant_scope.tenant_id
     assert order.storefront_id == tenant_scope.storefront_id
     assert order.source_fingerprint
+    assert order.technical_meta["submission_context"] == context
+    assert payload.description in order.comment
+    assert "Страница: /services/installation" in order.comment
     assert order.technical_meta["service_type"] == "pre_install"
     assert order.technical_meta["installation_estimate"]["status"] == "pending_review"
     assert order.technical_meta["installation_estimate"]["attachment_policy"] == "private_access_only"
@@ -187,6 +191,8 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
             await installation_estimate_session.execute(select(OrderAttachmentLink))
         ).scalars()
     )
+    event = (await installation_estimate_session.execute(select(IntegrationOutboxEvent))).scalars().one()
+    assert event.payload["submission_context"] == {**context, "service_id": None, "product_id": None}
     assert len(attachments) == 1
     assert len(links) == 1
     assert links[0].category == "installation_indoor"

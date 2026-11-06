@@ -7,6 +7,7 @@ from sqlmodel import select
 
 from models import LeadSource, Order, OrderStatus, Tenant
 from schemas import OrderPayload, OrderResponse
+from schemas_website_context import append_submission_context, submission_context_meta
 from services.communications.tenant_website_event_service import (
     TenantWebsiteEventService,
 )
@@ -173,7 +174,7 @@ class WebsiteOrderService:
             for item in items
             if item.get("product_id") is not None
         ]
-        technical_meta = {}
+        technical_meta = submission_context_meta(payload.submission_context)
         if catalog_pricing_snapshots:
             technical_meta["public_catalog_pricing"] = {
                 "snapshot_version": 1,
@@ -194,7 +195,7 @@ class WebsiteOrderService:
             items=items,
             lead_source=LeadSource.SITE,
             initial_status=OrderStatus.NEGOTIATION,
-            comment=payload.comment,
+            comment=append_submission_context(payload.comment, payload.submission_context),
             customer_type=payload.customer.type,
             customer_inn=payload.customer.inn,
             customer_full_legal_name=payload.customer.full_legal_name,
@@ -208,6 +209,7 @@ class WebsiteOrderService:
             ),
             tenant_scope=tenant_scope,
             commit=False,
+            notify_incoming=False,
         )
         if not accepted_installation:
             await TenantWebsiteEventService.enqueue_checkout(

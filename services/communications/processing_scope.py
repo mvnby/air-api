@@ -24,7 +24,7 @@ from services.communications.staff_task_contracts import (
 ProcessingMode = Literal["canary", "all", "staff_bot"]
 CANARY_EVENT_TYPES = (TELEGRAM_CANARY_REQUESTED_EVENT,)
 CANARY_TEMPLATE_KEYS = (TELEGRAM_CANARY_TEMPLATE_KEY,)
-# "all" is the production website rollout scope, not a synonym for every
+# "all" is the reviewed production incoming scope, not a synonym for every
 # registered communication. Keep it deliberately narrow and expand it only
 # through a separately reviewed rollout.
 ALL_EVENT_TYPES = TENANT_WEBSITE_EVENT_TYPES

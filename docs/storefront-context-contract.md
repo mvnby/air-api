@@ -11,6 +11,24 @@ The canonical MVN website may temporarily call the ordinary API host without a
 signature. A non-canonical storefront is accepted only through a complete
 short-lived HMAC envelope produced by its trusted SSR or same-origin proxy.
 
+## Submission page and form context
+
+Website contact, checkout, installation calculator, photo estimate, repair,
+multi-split selection and availability requests may include `submission_context`. Its fields are
+`page_path` (pathname only, up to 500 characters), `form_id` (the fixed form
+identifier), optional `service_id` (up to 80 characters) and optional positive
+`product_id`. Origins, query strings, fragments and control characters are not
+accepted in the pathname. This browser-provided context is descriptive evidence;
+it never selects a tenant, grants product access or confirms a requested service.
+
+JSON requests carry the object directly. Photo-estimate multipart requests carry
+its JSON serialization in a `submission_context` form field; repair requests
+carry it inside their existing JSON `payload`. Capture the context once per
+submission attempt and retain it with the original idempotency key on retries.
+Older clients may omit it. The API stores it with the incoming request, exposes
+readable form/page details in Manager and includes it in Telegram notifications.
+This contract does not collect browsing history, referrers or dwell time.
+
 ## Required signed headers
 
 The trusted runtime sends exactly one value for each header:

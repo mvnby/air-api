@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from core.input_validation import (
     validate_optional_bic,
     validate_optional_email,
@@ -17,6 +19,7 @@ from schemas_common import Meta
 
 
 class ProductAvailabilityLeadPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     product_id: int
     phone: str
     name: Optional[str] = None
@@ -60,6 +63,7 @@ class LeadListResponse(BaseModel):
 
 
 class LeadCreatePayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     source: str = "manager"
     name: Optional[str] = None
     phone: Optional[str] = None

@@ -68,7 +68,8 @@ async def test_create_contact_lead_uses_lead_funnel_and_enqueues_event(
     created_at = datetime.now()
     captured = {}
 
-    async def fake_create_lead(_session, payload, *, tenant_scope):
+    async def fake_create_lead(_session, payload, *, tenant_scope, notify_incoming=True):
+        assert notify_incoming is False
         captured["payload"] = payload
         captured["tenant_scope"] = tenant_scope
         return {"id": 33, "status": "new", "created_at": created_at}
@@ -91,6 +92,7 @@ async def test_create_contact_lead_uses_lead_funnel_and_enqueues_event(
             phone="+375 (29) 111-22-33",
             address="Минск",
             message="Нужен монтаж <script>",
+            submission_context={"page_path": "/services", "form_id": "contact", "service_id": "maintenance"},
         ),
         tenant_scope=tenant_scope,
         idempotency_key="contact-request-unit-0001",
@@ -101,6 +103,10 @@ async def test_create_contact_lead_uses_lead_funnel_and_enqueues_event(
         status="new",
         created_at=created_at,
     )
+    assert captured["payload"].submission_context.page_path == "/services"
+    assert "Нужен монтаж <script>" in captured["payload"].request_text
+    assert "Страница: /services" in captured["payload"].request_text
+    assert captured["event"]["submission_context"].service_id == "maintenance"
     assert captured["payload"].source == "site"
     assert captured["tenant_scope"] == tenant_scope
     assert "Адрес/район: Минск" in captured["payload"].request_text
@@ -123,6 +129,7 @@ async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(
             "phone": "+375 (29) 111-22-33",
             "address": "Минск",
             "message": "Нужна консультация",
+            "submission_context": {"page_path": "/services/maintenance", "form_id": "contact", "service_id": "maintenance"},
         },
     )
 
@@ -131,6 +138,9 @@ async def test_public_contact_lead_endpoint_uses_dedicated_lead_contract(
     assert lead is not None
     assert lead.tenant_id == 1
     assert lead.storefront_id == 1
+    assert lead.intake_meta["submission_context"]["service_id"] == "maintenance"
+    assert "Нужна консультация" in lead.request_text
+    assert "Страница: /services/maintenance" in lead.request_text
 
 
 @pytest.mark.asyncio
@@ -180,6 +190,9 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
         return None
 
     async def fake_create_from_website(**kwargs):
+        assert kwargs["notify_incoming"] is False
+        assert kwargs["order_technical_meta"]["submission_context"]["product_id"] == product.id
+        assert "Страница: /product/tcl-breezein" in kwargs["comment"]
         assert kwargs["items"] == []
         assert kwargs["lead_source"] == LeadSource.SITE
         assert "Сообщить о поступлении" in (kwargs["comment"] or "")
@@ -214,6 +227,7 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
             product_id=product.id,
             phone="+375 (29) 111-22-33",
             name="Иван",
+            submission_context={"page_path": "/product/tcl-breezein", "form_id": "product_availability", "product_id": 7},
         ),
         tenant_scope=tenant_scope,
         idempotency_key="availability-request-unit-0001",
@@ -240,6 +254,7 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
     assert len(enqueued) == 1
     assert enqueued[0]["order"] is order
     assert enqueued[0]["product"] is product
+    assert enqueued[0]["submission_context"].product_id == 7
     assert enqueued[0]["is_repeat"] is False
     assert enqueued[0]["tenant_scope"] == tenant_scope
 

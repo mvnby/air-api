@@ -32,7 +32,8 @@ async def _execute_once(session, *, operation, **_kwargs):
 
 
 @pytest.mark.asyncio
-async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_scope):
+@pytest.mark.parametrize("form_id", ["checkout", "installation_calculator"])
+async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_scope, form_id):
     captured_kwargs = {}
     captured_event = {}
     session = SimpleNamespace(commit_calls=0)
@@ -127,6 +128,7 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
                 }
             ],
             "comment": "Нужен монтаж",
+            "submission_context": {"page_path": "/services/install", "form_id": form_id, "service_id": "installation"},
         }
     )
 
@@ -137,6 +139,10 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
         idempotency_key="checkout-request-unit-0001",
     )
 
+    assert captured_kwargs["comment"].startswith("Нужен монтаж\n")
+    assert "Страница: /services/install" in captured_kwargs["comment"]
+    assert captured_kwargs["order_technical_meta"]["submission_context"]["form_id"] == form_id
+    assert captured_event["request"].submission_context.form_id == form_id
     assert response.id == 55
     assert response.status == OrderStatus.NEGOTIATION
     assert captured_kwargs["lead_source"] == LeadSource.SITE

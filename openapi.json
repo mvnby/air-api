@@ -42277,6 +42277,19 @@
             ],
             "title": "Description"
           },
+          "submission_context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Context",
+            "description": "Optional WebsiteSubmissionContext encoded as JSON text"
+          },
           "object_type": {
             "anyOf": [
               {
@@ -59625,6 +59638,16 @@
       "JsonValue": {},
       "LeadCreatePayload": {
         "properties": {
+          "submission_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteSubmissionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source": {
             "type": "string",
             "title": "Source",
@@ -88452,6 +88475,16 @@
       },
       "MultiSplitLeadPayload": {
         "properties": {
+          "submission_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteSubmissionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "configuration": {
             "$ref": "#/components/schemas/MultiSplitPreviewRequest"
           },
@@ -90085,6 +90118,16 @@
       },
       "OrderPayload": {
         "properties": {
+          "submission_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteSubmissionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "customer": {
             "$ref": "#/components/schemas/CustomerPayload"
           },
@@ -93262,6 +93305,16 @@
       },
       "ProductAvailabilityLeadPayload": {
         "properties": {
+          "submission_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteSubmissionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "product_id": {
             "type": "integer",
             "title": "Product Id"
@@ -96714,6 +96767,16 @@
       },
       "PublicContactLeadPayload": {
         "properties": {
+          "submission_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteSubmissionContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "type": "string",
             "maxLength": 160,
@@ -105068,6 +105131,62 @@
           "message"
         ],
         "title": "WebRebuildTriggerResponse"
+      },
+      "WebsiteSubmissionContext": {
+        "properties": {
+          "page_path": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Page Path"
+          },
+          "form_id": {
+            "type": "string",
+            "enum": [
+              "contact",
+              "checkout",
+              "installation_calculator",
+              "installation_estimate",
+              "repair_diagnostic",
+              "product_availability",
+              "multi_split"
+            ],
+            "title": "Form Id"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_path",
+          "form_id"
+        ],
+        "title": "WebsiteSubmissionContext",
+        "description": "Untrusted page/form references; these do not select or confirm ordered work."
       },
       "WorkerAssignmentCreate": {
         "properties": {

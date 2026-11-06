@@ -5,10 +5,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from core.input_validation import validate_optional_email, validate_required_phone
 
 
 class InstallationEstimateLeadPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=160)

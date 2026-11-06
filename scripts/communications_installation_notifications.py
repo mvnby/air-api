@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility CLI for the five-type tenant website notification runtime."""
+"""Compatibility CLI for the six-type tenant incoming notification runtime."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ CommandMode = Literal["plan", "enable", "status", "off"]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Operate the fixed five-type tenant website Telegram delivery "
+            "Operate the fixed six-type tenant incoming Telegram delivery "
             "allowlist. The historical filename is retained for automation "
             "compatibility; event types and destinations are not configurable."
         )

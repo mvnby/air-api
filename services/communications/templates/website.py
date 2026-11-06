@@ -4,6 +4,8 @@ from decimal import Decimal
 from html import escape
 from typing import Any, Mapping
 
+from schemas_website_context import FORM_LABELS, WebsiteSubmissionContext
+
 from services.communications.contracts import (
     InstallationEstimateLeadCreatedPayloadV1,
     PublicContactLeadCreatedPayloadV1,
@@ -43,6 +45,20 @@ def _escape_bounded(value: Any, *, max_length: int) -> str:
         parts.append(escaped_char)
         used += len(escaped_char)
     return "".join(parts) + ("..." if max_length >= 3 else "")
+
+
+def _submission_context_lines(context: WebsiteSubmissionContext | None) -> list[str]:
+    if context is None:
+        return []
+    lines = [
+        f"Форма: {_escape_bounded(FORM_LABELS[context.form_id], max_length=80)}",
+        f"Страница: {_escape_bounded(context.page_path, max_length=400)}",
+    ]
+    if context.service_id:
+        lines.append(f"Услуга на странице: {_escape_bounded(context.service_id, max_length=100)}")
+    if context.product_id:
+        lines.append(f"Товар на странице: #{context.product_id}")
+    return lines
 
 
 def _format_amount(value: Decimal) -> str:
@@ -110,6 +126,7 @@ def render_website_order_v1(
             f"💰 <b>Итого: {_format_amount(payload.total_amount)} {payload.currency}</b>",
         ]
     )
+    lines.extend(_submission_context_lines(payload.submission_context))
     return _ensure_telegram_length("\n".join(lines))
 
 
@@ -134,6 +151,7 @@ def render_website_contact_lead_v1(
         lines.extend(
             ["", f"💬 {_escape_bounded(payload.message, max_length=800)}"]
         )
+    lines.extend(_submission_context_lines(payload.submission_context))
     return _ensure_telegram_length("\n".join(lines))
 
 
@@ -189,6 +207,7 @@ def render_installation_estimate_lead_v1(
             "Статус: ожидает предварительной оценки",
         ]
     )
+    lines.extend(_submission_context_lines(payload.submission_context))
     return _ensure_telegram_length("\n".join(lines))
 
 
@@ -217,6 +236,7 @@ def render_tenant_website_availability_v1(
             4,
             f"👤 {_escape_bounded(payload.name, max_length=160)}",
         )
+    lines.extend(_submission_context_lines(payload.submission_context))
     return _ensure_telegram_length("\n".join(lines))
 
 
@@ -239,4 +259,5 @@ def render_tenant_website_repair_v1(
             f"Адрес/район: {_escape_bounded(payload.address, max_length=300)}"
         )
     lines.append(f"Фото: {payload.photo_count}")
+    lines.extend(_submission_context_lines(payload.submission_context))
     return _ensure_telegram_length("\n".join(lines))

@@ -14,6 +14,10 @@ export type Body_create_installation_estimate_lead = {
     email?: (string | null);
     address?: (string | null);
     description?: (string | null);
+    /**
+     * Optional WebsiteSubmissionContext encoded as JSON text
+     */
+    submission_context?: (string | null);
     object_type?: (string | null);
 };
 

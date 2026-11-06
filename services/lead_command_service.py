@@ -5,7 +5,9 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Lead, LeadIntakeSource, LeadLossReason, LeadStatus
+from schemas_website_context import submission_context_meta
 from services.command_transaction import command_transaction
+from services.communications.incoming_events import IncomingEventService
 from services.lead_service import LeadService
 from services.tenant_entity_access_service import TenantEntityAccessService
 from services.tenant_scope_service import TenantScope
@@ -18,6 +20,7 @@ class LeadCommandService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        notify_incoming: bool = True,
     ) -> Dict[str, Any]:
         async with command_transaction(session):
             request_text = (payload.request_text or "").strip()
@@ -42,6 +45,9 @@ class LeadCommandService:
                 inn=inn,
                 company_name=LeadService._clean_optional(payload.company_name),
                 request_text=request_text,
+                intake_meta=submission_context_meta(
+                    getattr(payload, "submission_context", None)
+                ) or None,
                 source_message_id=LeadService._clean_optional(
                     getattr(payload, "source_message_id", None)
                 ),
@@ -54,6 +60,10 @@ class LeadCommandService:
             )
             session.add(lead)
             await session.flush()
+            # Dedicated website producers enqueue their richer event in this
+            # same transaction. Source labels alone never suppress an alert.
+            if notify_incoming:
+                await IncomingEventService.enqueue_lead(session, lead)
 
         await session.refresh(lead)
         return LeadService._map_lead(lead)

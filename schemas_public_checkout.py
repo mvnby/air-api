@@ -11,6 +11,8 @@ from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from core.input_validation import (
     validate_optional_bic,
     validate_optional_email,
@@ -155,6 +157,7 @@ class PublicInstallationAcceptance(BaseModel):
 
 
 class OrderPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     model_config = ConfigDict(extra="forbid", validate_default=True)
 
     customer: CustomerPayload
@@ -224,6 +227,7 @@ class PublicWriteRequestErrorResponse(BaseModel):
 
 
 class PublicContactLeadPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=160)

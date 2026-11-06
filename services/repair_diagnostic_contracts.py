@@ -17,6 +17,8 @@ from pydantic import (
     model_validator,
 )
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from core.input_validation import validate_required_phone
 
 
@@ -169,6 +171,7 @@ class RepairDiagnosticContact(BaseModel):
 
 
 class RepairDiagnosticLeadPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     model_config = ConfigDict(extra="forbid")
 
     scenario: Literal["repair"] = "repair"

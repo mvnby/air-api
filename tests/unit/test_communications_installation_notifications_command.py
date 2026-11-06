@@ -14,6 +14,8 @@ from models import (
     CommunicationRuntimeState,
     IntegrationOutboxEvent,
     StaffUser,
+    Storefront,
+    Tenant,
     TenantMembership,
 )
 import scripts.communications_installation_notifications as command_module
@@ -102,6 +104,11 @@ async def _seed_dormant_runtime(session_factory) -> None:
     now = datetime.now(timezone.utc) - timedelta(seconds=1)
     async with session_factory() as session:
         await ensure_tenant_website_scope(session)
+        tenant = await session.get(Tenant, 1)
+        tenant.slug = "mvn"
+        tenant.is_system = True
+        storefront = await session.get(Storefront, 1)
+        storefront.slug = "main"
         owner = StaffUser(
             display_name="Owner",
             status="active",
@@ -123,6 +130,146 @@ async def _seed_dormant_runtime(session_factory) -> None:
             )
         )
         await session.commit()
+
+
+async def _seed_partner(session_factory, *, telegram_id: int | None) -> None:
+    async with session_factory() as session:
+        await ensure_tenant_website_scope(session, tenant_id=2, storefront_id=2)
+        owner = StaffUser(
+            display_name="Partner owner",
+            status="active",
+            roles=["owner"],
+            primary_role="owner",
+            telegram_id=telegram_id,
+        )
+        await add_tenant_members(session, owner, tenant_id=2)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_partner_does_not_block_canonical_activation_or_gain_fallback(
+    operator_session_factory,
+    allow_sqlite_operator_checks,
+    monkeypatch,
+):
+    from core.config import settings
+    from services.communications.canary_errors import CommunicationsCanarySafetyError
+    from services.communications.recipient_directory import TenantWebsiteManagementRecipientDirectory
+
+    await _seed_dormant_runtime(operator_session_factory)
+    await _seed_partner(operator_session_factory, telegram_id=None)
+    monkeypatch.setattr(settings, "ADMIN_IDS", "123456")
+
+    plan = await run_command(
+        "plan", session_factory=operator_session_factory, config=_runtime_config(),
+        bot_token="valid-token", runtime_locks_enabled=True,
+    )
+    assert plan["enable_allowed"] is True
+    assert plan["owner_recipient_count"] == 1
+    enabled = await run_command(
+        "enable", session_factory=operator_session_factory, config=_runtime_config(),
+        bot_token="valid-token", runtime_locks_enabled=True,
+    )
+    assert enabled["runtime_mode"] == "all"
+    async with operator_session_factory() as session:
+        with pytest.raises(CommunicationsCanarySafetyError, match="tenant_website_recipient_invalid"):
+            await TenantWebsiteManagementRecipientDirectory.list_telegram(
+                session, tenant_id=2, storefront_id=2,
+            )
+        canonical = await TenantWebsiteManagementRecipientDirectory.list_telegram(
+            session, tenant_id=1, storefront_id=1,
+        )
+        assert [recipient.destination for recipient in canonical] == ["90001"]
+
+
+@pytest.mark.asyncio
+async def test_configured_partner_cannot_mask_invalid_canonical_recipient(
+    operator_session_factory,
+    allow_sqlite_operator_checks,
+):
+    await _seed_dormant_runtime(operator_session_factory)
+    await _seed_partner(operator_session_factory, telegram_id=90002)
+    async with operator_session_factory() as session:
+        owner = await session.get(StaffUser, 1)
+        owner.telegram_id = None
+        await session.commit()
+
+    plan = await run_command(
+        "plan", session_factory=operator_session_factory, config=_runtime_config(),
+        bot_token="valid-token", runtime_locks_enabled=True,
+    )
+    assert plan["enable_allowed"] is False
+    assert plan["owner_recipient_count"] == 0
+    assert "tenant_website_recipient_invalid" in plan["blockers"]
+    with pytest.raises(InstallationNotificationControlRejected, match="tenant_website_recipient_invalid"):
+        await run_command(
+            "enable", session_factory=operator_session_factory, config=_runtime_config(),
+            bot_token="valid-token", runtime_locks_enabled=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_partner_backlog_still_blocks_canonical_activation(
+    operator_session_factory,
+    allow_sqlite_operator_checks,
+):
+    from services.communications.incoming_contracts import (
+        TENANT_INCOMING_CREATED_EVENT,
+        TenantIncomingCreatedPayloadV1,
+    )
+
+    await _seed_dormant_runtime(operator_session_factory)
+    await _seed_partner(operator_session_factory, telegram_id=None)
+    async with operator_session_factory() as session:
+        event = _event(92, status="pending", created_at=datetime.now(timezone.utc))
+        event.event_type = TENANT_INCOMING_CREATED_EVENT
+        event.aggregate_type = "lead"
+        event.payload = TenantIncomingCreatedPayloadV1(
+            tenant_id=2, storefront_id=2, entity_type="lead", entity_id=92,
+            source="manager", request_text="Partner request",
+        ).model_dump(mode="json")
+        session.add(event)
+        await session.commit()
+    plan = await run_command(
+        "plan", session_factory=operator_session_factory, config=_runtime_config(),
+        bot_token="valid-token", runtime_locks_enabled=True,
+    )
+    assert plan["owner_recipient_count"] == 1
+    assert plan["backlog_count"] == 1
+    assert "installation_backlog_not_reconciled" in plan["blockers"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["missing", "ambiguous"])
+async def test_canonical_scope_resolution_failure_blocks_activation(
+    operator_session_factory,
+    allow_sqlite_operator_checks,
+    monkeypatch,
+    case,
+):
+    from services.tenant_scope_service import SystemTenantScopeResolver, TenantScopeResolutionError
+
+    await _seed_dormant_runtime(operator_session_factory)
+    await _seed_partner(operator_session_factory, telegram_id=90002)
+    if case == "missing":
+        async with operator_session_factory() as session:
+            tenant = await session.get(Tenant, 1)
+            tenant.is_system = False
+            await session.commit()
+    else:
+        async def ambiguous(*args, **kwargs):
+            raise TenantScopeResolutionError("Canonical system tenant scope is unavailable")
+        monkeypatch.setattr(SystemTenantScopeResolver, "resolve", ambiguous)
+
+    with pytest.raises(InstallationNotificationControlRejected, match="tenant_website_canonical_scope_invalid"):
+        await run_command(
+            "enable", session_factory=operator_session_factory, config=_runtime_config(),
+            bot_token="valid-token", runtime_locks_enabled=True,
+        )
+    async with operator_session_factory() as session:
+        state = await session.get(CommunicationRuntimeState, "telegram")
+        assert state.mode == "off" and state.control_revision == 0
+        assert state.installation_estimate_watermark_at is None
 
 
 def _event(

@@ -1,4 +1,5 @@
 import io
+import json
 
 import pytest
 from PIL import Image
@@ -70,6 +71,7 @@ async def test_public_installation_estimate_contract_and_replay(
         "description": "Нужно оценить трассу",
         "object_type": "apartment",
         "consent": "true",
+        "submission_context": json.dumps({"page_path": "/installation", "form_id": "installation_estimate"}),
     }
     files = [
         ("indoor_unit", ("indoor.png", _png_bytes(), "image/png")),
@@ -106,6 +108,9 @@ async def test_public_installation_estimate_contract_and_replay(
     assert order is not None
     assert order.tenant_id == 1
     assert order.storefront_id == 1
+    assert order.technical_meta["submission_context"]["page_path"] == "/installation"
+    assert "Страница: /installation" in order.comment
+    assert "Нужно оценить трассу" in order.comment
     assert order.technical_meta["installation_estimate"]["category_counts"] == {
         "indoor_unit": 1,
         "route": 1,

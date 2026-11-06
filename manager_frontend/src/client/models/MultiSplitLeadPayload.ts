@@ -3,7 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { MultiSplitPreviewRequest } from './MultiSplitPreviewRequest';
+import type { WebsiteSubmissionContext } from './WebsiteSubmissionContext';
 export type MultiSplitLeadPayload = {
+    submission_context?: (WebsiteSubmissionContext | null);
     configuration: MultiSplitPreviewRequest;
     name: string;
     phone: string;
