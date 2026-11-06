@@ -75,6 +75,7 @@ async def test_public_repair_diagnostic_creates_private_structured_order(
     )
     payload = {
         "scenario": "repair",
+        "submission_context": {"page_path": "/repair", "form_id": "repair_diagnostic", "service_id": "repair"},
         "symptom": "water_leak",
         "problem_timing": "after_minutes",
         "symptom_details": {
@@ -116,6 +117,9 @@ async def test_public_repair_diagnostic_creates_private_structured_order(
     assert order.lead_source == LeadSource.SITE
     assert order.workflow_type == "repair"
     assert order.title == "Ремонт кондиционера: Течет вода из внутреннего блока"
+    assert order.technical_meta["submission_context"]["page_path"] == "/repair"
+    assert "Страница: /repair" in order.comment
+    assert payload["client_comment"] in order.comment
     assert "предварительной диагностикой" in order.comment
 
     repair_meta = order.technical_meta["repair"]

@@ -103,7 +103,6 @@ class EmailLeadImportJobService:
         lookback_days: int | None,
     ) -> None:
         from core.database import async_session_maker
-        from services.notification_service import NotificationService
 
         notified_admins = 0
         try:
@@ -115,19 +114,8 @@ class EmailLeadImportJobService:
                     dry_run=dry_run,
                     lookback_days=lookback_days,
                 )
-                if not dry_run and result.created_order_ids:
-                    try:
-                        notified_admins = await NotificationService.notify_admins_email_leads_imported(
-                            session,
-                            result.created_order_ids,
-                            tenant_scope=tenant_scope,
-                        )
-                    except Exception:
-                        logger.exception(
-                            "EMAIL_LEAD_IMPORT_NOTIFY_FAILED source=%s order_ids=%s",
-                            source,
-                            result.created_order_ids,
-                        )
+                # New requests are snapshotted into the durable outbox in the
+                # order transaction. A second batch send would duplicate them.
 
             async with cls._lock:
                 cls._snapshot = EmailLeadImportJobSnapshot(

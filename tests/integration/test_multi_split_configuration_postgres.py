@@ -97,12 +97,19 @@ async def test_multi_split_options_and_source_gated_preview(db, tenant_scope):
     lead_payload = MultiSplitLeadPayload(
         configuration=request,
         name="Заявка на мультисплит",
+        message="Original client message",
+        submission_context={"page_path": "/multi-split", "form_id": "multi_split"},
         phone="+375291234569",
         consent=True,
     )
     first = await MultiSplitLeadService.create(db, tenant_scope=tenant_scope, payload=lead_payload, idempotency_key="multi-lead-test-001")
     replay = await MultiSplitLeadService.create(db, tenant_scope=tenant_scope, payload=lead_payload, idempotency_key="multi-lead-test-001")
     assert replay.lead_id == first.lead_id
+    saved_lead = await db.get(Lead, first.lead_id)
+    assert saved_lead.intake_meta["submission_context"] == {"page_path": "/multi-split", "form_id": "multi_split"}
+    assert "Страница: /multi-split" in saved_lead.request_text
+    assert "Форма: Подбор мультисплита" in saved_lead.request_text
+    assert "Original client message" in saved_lead.request_text
     lead_configurations = (await db.execute(
         select(LeadMultiSplitConfiguration).where(LeadMultiSplitConfiguration.lead_id == first.lead_id)
     )).scalars().all()

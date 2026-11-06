@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from core.input_validation import normalize_phone_digits
+from schemas_website_context import append_submission_context, submission_context_meta
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import (
     LeadCreatePayload,
@@ -97,9 +98,11 @@ class WebsiteLeadService:
                 name=payload.name,
                 phone=payload.phone,
                 email=payload.email,
-                request_text="\n".join(request_lines),
+                request_text=append_submission_context("\n".join(request_lines), payload.submission_context),
+                submission_context=payload.submission_context,
             ),
             tenant_scope=tenant_scope,
+            notify_incoming=False,
         )
         response = PublicContactLeadResponse(
             lead_id=int(lead_data["id"]),
@@ -115,6 +118,7 @@ class WebsiteLeadService:
             email=payload.email,
             address=payload.address,
             message=payload.message,
+            submission_context=payload.submission_context,
             tenant_scope=tenant_scope,
             request_key_hash=request_key_hash,
         )
@@ -211,6 +215,7 @@ class WebsiteLeadService:
                     name=payload.name,
                     phone=payload.phone,
                     is_repeat=True,
+                    submission_context=payload.submission_context,
                     tenant_scope=tenant_scope,
                     request_key_hash=request_key_hash,
                 )
@@ -241,8 +246,10 @@ class WebsiteLeadService:
             items=[],
             lead_source=LeadSource.SITE,
             initial_status=OrderStatus.NEW_LEAD,
-            comment=WebsiteLeadService._build_request_text(product),
+            comment=append_submission_context(WebsiteLeadService._build_request_text(product), payload.submission_context),
+            order_technical_meta=submission_context_meta(payload.submission_context) or None,
             tenant_scope=tenant_scope,
+            notify_incoming=False,
             commit=False,
         )
         order.created_at = now
@@ -261,6 +268,7 @@ class WebsiteLeadService:
             name=payload.name,
             phone=payload.phone,
             is_repeat=False,
+            submission_context=payload.submission_context,
             tenant_scope=tenant_scope,
             request_key_hash=request_key_hash,
         )
@@ -343,7 +351,12 @@ class WebsiteLeadService:
                 order.customer.name = cleaned_name
                 session.add(order.customer)
 
-        order.comment = WebsiteLeadService._build_request_text(product)
+        order.comment = order.comment or WebsiteLeadService._build_request_text(product)
+        if payload.submission_context is not None:
+            context_meta = submission_context_meta(payload.submission_context)
+            if (order.technical_meta or {}).get("submission_context") != context_meta["submission_context"]:
+                order.comment = append_submission_context(order.comment, payload.submission_context)
+            order.technical_meta = {**(order.technical_meta or {}), **context_meta}
         order.status = OrderStatus.NEW_LEAD
         order.closing_result = None
         order.closed_at = None

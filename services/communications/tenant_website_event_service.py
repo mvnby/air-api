@@ -15,6 +15,7 @@ from models import (
     Storefront,
 )
 from schemas import OrderPayload
+from schemas_website_context import WebsiteSubmissionContext
 from services.communications.contracts import (
     PublicOrderCustomerSnapshotV1,
     PublicOrderProductLineSnapshotV1,
@@ -128,6 +129,7 @@ class TenantWebsiteEventService:
                 customer_type=request.customer.type,
             ),
             comment=request.comment,
+            submission_context=request.submission_context,
             total_amount=order.total_amount,
             currency=str(storefront.currency).strip().upper(),
             product_lines=[
@@ -181,6 +183,7 @@ class TenantWebsiteEventService:
         email: str | None,
         address: str | None,
         message: str | None,
+        submission_context: WebsiteSubmissionContext | None = None,
         tenant_scope: TenantScope,
         request_key_hash: str,
     ) -> None:
@@ -201,6 +204,7 @@ class TenantWebsiteEventService:
             email=email,
             address=address,
             message=message,
+            submission_context=submission_context,
         )
         await IntegrationOutboxService.enqueue(
             session,
@@ -223,6 +227,7 @@ class TenantWebsiteEventService:
         name: str | None,
         phone: str,
         is_repeat: bool,
+        submission_context: WebsiteSubmissionContext | None = None,
         tenant_scope: TenantScope,
         request_key_hash: str,
     ) -> None:
@@ -242,6 +247,7 @@ class TenantWebsiteEventService:
             name=(name or "").strip() or None,
             phone=phone,
             is_repeat=is_repeat,
+            submission_context=submission_context,
         )
         await IntegrationOutboxService.enqueue(
             session,
@@ -284,6 +290,7 @@ class TenantWebsiteEventService:
             address=request.contact.address,
             symptom_label=symptom_label,
             photo_count=photo_count,
+            submission_context=request.submission_context,
         )
         await IntegrationOutboxService.enqueue(
             session,

@@ -16,6 +16,7 @@ from core.tenant_scope import (
     get_public_tenant_scope,
     verify_public_storefront_request,
 )
+from schemas_website_context import WebsiteSubmissionContext
 from schemas_installation_estimate import (
     InstallationEstimateLeadPayload,
     InstallationEstimateLeadResponse,
@@ -84,6 +85,9 @@ async def installation_estimate_form_payload(
     email: Annotated[Optional[str], Form(max_length=254)] = None,
     address: Annotated[Optional[str], Form(max_length=500)] = None,
     description: Annotated[Optional[str], Form(max_length=2000)] = None,
+    submission_context: Annotated[
+        Optional[str], Form(max_length=4000, description="Optional WebsiteSubmissionContext encoded as JSON text"),
+    ] = None,
     object_type: Annotated[
         Optional[str],
         Form(pattern=r"^(apartment|house|office|commercial|other)$"),
@@ -99,6 +103,10 @@ async def installation_estimate_form_payload(
                 "description": description,
                 "object_type": object_type,
                 "consent": consent,
+                "submission_context": (
+                    WebsiteSubmissionContext.model_validate_json(submission_context)
+                    if submission_context is not None else None
+                ),
             }
         )
     except ValidationError as exc:

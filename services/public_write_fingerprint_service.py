@@ -55,8 +55,13 @@ class PublicWriteFingerprintService:
     @staticmethod
     def _payload_data(payload: BaseModel | Mapping[str, Any]) -> Mapping[str, Any]:
         if isinstance(payload, BaseModel):
-            return payload.model_dump(mode="json")
-        return dict(payload)
+            data = payload.model_dump(mode="json")
+        else:
+            data = dict(payload)
+        # Keep fingerprints for legacy requests stable across this additive field.
+        if data.get("submission_context") is None:
+            data.pop("submission_context", None)
+        return data
 
     @staticmethod
     def _sha256(value: str) -> str:

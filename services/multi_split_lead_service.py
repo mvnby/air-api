@@ -8,6 +8,7 @@ from api_contracts.multi_split import MultiSplitLeadPayload, MultiSplitLeadRespo
 from models import LeadMultiSplitConfiguration
 from models.tenancy import TenantScope
 from schemas import LeadCreatePayload
+from schemas_website_context import append_submission_context
 from services.communications.tenant_website_event_service import TenantWebsiteEventService
 from services.lead_service import LeadService
 from services.multi_split_configuration_service import MultiSplitConfigurationService
@@ -47,9 +48,11 @@ class MultiSplitLeadService:
                     name=payload.name,
                     phone=payload.phone,
                     email=payload.email,
-                    request_text=text,
+                    request_text=append_submission_context(text, payload.submission_context),
+                    submission_context=payload.submission_context,
                 ),
                 tenant_scope=tenant_scope,
+                notify_incoming=False,
             )
             lead_id = int(lead_data["id"])
             profile = preview.profile
@@ -73,6 +76,7 @@ class MultiSplitLeadService:
                 email=payload.email,
                 address=None,
                 message=text,
+                submission_context=payload.submission_context,
                 tenant_scope=tenant_scope,
                 request_key_hash=request_key_hash,
             )

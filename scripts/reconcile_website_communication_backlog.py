@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect or terminally suppress an explicit five-event website manifest."""
+"""Inspect or terminally suppress the reviewed six-event incoming manifest."""
 
 from __future__ import annotations
 
@@ -55,9 +55,9 @@ def _expected_count(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Reconcile the reviewed five-type tenant website notification "
+            "Reconcile the reviewed six-type tenant incoming notification "
             "backlog. Repeat each manifest flag once per event type. "
-            "Execution is terminal no-send only and commits all five types "
+            "Execution is terminal no-send only and commits all six types "
             "atomically."
         )
     )
@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Persist the exact five-entry manifest; omitted means dry-run",
+        help="Persist the exact six-entry manifest; omitted means dry-run",
     )
     return parser
 

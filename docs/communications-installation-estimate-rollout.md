@@ -1,6 +1,6 @@
-# Tenant website communications rollout
+# Incoming communications rollout
 
-This runbook covers the managed Telegram worker for the reviewed tenant website
+This runbook covers the managed Telegram worker for the reviewed tenant incoming
 notification allowlist. The historical filename is retained because operator
 automation already refers to it; the runtime is no longer installation-only.
 
@@ -13,6 +13,14 @@ The fixed production allowlist is:
 | `tenant.website.contact_lead.created` | `telegram.tenant_website_contact_lead_created` |
 | `tenant.website.product_availability.requested` | `telegram.tenant_website_product_availability_requested` |
 | `tenant.website.repair_diagnostic.created` | `telegram.tenant_website_repair_diagnostic_created` |
+| `tenant.incoming.created` | `telegram.tenant_incoming_created` |
+
+The generic event covers newly created non-website raw leads, non-website inbox
+orders and imported procurement requests. Website producers keep their existing
+specific events. Qualification of a saved raw lead does not produce another
+new-request alert. The record and event commit together; retries reuse the
+event identity. The former email-import batch alert is replaced by individual
+durable incoming alerts.
 
 Every event resolves active owner/admin memberships inside its exact tenant and
 storefront. There is no manager, global admin, or `ADMIN_IDS` fallback. The
@@ -27,16 +35,24 @@ The two HA Compose files must carry the same immutable worker profile.
 - Exact canary: `true/false`.
 - Full allowlist: `true/true`, only after a separate reviewed activation.
 
-This release pins both Patroni nodes to the exact-canary `true/false` profile.
+This preparation release pins both Patroni nodes to the dormant `false/false`
+profile so the reviewed old backlog can be reconciled. Before deployment, use
+the emergency-off command below and verify that in-flight work has drained.
 Deploying it does not activate `all` mode. Do not edit one node independently:
 profile changes use the existing attested HA rollout.
 
-## Five-type backlog manifest
+An earlier deployment can leave `mode=all` with a canary profile. A fresh
+heartbeat with `status=paused` and `last_error_code=all_mode_not_enabled` proves
+that no production delivery is running; a live process alone does not prove
+notification health. Do not simply switch the profile to active while that
+control state and an unreviewed backlog remain.
+
+## Complete backlog manifest
 
 Before any full activation, inventory every allowlisted event type. Use the
 canonical command; `reconcile_installation_estimate_backlog.py` remains only
 as a compatibility entrypoint for older installation-only automation and is not
-sufficient evidence for five-type activation.
+sufficient evidence for the complete activation scope.
 
 Production hosts are image-only. Resolve the writable Patroni primary and the
 active API slot, then run inside that immutable backend image:
@@ -60,7 +76,7 @@ BACKEND=(
 ```
 
 Prepare one UUID operation ID and one reviewed cutoff, count, and disposition
-for each type. Every flag is positional and repeated five times:
+for each type. Every flag is positional and repeated six times:
 
 ```bash
 operation_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
@@ -77,6 +93,8 @@ cutoff=2026-08-01T00:00:00+03:00
   --event-type tenant.website.product_availability.requested \
   --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
   --event-type tenant.website.repair_diagnostic.created \
+  --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send \
+  --event-type tenant.incoming.created \
   --cutoff "${cutoff}" --expected-count 0 --disposition terminal_no_send
 ```
 
@@ -89,7 +107,7 @@ candidate count, choose a reviewed disposition, rerun dry-run, then add
   non-terminal delivery without a provider call.
 - An ambiguous attempt is preserved as ambiguous and can never be claimed
   again. It is never converted into a retry.
-- Execution requires a manifest containing each of the five types exactly once.
+- Execution requires a manifest containing each of the six types exactly once.
   A count change, lock conflict, malformed lifecycle, ownership conflict, or
   inventory overflow aborts the whole transaction.
 - Execution is accepted only on the writable primary while the managed runtime
@@ -99,11 +117,11 @@ candidate count, choose a reviewed disposition, rerun dry-run, then add
 The report is per event type and contains aggregate counts plus the operation
 UUID. It never contains payloads, destinations, rendered messages, customer
 data, tokens, connection strings, or raw database errors. Do not continue until
-all five entries have `remaining_candidate_count=0`, no retain disposition,
+all six entries have `remaining_candidate_count=0`, no retain disposition,
 and the manifest reports `activation_safe=true`.
 
 Each `--execute` UUID creates a durable PII-free operation audit before the
-mutation transaction. The audit stores the canonical five-entry manifest and
+mutation transaction. The audit stores the canonical six-entry manifest and
 its SHA-256 plus aggregate per-type counts only. Event mutations and a
 `succeeded` outcome commit atomically. A blocked or failed execution first
 rolls back every event/delivery mutation, then durably records the fixed failure
@@ -115,8 +133,27 @@ is committed before any concurrent replay can proceed. Audit rows cannot be
 deleted or rewritten.
 
 The later activation command re-acquires the exclusive website enqueue fence
-and re-queries the complete five-type backlog in the same transaction. A stale
+and re-queries the complete six-type backlog in the same transaction. A stale
 manifest report cannot authorize activation.
+
+## Full activation
+
+After the explicitly approved backlog operation succeeds, release matching
+`true/true` profiles on both nodes through the normal CI and attested HA
+deployment. Keep runtime control `off` throughout this deployment. Run
+`scripts/communications_installation_notifications.py --plan` inside the active
+**communications worker** container so inspection uses its actual deployment
+gates; the API container intentionally has different defaults. Only a plan
+without blockers permits `--enable`. The command rechecks the complete backlog
+and current recipients atomically. Never override a blocker with direct SQL.
+
+Verify `--status`, a fresh heartbeat, `mode=all`, `status=running`, no runtime
+error, and the existing API smoke checks. A real new incoming must produce its
+outbox event and a provider-acknowledged `sent` delivery for each intended
+recipient. Do not create a fictitious customer request for a smoke test.
+If no new incoming occurs during verification, report that delivery evidence is
+pending rather than claiming an end-to-end send. Emergency-off below is the
+immediate rollback and preserves all source requests and delivery evidence.
 
 ## Exact website canary
 
@@ -210,7 +247,7 @@ The compatibility control command still owns the independent emergency path:
 "${BACKEND[@]}" scripts/communications_installation_notifications.py --off
 ```
 
-Its name is historical; help and status cover the full five-type website
+Its name is historical; help and status cover the full six-type incoming
 allowlist. Emergency off needs no token or recipient lookup. If a website canary
 is active, it first records terminal `aborted` in the durable canary audit and
 then clears the runtime reference. If that audit cannot be verified, off fails

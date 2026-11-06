@@ -192,6 +192,7 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
         TENANT_WEBSITE_CONTACT_LEAD_CREATED_EVENT,
         TENANT_WEBSITE_AVAILABILITY_REQUESTED_EVENT,
         TENANT_WEBSITE_REPAIR_DIAGNOSTIC_CREATED_EVENT,
+        "tenant.incoming.created",
     )
     assert ALL_TEMPLATE_KEYS == (
         INSTALLATION_ESTIMATE_TEMPLATE_KEY,
@@ -199,6 +200,7 @@ def test_processing_scope_factories_are_closed_immutable_allowlists():
         TENANT_WEBSITE_CONTACT_TEMPLATE_KEY,
         TENANT_WEBSITE_AVAILABILITY_TEMPLATE_KEY,
         TENANT_WEBSITE_REPAIR_TEMPLATE_KEY,
+        "telegram.tenant_incoming_created",
     )
     assert PUBLIC_ORDER_CREATED_EVENT not in ALL_EVENT_TYPES
     assert PUBLIC_CONTACT_LEAD_CREATED_EVENT not in ALL_EVENT_TYPES

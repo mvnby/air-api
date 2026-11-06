@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from schemas_common import Meta
+from schemas_website_context import WebsiteSubmissionContext
 
 
 CompatibilityStatus = Literal["confirmed", "requires_specialist", "incompatible"]
@@ -67,6 +68,7 @@ class ManagerMultiSplitPreviewResponse(MultiSplitPreviewResponse):
 
 
 class MultiSplitLeadPayload(BaseModel):
+    submission_context: WebsiteSubmissionContext | None = None
     configuration: MultiSplitPreviewRequest
     name: str = Field(min_length=1, max_length=160)
     phone: str = Field(min_length=7, max_length=40)

@@ -2,7 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { WebsiteSubmissionContext } from './WebsiteSubmissionContext';
 export type LeadCreatePayload = {
+    submission_context?: (WebsiteSubmissionContext | null);
     source?: string;
     name?: (string | null);
     phone?: (string | null);

@@ -151,6 +151,7 @@ class LeadService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        notify_incoming: bool = True,
     ) -> Dict[str, Any]:
         """Compatibility delegate to the transactional Lead command."""
         from services.lead_command_service import LeadCommandService
@@ -159,6 +160,7 @@ class LeadService:
             session,
             payload,
             tenant_scope=tenant_scope,
+            notify_incoming=notify_incoming,
         )
 
     @staticmethod

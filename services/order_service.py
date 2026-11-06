@@ -962,6 +962,7 @@ class OrderService:
         order_technical_meta: Optional[Dict[str, Any]] = None,
         product_link_command: Optional[OrderProductLinkCommand] = None,
         commit: bool = True,
+        notify_incoming: bool = True,
     ) -> Order:
         """
         Create order from website checkout.
@@ -1463,6 +1464,9 @@ class OrderService:
         await session.flush()
         await OrderService._refresh_order_financials(session, order)
         session.add(order)
+        if notify_incoming and initial_status == OrderStatus.NEW_LEAD:
+            from services.communications.incoming_events import IncomingEventService
+            await IncomingEventService.enqueue_order(session, order)
         if commit:
             await session.commit()
             await session.refresh(order)

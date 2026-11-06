@@ -305,6 +305,8 @@ class BelzakupkiImportService:
                 if order is None:
                     raise
             else:
+                from services.communications.incoming_events import IncomingEventService
+                await IncomingEventService.enqueue_order(session, order)
                 result.created += 1
                 return
 

@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from services.communications.canary_run_id import CANARY_RUN_ID_PATTERN
 
 
@@ -73,6 +75,7 @@ class PublicOrderServiceLineSnapshotV1(_ContractV1):
 
 
 class PublicOrderCreatedPayloadV1(_ContractV1):
+    submission_context: WebsiteSubmissionContext | None = None
     order_id: int = Field(gt=0)
     status: str = Field(min_length=1, max_length=40)
     customer: PublicOrderCustomerSnapshotV1
@@ -93,6 +96,7 @@ class PublicOrderCreatedPayloadV1(_ContractV1):
 
 
 class PublicContactLeadCreatedPayloadV1(_ContractV1):
+    submission_context: WebsiteSubmissionContext | None = None
     lead_id: int = Field(gt=0)
     status: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=1, max_length=160)
@@ -103,6 +107,7 @@ class PublicContactLeadCreatedPayloadV1(_ContractV1):
 
 
 class InstallationEstimateLeadCreatedPayloadV1(_ContractV1):
+    submission_context: WebsiteSubmissionContext | None = None
     tenant_id: int = Field(gt=0)
     storefront_id: int = Field(gt=0)
     order_id: int = Field(gt=0)
@@ -127,6 +132,7 @@ class TenantWebsiteContactLeadCreatedPayloadV1(PublicContactLeadCreatedPayloadV1
 
 
 class TenantWebsiteAvailabilityRequestedPayloadV1(_ContractV1):
+    submission_context: WebsiteSubmissionContext | None = None
     tenant_id: int = Field(gt=0)
     storefront_id: int = Field(gt=0)
     order_id: int = Field(gt=0)
@@ -140,6 +146,7 @@ class TenantWebsiteAvailabilityRequestedPayloadV1(_ContractV1):
 
 
 class TenantWebsiteRepairDiagnosticCreatedPayloadV1(_ContractV1):
+    submission_context: WebsiteSubmissionContext | None = None
     tenant_id: int = Field(gt=0)
     storefront_id: int = Field(gt=0)
     order_id: int = Field(gt=0)
