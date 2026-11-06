@@ -1,0 +1,30 @@
+{
+  "bundle_id": "mvn-paper-waybills-v1",
+  "target": {
+    "tenant_slug": "mvn",
+    "tenant_id": 1,
+    "default_legal_entity_id": 1,
+    "is_vat_payer": false
+  },
+  "description": "Две формы печати на бланке A4 для основного продавца MVN без НДС.",
+  "templates": [
+    {
+      "key": "tn2",
+      "name": "ТН-2 · печать на бланке",
+      "doc_type": "tn2",
+      "description": "Книжный A4, печать на бланке. Сверьте поля и количество страниц в предпросмотре.",
+      "source_filename": "tn2-paper-v1.docx",
+      "sha256": "6ddf47322f624f93bcb912a6ff9771ae363edb4881e8560ee2699bc1330735c9",
+      "sort_order": 50
+    },
+    {
+      "key": "ttn1",
+      "name": "ТТН-1 · печать на бланке",
+      "doc_type": "ttn1",
+      "description": "Книжный A4, печать на бланке. Сверьте поля и количество страниц в предпросмотре.",
+      "source_filename": "ttn1-paper-v1.docx",
+      "sha256": "5614cc50cc5f16ebdca00410e6cd8471bd4f9c3a400cd1ee9b01b2bc229ec930",
+      "sort_order": 50
+    }
+  ]
+}

@@ -49,12 +49,11 @@ def assign_official_identity(
     return snapshot, values
 
 
-async def render_and_store_issued_artifacts(
+async def render_issued_files(
     *,
     tenant_id: int,
-    document_id: int,
     document_type: str,
-    official_full_number: str,
+    basename: str,
     contract_act_number: int | None,
     template,
     version,
@@ -63,10 +62,9 @@ async def render_and_store_issued_artifacts(
     editable_source: bytes | None,
     required_placeholder_counts: dict[str, int] | None,
     template_storage: TemplateSourceStorage,
-    artifact_storage: DocumentArtifactStorage,
     pdf_converter: PdfConverter,
-) -> tuple[StoredDocumentArtifact, StoredDocumentArtifact]:
-    """Render final DOCX/PDF bytes and persist them through immutable storage."""
+) -> tuple[bytes, bytes]:
+    """Render the exact document used for both downloads."""
 
     source = editable_source
     if source is None:
@@ -111,12 +109,44 @@ async def render_and_store_issued_artifacts(
             render_template, render_context
         ).content
 
-    basename = artifact_basename(document_type, official_full_number)
     pdf_content = await asyncio.to_thread(
         pdf_converter.convert_docx,
         rendered_content,
         filename=f"{basename}.docx",
     )
+    return rendered_content, pdf_content
+
+
+async def render_and_store_issued_artifacts(
+    *,
+    tenant_id: int,
+    document_id: int,
+    document_type: str,
+    official_full_number: str,
+    contract_act_number: int | None,
+    template,
+    version,
+    snapshot: dict,
+    official_values: dict,
+    editable_source: bytes | None,
+    required_placeholder_counts: dict[str, int] | None,
+    template_storage: TemplateSourceStorage,
+    artifact_storage: DocumentArtifactStorage,
+    pdf_converter: PdfConverter,
+    prepared_files: tuple[bytes, bytes] | None = None,
+) -> tuple[StoredDocumentArtifact, StoredDocumentArtifact]:
+    """Render final DOCX/PDF bytes and persist them through immutable storage."""
+
+    basename = artifact_basename(document_type, official_full_number)
+    if prepared_files is None:
+        prepared_files = await render_issued_files(
+            tenant_id=tenant_id, document_type=document_type, basename=basename,
+            contract_act_number=contract_act_number,
+            template=template, version=version, snapshot=snapshot, official_values=official_values,
+            editable_source=editable_source, required_placeholder_counts=required_placeholder_counts,
+            template_storage=template_storage, pdf_converter=pdf_converter,
+        )
+    rendered_content, pdf_content = prepared_files
     stored_docx = await artifact_storage.save(
         tenant_id=tenant_id,
         document_id=document_id,

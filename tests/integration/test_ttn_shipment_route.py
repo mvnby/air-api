@@ -18,6 +18,7 @@ def _transport_template():
     doc.add_paragraph("ТТН-1 № {{ document.official_full_number }}")
     doc.add_paragraph("Путевой лист: {{ transport.trip_sheet_number }}")
     doc.add_paragraph("Плательщик: {{ transport.freight_payer }}")
+    doc.add_paragraph("УНП плательщика: {{ transport.freight_payer_unp }}")
     doc.add_paragraph("Погрузка: {{ transport.loading_point }}")
     doc.add_paragraph("Разгрузка: {{ transport.unloading_point }}")
     for stage in ("loading", "unloading"):
@@ -82,7 +83,8 @@ async def test_manager_ttn_route_preview_edit_and_issue(async_client, db, monkey
     terms = dict(
         car_number="1234 АА-1",
         trip_sheet_number="б/н",
-        freight_payer="Грузоотправитель",
+        freight_payer="Учебный перевозчик",
+        freight_payer_unp="012345678",
         loading_point="Учебный склад 1",
         unloading_point="Учебный склад 2",
         loading={
@@ -109,6 +111,7 @@ async def test_manager_ttn_route_preview_edit_and_issue(async_client, db, monkey
         "0:30",
     ]
     assert [c.text for c in captured[-1].tables[1].rows[0].cells] == [""] * 5
+    assert "УНП плательщика: 012345678" in [p.text for p in captured[-1].paragraphs]
     parameters_url = f"{doc}/draft/parameters"
 
     async def edit(change):
@@ -140,6 +143,9 @@ async def test_manager_ttn_route_preview_edit_and_issue(async_client, db, monkey
     assert (
         await edit({"unloading": {"arrived_at": "2026-02-31T10:00"}})
     ).status_code == 422
+    assert after["freight_payer_unp"] == "012345678"
+    assert (await edit({"freight_payer_unp": "123-45678"})).status_code == 422
+    assert (await edit({"freight_payer_unp": "12345678"})).status_code == 422
     update = await edit(
         {
             "unloading_point": "Учебный склад 3",
@@ -158,6 +164,7 @@ async def test_manager_ttn_route_preview_edit_and_issue(async_client, db, monkey
     saved = Document(BytesIO(download.content))
     text = [p.text.strip() for p in saved.paragraphs]
     assert "Погрузка: Учебный склад 1" in text and "Разгрузка: Учебный склад 3" in text
+    assert "УНП плательщика:" in text
     assert "Плательщик:" in text and "Путевой лист: б/н" in text
     assert [c.text for c in saved.tables[1].rows[0].cells] == [
         "Получатель",

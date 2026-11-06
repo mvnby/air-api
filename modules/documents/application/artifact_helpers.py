@@ -13,6 +13,7 @@ from models import DocumentArtifact, DocumentTemplate, DocumentTemplateVersion
 from modules.documents.domain.customer_signing import customer_signing_text
 from .customer_readiness import READINESS_DOCUMENT_TYPES, snapshot_customer_readiness
 from modules.documents.infrastructure.renderers.legacy_customer_marker import remove_legacy_customer_marker
+from .waybill_paper import EXEMPT_TOTAL, check_waybill_tax_profile, project_paper_waybill_values
 from modules.documents.infrastructure.artifact_storage import StoredDocumentArtifact
 from modules.documents.infrastructure.renderers import (
     DocumentTemplateVersion as RenderTemplateVersion,
@@ -56,6 +57,11 @@ def build_render_inputs(
         # Older snapshots sometimes contain a dotted/dashed line or a printed
         # hint instead of a fact. Normalize the presentation copy only.
         snapshot_values[item["field"]] = ""
+    if getattr(template, "doc_type", None) in {"tn2", "ttn1"}:
+        project_paper_waybill_values(snapshot_values, field_catalog)
+    if EXEMPT_TOTAL in field_catalog:
+        check_waybill_tax_profile(snapshot, version.placeholder_schema, template.doc_type)
+        snapshot_values[EXEMPT_TOTAL] = snapshot_values.get("totals.amount", "")
     # Use frozen party metadata before projecting to the template allowlist.
     # Handwriting hints belong only to rendering, never to the factual snapshot.
     if snapshot_values.get("customer.entity_type"):

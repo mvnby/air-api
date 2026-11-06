@@ -104098,6 +104098,20 @@
             ],
             "title": "Freight Payer"
           },
+          "freight_payer_unp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 9,
+                "minLength": 9,
+                "pattern": "^[0-9]{9}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freight Payer Unp"
+          },
           "loading_point": {
             "anyOf": [
               {

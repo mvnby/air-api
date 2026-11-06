@@ -80,6 +80,7 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("transport.driver_name", "ФИО водителя", "Транспорт"),
     PlaceholderDescriptor("transport.carrier", "Перевозчик", "Транспорт"),
     PlaceholderDescriptor("transport.trip_sheet_number", "Номер путевого листа", "Транспорт"),
+    PlaceholderDescriptor("transport.freight_payer_unp", "УНП заказчика автоперевозки", "Транспорт"),
     PlaceholderDescriptor("transport.freight_payer", "Заказчик автоперевозки (плательщик)", "Транспорт"),
     PlaceholderDescriptor("transport.loading_point", "Пункт погрузки", "Транспорт"),
     PlaceholderDescriptor("transport.unloading_point", "Пункт разгрузки", "Транспорт"),
@@ -237,6 +238,13 @@ SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     ),
     PlaceholderDescriptor("totals.seats", "Всего грузовых мест", "Итоги"),
     PlaceholderDescriptor("totals.seats_in_words", "Всего грузовых мест прописью", "Итоги"),
+    *(
+        PlaceholderDescriptor(f"waybill.{stage}.{event}", f"{label} · {description} на бланке (ДД.ММ.ГГ)", "Транспорт")
+        for stage, label in (("loading", "Погрузка"), ("unloading", "Разгрузка"))
+        for event, description in (("arrived_at", "прибытие"), ("departed_at", "убытие"))
+    ),
+    PlaceholderDescriptor("waybill.preprinted_a4", "Контроль одного печатного бланка A4", "Транспорт"),
+    PlaceholderDescriptor("waybill.no_vat_total", "Итого накладной для продавца без НДС", "Итоги"),
     PlaceholderDescriptor("totals.weight", "Общая масса", "Итоги"),
     PlaceholderDescriptor("totals.weight_in_words", "Общая масса прописью", "Итоги"),
 )

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from modules.documents.domain.transport_terms import TransportOperation
+from modules.documents.domain.transport_terms import FreightPayerUnp, TransportOperation
 from modules.documents.domain import (
     B2C_NATIVE_DOCUMENT_TYPES,
     BUSINESS_TERMS_DOCUMENT_TYPES,
@@ -408,6 +408,7 @@ class TransportTermsPayload(BaseModel):
     carrier: str | None = Field(default=None, max_length=500)
     trip_sheet_number: str | None = Field(default=None, max_length=100)
     freight_payer: str | None = Field(default=None, max_length=500)
+    freight_payer_unp: FreightPayerUnp | None = None
     loading_point: str | None = Field(default=None, max_length=500)
     unloading_point: str | None = Field(default=None, max_length=500)
     loading: TransportOperation | None = None

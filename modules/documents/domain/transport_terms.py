@@ -6,6 +6,7 @@ from pydantic.dataclasses import dataclass
 
 
 WAYBILL_DOCUMENT_TYPES = frozenset({"tn2", "ttn1"})
+FreightPayerUnp = Annotated[str, Field(min_length=9, max_length=9, pattern=r"^[0-9]{9}$")]
 LOCAL_MINUTE = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
 
 
@@ -48,6 +49,7 @@ class TransportTerms:
     carrier: str | None = None
     trip_sheet_number: str | None = None
     freight_payer: str | None = None
+    freight_payer_unp: FreightPayerUnp | None = None
     loading_point: str | None = None
     unloading_point: str | None = None
     loading: TransportOperation | None = None

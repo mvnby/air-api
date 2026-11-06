@@ -13,6 +13,7 @@ export type TransportTermsPayload = {
     carrier?: (string | null);
     trip_sheet_number?: (string | null);
     freight_payer?: (string | null);
+    freight_payer_unp?: (string | null);
     loading_point?: (string | null);
     unloading_point?: (string | null);
     loading?: (TransportOperation | null);

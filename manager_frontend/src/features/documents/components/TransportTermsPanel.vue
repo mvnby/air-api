@@ -16,6 +16,7 @@ const routeFields = [
   { key: 'unloading_point', label: 'Пункт разгрузки', max: 500 },
   { key: 'trip_sheet_number', label: 'Номер путевого листа', max: 100 },
   { key: 'freight_payer', label: 'Заказчик автоперевозки (плательщик)', max: 500 },
+  { key: 'freight_payer_unp', label: 'УНП плательщика', max: 9 },
 ] as const;
 const operationFields = [
   { key: 'performer', label: 'Исполнитель', type: 'text', max: 300 },
@@ -26,8 +27,12 @@ const operationFields = [
 ] as const;
 
 const valueOf = (event: Event) => (event.target as HTMLInputElement).value;
-const update = (field: keyof TransportTerms, event: Event) =>
-  emit('updateTerms', { ...props.terms, [field]: valueOf(event) || null });
+const update = (field: keyof TransportTerms, event: Event) => {
+  const value = valueOf(event) || null;
+  const next = { ...props.terms, [field]: value };
+  if (field === 'freight_payer' && value !== props.terms.freight_payer) next.freight_payer_unp = null;
+  emit('updateTerms', next);
+};
 const updateOperation = (stage: HandlingStage, key: keyof TransportOperation, event: Event) => {
   const value = valueOf(event);
   const updated = { ...props.terms[stage], [key]: value && key === 'downtime_minutes' ? Number(value) : value || null };
@@ -50,7 +55,8 @@ const updateOperation = (stage: HandlingStage, key: keyof TransportOperation, ev
         <span>{{ field.label }}</span>
         <textarea v-if="field.key === 'loading_point' || field.key === 'unloading_point' || field.key === 'freight_payer'"
           :value="terms[field.key] || ''" :maxlength="field.max" rows="2" @input="update(field.key, $event)" />
-        <input v-else :value="terms[field.key] || ''" :maxlength="field.max" @input="update(field.key, $event)" />
+        <input v-else :value="terms[field.key] || ''" :maxlength="field.max"
+          :inputmode="field.key === 'freight_payer_unp' ? 'numeric' : undefined" @input="update(field.key, $event)" />
       </label>
     </div>
     <div class="mt-3 grid min-w-0 gap-2">

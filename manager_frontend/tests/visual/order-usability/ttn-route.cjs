@@ -123,6 +123,11 @@ async function examine(browser, width) {
       'Пункт погрузки':'Витебск, учебный склад 1','Пункт разгрузки':'Витебск, учебный склад с длинным названием 2',
       'Номер путевого листа':'б/н','Заказчик автоперевозки (плательщик)':'Грузоотправитель',
     })) await panel.getByLabel(label, {exact:true}).fill(value);
+    const taxId = panel.getByLabel('УНП плательщика', {exact:true});
+    assert.equal(await taxId.inputValue(), '');
+    await taxId.fill('0123');
+    assert.equal(await page.getByTestId('create-native-draft').isEnabled(), false);
+    await taxId.fill('012345678');
     const loading = panel.getByTestId('ttn-loading-operation');
     await loading.locator('summary').click();
     for (const [label, value] of Object.entries({
@@ -145,10 +150,15 @@ async function examine(browser, width) {
     assert.equal(state.creates[1].template_id,211);
     const editor = card.getByTestId('transport-terms-panel');
     assert.equal(await editor.getByLabel('Номер путевого листа').inputValue(), 'б/н');
+    assert.equal(await editor.getByLabel('УНП плательщика').inputValue(), '012345678');
+    await editor.getByLabel('Заказчик автоперевозки (плательщик)').fill('Учебный перевозчик');
+    assert.equal(await editor.getByLabel('УНП плательщика').inputValue(), '');
+    await editor.getByLabel('УНП плательщика').fill('987654321');
     await editor.getByLabel('Пункт разгрузки').fill('Склад 3');
     await card.getByTestId('save-draft-parameters').click();
     await editor.waitFor({state:'detached'});
     assert.equal(state.route.unloading_point,'Склад 3');
+    assert.equal(state.route.freight_payer_unp,'987654321');
     assert.equal(state.route.loading.downtime_minutes,30);
     assert(await page.evaluate(()=>document.documentElement.scrollWidth <= document.documentElement.clientWidth));
     assert.deepEqual(errors, []);
