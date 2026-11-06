@@ -10,6 +10,12 @@ const origin = `http://127.0.0.1:${port}`;
 const output = process.env.KITLANE_SCREENSHOTS || '/tmp/mvn-ttn-route-screens';
 const fixture = createFixtureServer(port, async (req, res, {url, state, json, body}) => {
   const p = url.pathname;
+  if (p.endsWith('/waybill-composition')) {
+    assert.equal(url.searchParams.get('proposal_id'), '586');
+    json(res, {source_revision: 'd'.repeat(64), lines: [{order_product_line_id: 10, product_id: 10,
+      title: 'Вентилятор', country: '', quantity: 1, unit_price: '500.00', components: null}]});
+    return true;
+  }
   if (p.endsWith('/request-context')) json(res, { sources: [], warnings: [], files: [] });
   else if (p.endsWith('/customers/541/contracts')) json(res, { items: [] });
   else if (p.endsWith('/document-system/legal-entities')) {
@@ -71,6 +77,7 @@ async function examine(browser, width) {
     const warning = page.getByTestId('waybill-template-status');
     await warning.getByText('Для «Второе юрлицо» нужно подключить шаблон ТН-2.').waitFor();
     assert.equal(await panel.count(),0);
+    assert.equal(await page.getByTestId('native-waybill-composition').count(),0);
     assert.equal(await create.isEnabled(),false);
     assert(await page.getByTestId('current-document-901').getByRole('button',{name:'Выпустить',exact:true}).isEnabled());
     await warning.screenshot({path:path.join(output,`${width}-missing-template.png`),animations:'disabled'});
@@ -101,6 +108,7 @@ async function examine(browser, width) {
     await page.getByTestId('current-document-862').waitFor();
     assert.equal(state.creates[0].document_type,'tn2');
     assert.equal(state.creates[0].template_id,111);
+    assert.equal(state.creates[0].waybill_composition.source_revision,'d'.repeat(64));
     assert(!Object.hasOwn(state.creates[0],'transport_terms'));
     await page.getByTestId('native-document-type-ttn1').click();
     await warning.getByText(/нет активной версии DOCX/).waitFor();

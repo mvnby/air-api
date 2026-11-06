@@ -8,6 +8,7 @@ import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayloa
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
+import type { WaybillComposition_Input } from './WaybillComposition_Input';
 export type ManagedDocumentDraftPayload = {
     /**
      * Для совместимости. Неизвестные реквизиты можно вписать от руки без дополнительного подтверждения.
@@ -38,6 +39,7 @@ export type ManagedDocumentDraftPayload = {
     act_terms?: (ActTermsPayload | null);
     transport_terms?: (TransportTermsPayload | null);
     repair_defect?: (RepairDefect | null);
+    waybill_composition?: (WaybillComposition_Input | null);
     receipt_note?: (string | null);
     warranty_equipment_id?: (number | null);
     participant_statement?: (ParticipantStatementPayload | null);

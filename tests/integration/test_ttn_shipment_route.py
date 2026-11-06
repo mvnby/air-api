@@ -5,7 +5,7 @@ from io import BytesIO
 import pytest
 from docx import Document
 
-from models import OrderDocument
+from models import OrderDocument, OrderProductLink, Product
 from tests.integration import test_manager_document_system_api as api
 from tests.integration.test_manager_document_system_api import (
     BASE,
@@ -67,7 +67,10 @@ async def test_manager_ttn_route_preview_edit_and_issue(async_client, db, monkey
         official_series="Д-",
         official_period_key="2026",
     )
-    db.add(basis)
+    freight = Product(title="Вентилятор", slug="ttn-route-test-fan", price=500)
+    db.add_all([basis, freight])
+    await db.flush()
+    db.add(OrderProductLink(order_id=order.id, product_id=freight.id, quantity=1, price=500))
     await db.commit()
     selection = dict(
         legal_entity_id=issuer,

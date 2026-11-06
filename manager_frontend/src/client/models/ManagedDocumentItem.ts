@@ -6,8 +6,10 @@ import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
+import type { WaybillComposition_Output } from './WaybillComposition_Output';
 export type ManagedDocumentItem = {
     scope_product_line_ids?: (Array<number> | null);
+    waybill_composition?: (WaybillComposition_Output | null);
     repair_defect?: (RepairDefect | null);
     receipt_note?: (string | null);
     warranty_equipment_id?: (number | null);

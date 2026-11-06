@@ -1,57 +1,118 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Mapping, Sequence
 
 from models import OrderProductLink
+from modules.documents.domain.waybill_composition import (
+    WaybillComponent,
+    WaybillComposition,
+    WaybillCompositionSource,
+    WaybillSourceLine,
+)
 
 
-DEFAULT_COUNTRY = "Китай"
+def waybill_composition_source(
+    product_links: Sequence[OrderProductLink],
+) -> WaybillCompositionSource:
+    """Return the same scoped source to the editor and to the final draft check."""
+    groups = []
+    for link in sorted(product_links, key=lambda item: item.id):
+        product = link.product
+        if link.quantity is None or link.quantity <= 0:
+            raise ValueError("Укажите положительное количество товара в предложении")
+        parent_price = _decimal(link.price)
+        saved = _order_components(link.logistics_components)
+        components = saved or _catalog_components(
+            getattr(product, "specs", None), parent_price
+        )
+        groups.append(
+            WaybillSourceLine(
+                order_product_line_id=link.id,
+                product_id=link.product_id,
+                title=link.title_snapshot or getattr(product, "title", "") or "Товар",
+                country=_product_country(getattr(product, "specs", None)),
+                quantity=link.quantity,
+                unit_price=_money(parent_price),
+                components=[
+                    WaybillComponent(
+                        **{**item, "unit_price": _money(item["unit_price"])}
+                    )
+                    for item in components
+                ]
+                or None,
+            )
+        )
+    encoded = json.dumps(
+        [group.model_dump() for group in groups],
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
+    return WaybillCompositionSource(
+        source_revision=hashlib.sha256(encoded).hexdigest(), lines=groups
+    )
 
 
 def build_logistics_rows(
     product_links: Sequence[OrderProductLink],
+    composition: WaybillComposition | None = None,
 ) -> list[dict[str, str]]:
-    """Expand saved product composition into reproducible paper-waybill rows."""
-
-    rows: list[dict[str, str]] = []
-    for link in product_links:
-        product = link.product
-        parent_title = str(
-            link.title_snapshot or getattr(product, "title", "") or "Товар"
-        )
-        parent_quantity = _positive_int(link.quantity, 1)
-        parent_price = _decimal(link.price)
-        components = _order_components(link.logistics_components)
-        if components:
-            components = _balance_saved_components(components, parent_price)
-        else:
-            components = _catalog_components(
-                getattr(product, "specs", None), parent_price
+    """Validate per-product prices before freezing the rows in the document snapshot."""
+    source = waybill_composition_source(product_links)
+    if not source.lines:
+        raise ValueError("В выбранном предложении нет товаров для накладной")
+    choices = {}
+    if composition is not None:
+        if composition.source_revision != source.source_revision:
+            raise ValueError(
+                "Товары предложения изменились. Обновите состав накладной и проверьте строки"
             )
-        if not components:
+        choices = {line.order_product_line_id: line for line in composition.lines}
+        if len(choices) != len(composition.lines) or choices.keys() != {
+            line.order_product_line_id for line in source.lines
+        }:
+            raise ValueError(
+                "Состав накладной должен содержать каждую товарную строку выбранного предложения один раз"
+            )
+    rows: list[dict[str, str]] = []
+    for group in source.lines:
+        choice = choices.get(group.order_product_line_id)
+        components = choice.components if choice else group.components
+        if components is None:
+            country = (
+                choice.whole_country.strip()
+                if choice and choice.whole_country is not None
+                else group.country
+            )
             components = [
-                {
-                    "title": parent_title,
-                    "country": _product_country(getattr(product, "specs", None))
-                    or DEFAULT_COUNTRY,
-                    "unit": "шт.",
-                    "quantity_per_parent": 1,
-                    "unit_price": parent_price,
-                }
+                WaybillComponent(
+                    title=group.title,
+                    country=country,
+                    unit="шт.",
+                    quantity_per_parent=1,
+                    unit_price=group.unit_price,
+                )
             ]
-
+        if sum(
+            Decimal(part.unit_price) * part.quantity_per_parent for part in components
+        ) != Decimal(group.unit_price):
+            raise ValueError(
+                f"Проверьте цены и количество в составе «{group.title}»: за комплект должно быть {group.unit_price} BYN"
+            )
         for component in components:
-            quantity = parent_quantity * int(component["quantity_per_parent"])
-            unit_price = _decimal(component["unit_price"])
+            quantity = group.quantity * component.quantity_per_parent
+            unit_price = Decimal(component.unit_price)
             amount = unit_price * quantity
             rows.append(
                 {
                     "line.number": str(len(rows) + 1),
-                    "line.title": str(component["title"]),
+                    "line.title": component.title,
                     "line.kind": "product",
-                    "line.country": str(component["country"]),
-                    "line.unit": str(component["unit"]),
+                    "line.country": component.country,
+                    "line.unit": component.unit,
                     "line.quantity": str(quantity),
                     "line.unit_price": _money(unit_price),
                     "line.amount": _money(amount),
@@ -79,7 +140,7 @@ def _order_components(raw: object) -> list[dict[str, object]]:
         result.append(
             {
                 "title": title,
-                "country": _clean(item.get("country")) or DEFAULT_COUNTRY,
+                "country": _clean(item.get("country")),
                 "unit": _clean(item.get("unit")) or "шт.",
                 "quantity_per_parent": _positive_int(
                     item.get("quantity_per_parent"), 1
@@ -109,9 +170,7 @@ def _catalog_components(
         components.append(
             {
                 "title": title,
-                "country": _clean(item.get("country"))
-                or _product_country(raw_specs)
-                or DEFAULT_COUNTRY,
+                "country": _clean(item.get("country")) or _product_country(raw_specs),
                 "unit": _clean(item.get("unit")) or "шт.",
                 "quantity_per_parent": _positive_int(
                     item.get("quantity_per_parent"), 1
@@ -137,27 +196,6 @@ def _catalog_components(
             )
             remaining -= component_total
         component["unit_price"] = component_total / quantity
-    return components
-
-
-def _balance_saved_components(
-    components: list[dict[str, object]],
-    parent_price: Decimal,
-) -> list[dict[str, object]]:
-    per_parent = sum(
-        (
-            _decimal(item["unit_price"]) * int(item["quantity_per_parent"])
-            for item in components
-        ),
-        Decimal("0"),
-    )
-    if per_parent == parent_price:
-        return components
-    last = components[-1]
-    quantity = Decimal(int(last["quantity_per_parent"]))
-    last["unit_price"] = _decimal(last["unit_price"]) + (
-        (parent_price - per_parent) / quantity
-    )
     return components
 
 

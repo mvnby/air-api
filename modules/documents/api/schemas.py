@@ -14,6 +14,7 @@ from modules.documents.domain import (
     WAYBILL_DOCUMENT_TYPES,
 )
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
+from modules.documents.domain.waybill_composition import WaybillComposition
 from modules.documents.domain.repair_defect import RepairDefect
 from .participant_statement_schemas import ParticipantStatementPayload
 from services.envelope_branding_service import EnvelopeBranding
@@ -328,6 +329,7 @@ class ManagedDocumentDraftPayload(BaseModel):
     act_terms: ActTermsPayload | None = None
     transport_terms: "TransportTermsPayload | None" = None
     repair_defect: RepairDefect | None = None
+    waybill_composition: WaybillComposition | None = None
     receipt_note: str | None = Field(default=None, max_length=1500)
     warranty_equipment_id: int | None = Field(default=None, gt=0)
     participant_statement: ParticipantStatementPayload | None = None
@@ -495,6 +497,7 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 
 class ManagedDocumentItem(BaseModel):
     scope_product_line_ids: list[int] | None = None
+    waybill_composition: WaybillComposition | None = None
     repair_defect: RepairDefect | None = None
     receipt_note: str | None = None
     warranty_equipment_id: int | None = None

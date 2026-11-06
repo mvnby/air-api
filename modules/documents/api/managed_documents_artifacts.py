@@ -682,6 +682,7 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
             scoped_products = saved_ids
     return ManagedDocumentItem(
         scope_product_line_ids=scoped_products,
+        waybill_composition=((document.render_snapshot or {}).get("meta") or {}).get("waybill_composition"),
         repair_defect=(
             (document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("repair_defect")
             if document.doc_type == "repair_defect_act" else None

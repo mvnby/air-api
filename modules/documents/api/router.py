@@ -28,6 +28,7 @@ from . import (
     registration_certificates,
     template_external_edits,
     templates_runtime,
+    waybill_composition,
 )
 
 
@@ -47,6 +48,7 @@ router = APIRouter()
 router.include_router(draft_parameters.router)
 router.include_router(condition_presets.router)
 router.include_router(consumer_defaults.router)
+router.include_router(waybill_composition.router)
 router.include_router(facsimiles.router)
 router.include_router(legal_entities_number_policies.router)
 router.include_router(templates_runtime.router)

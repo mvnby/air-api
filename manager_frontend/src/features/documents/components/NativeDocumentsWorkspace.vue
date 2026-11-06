@@ -30,6 +30,7 @@ import WarrantyEquipmentPicker from './WarrantyEquipmentPicker.vue';
 import NativeActComposition from './NativeActComposition.vue';
 import { formatDocumentDate as formatDate, useNativeDocumentBasis } from '../composables/use-native-document-basis';
 import { useNativeActComposition } from '../composables/use-native-act-composition';
+import NativeWaybillComposition from './NativeWaybillComposition.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import { transportTermsError } from '../model/transport-terms';
 import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
@@ -94,6 +95,7 @@ const compositionTotalCents = (type: string) => {
     service_lines: proposalServices.value,
   });
 };
+const waybillSelection = ref<import('../../../client').WaybillComposition_Input | null>(null);
 const access = computed(() => getOrderDocumentAccess(props.order.status));
 const contractSource = ref<'ours' | 'customer'>('ours');
 const orderDocuments = ref<ManagerOrderDocumentItem[]>([]);
@@ -106,6 +108,7 @@ const actComposition = useNativeActComposition(
   () => props.order, proposalId, (message, type = 'success') => emit('toast', { message, type }),
 );
 const workspace = useManagedDocumentWorkspace({
+  waybillSelection: () => waybillSelection.value,
   actScope: () => actComposition.payload.value,
   customerContext: () => props.order.customer,
   repairOrder: () => props.order,
@@ -230,6 +233,7 @@ const selectionError = computed(() => {
     const error = transportTermsError(workspace.transportTerms.value);
     if (error) return error;
   }
+  if (['tn2', 'ttn1'].includes(workspace.documentType.value) && !waybillSelection.value) return 'Проверьте состав накладной';
   if (workspace.documentType.value === 'repair_defect_act') return repairDefectFormError(workspace.repairDefect.value);
   if (workspace.documentType.value === 'retail_receipt') {
     if (props.order.customer?.type !== 'individual') return 'Для товарного чека выберите покупателя-физлицо';
@@ -790,6 +794,10 @@ defineExpose({
             :terms="workspace.actTerms.value"
             @update-terms="workspace.actTerms.value = $event"
           />
+          <NativeWaybillComposition v-if="['tn2', 'ttn1'].includes(workspace.documentType.value)" :key="workspace.documentType.value"
+            :order-id="order.id" :proposal-id="proposalId" :replacement-id="workspace.replacesDocumentId.value"
+            :prior="workspace.documents.value.find(doc => doc.id === workspace.replacesDocumentId.value)?.waybill_composition"
+            @change="waybillSelection = $event" />
           <TransportTermsPanel
             v-if="workspace.documentType.value === 'ttn1'"
             :terms="workspace.transportTerms.value"
