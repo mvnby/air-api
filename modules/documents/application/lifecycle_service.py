@@ -399,6 +399,25 @@ class ManagedDocumentService:
                 raise ManagedDocumentConflictError(
                     "Предложение изменилось после подготовки документа. Создайте новый черновик по актуальным строкам."
                 )
+        # Sales offers also freeze the worksite and recorded source context.
+        # Native document parameter edits have their own revision and remain valid.
+        sales_context_version = (document.render_snapshot.get("meta") or {}).get(
+            "sales_order_context_version"
+        )
+        if document.doc_type == "offer" and sales_context_version is not None:
+            from services.order_sales_context_version import sales_order_context_version
+
+            if connector_version is None:
+                await session.execute(
+                    select(Order.id).where(Order.id == document.order_id).with_for_update()
+                )
+            current_sales_context = await sales_order_context_version(
+                session, document.order_id, document.proposal_id
+            )
+            if sales_context_version != current_sales_context:
+                raise ManagedDocumentConflictError(
+                    "Контекст заказа изменился после подготовки предложения. Создайте новый черновик по актуальным условиям."
+                )
         # Validate the frozen customer and term before reserving an official number.
         await prepare_framework_registration(session, document, tenant_scope)
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:

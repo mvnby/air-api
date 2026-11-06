@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kitlane",
-  "version": "1.4.0",
-  "description": "Create service and repair orders with priced proposals and native contract drafts. Prepare mail drafts, send approved versions, select catalog equipment, manage requests, tasks and maintenance in Kitlane.",
+  "version": "1.5.0",
+  "description": "Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Manage service orders, mail, requests, tasks and maintenance in Kitlane.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Kitlane",
         "shortDescription": "Почта, подбор, документы и ТО",
-        "longDescription": "Оформляйте заказы на ремонт и услуги с согласованной ценой. Готовьте договор по выбранному предложению для проверки в Manager. Готовьте самостоятельные почтовые черновики с вложениями и отправляйте только версии, явно подтверждённые в Manager. Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками. Готовьте черновики КП и счетов, сохраняйте обращения, поручения и замечания ТО.",
+        "longDescription": "Подбирайте оборудование с монтажом в общий бюджет, сравнивайте варианты в чате и сохраняйте выбранную продажу с нативным КП. Продолжайте сохранённую сделку в новом разговоре. Оформляйте заказы на ремонт и услуги с согласованной ценой. Готовьте договор по выбранному предложению для проверки в Manager. Готовьте самостоятельные почтовые черновики с вложениями и отправляйте только версии, явно подтверждённые в Manager. Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками. Готовьте черновики КП и счетов, сохраняйте обращения, поручения и замечания ТО.",
         "developerName": "Kitlane",
         "category": "Productivity",
         "capabilities": [

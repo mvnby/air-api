@@ -470,8 +470,13 @@ class CatalogDecisionQueryService:
         *,
         tenant_scope: TenantScope,
         product_ids: list[int] | tuple[int, ...],
+        allowed_accessory_ids: list[int] | tuple[int, ...] = (),
     ) -> dict[int, CatalogDecisionProductSnapshot]:
-        """Resolve authoritative order-line price/cost snapshots in one query."""
+        """Resolve authoritative order-line price/cost snapshots in one query.
+
+        Explicit accessory IDs are for callers that already checked product
+        compatibility and public visibility; the default remains complete splits.
+        """
         ids = tuple(dict.fromkeys(int(product_id) for product_id in product_ids))
         if not ids:
             return {}
@@ -484,7 +489,11 @@ class CatalogDecisionQueryService:
         statement = (
             select(Product, retail.label("retail_price_byn"), purchase)
             .outerjoin(metrics, metrics.c.product_id == Product.id)
-            .where(Product.id.in_(ids), cls._complete_split_condition(session))
+            .where(Product.id.in_(ids), or_(
+                cls._complete_split_condition(session),
+                and_(Product.id.in_(allowed_accessory_ids), Product.product_kind == "accessory",
+                     Product.is_published.is_(True)),
+            ))
         )
         if not tenant_scope.is_system:
             statement = statement.join(TenantOffer, TenantOffer.product_id == Product.id).where(

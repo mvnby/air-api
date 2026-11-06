@@ -1,11 +1,67 @@
 ---
 name: kitlane-work
-description: Create service and repair orders with priced proposals and native contract drafts, prepare standalone mail drafts, review saved mail and send exact versions approved in Manager; select catalog equipment, prepare business document drafts, save requests and manage tasks and maintenance through connected Kitlane tools.
+description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend
 determines the authenticated person, company, workspace and permissions; never
 ask for an actor or tenant ID as a tool argument.
+
+For an equipment sale WITH installation, use the sales workflow below. This
+release covers one room and one complete wall split system. Read the user's
+requirements and distinguish the total installed budget from equipment-only
+pricing. Use `select_sales_installation_options` with area or cooling class,
+hard equipment requirements, total budget and installation conditions. Route
+length, hole types/counts and standard access must be known or explicitly stated
+as preliminary assumptions. Ask only for missing material facts; never invent
+site measurements or assume a tariff. Missing published tariffs or site facts
+return readiness. Explain the missing conditions and retain the request.
+
+Each option is one alternative purchase. Show equipment, selected compatible
+accessories, installation and total separately, with installation assumptions.
+Use the optional comparison card when the host renders it; the structured and
+text results are sufficient otherwise. Selection in the card identifies the
+chosen product and calculation fingerprint; it does not itself save an order.
+For changed equipment, accessories or installation conditions call
+`preview_sales_installation` and use its new fingerprint. Never use a higher
+price alone as evidence of better quality. Estimated work and catalog stock do
+not promise an installation slot or delivery date.
+
+Search customers first. Reuse a verified existing customer. When the user
+explicitly asks to create a new customer, use `create_sales_customer` with the
+factual required party type (`individual`, `individual_entrepreneur`, `company`)
+and known details. Missing optional requisites may be completed later. A duplicate
+returns an existing ID to read and verify; do not bypass a conflict by altering
+the name or contact. Customer creation requires `kitlane:customers:write`.
+It is unnecessary for orders using an existing customer.
+
+On an explicit request to arrange the chosen deal, call `save_sales_order` with
+the verified customer, product, selected accessory IDs, declared installation
+conditions and `expected_calculation_fingerprint` from the accepted preview.
+Preserve `request_text`, `requirements_text`, address and assumptions. It creates
+a real `sales_installation` / `turnkey` negotiation order and native installation
+estimate. It requires both `kitlane:orders:write` and `kitlane:catalog:write`.
+If the price, availability or tariff changed, preview again and show the changed
+amount before saving; do not silently accept a new calculation. To change the
+saved chosen draft, first read `get_sales_order`, then supply its exact order,
+proposal and expected version. Preserve other proposals and Manager changes.
+
+When requested, prepare the native quote with `prepare_sales_order_offer` using
+the saved proposal's current version, current issue date and verified default
+issuer (or choose via `list_catalog_document_issuers`). Read
+`get_sales_order_offer` for readiness, missing fields, stale state and the exact
+Manager document link. Missing requisites/templates do not erase the saved
+order. A preparation failure resumes with these saved IDs. A single request to
+prepare the sale covers its draft saves; issuance, sending, signing, payment,
+stock reservation and booking remain separate actions. Do not route a sale with
+installation through the equipment-only `prepare_catalog_document` tool, which
+creates a separate equipment-only proposal.
+
+In a later conversation, find the order and call `get_sales_order` to recover
+the actual selected composition, original request, requirements and installation
+assumptions. The saved amount describes that proposal; refresh pricing before
+changing composition. Use the same idempotency key and payload after timeouts,
+read saved results and resume the remaining step instead of creating copies.
 
 For an explicit request to arrange a service or repair deal, use the order
 workflow. Search the existing customer, use a single verified match directly,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
@@ -37,6 +38,16 @@ from services.tariffs_service import TariffsService
 from services.service_catalog_scope import service_catalog_scope_clause
 from services.installation_preview_receipt_service import InstallationPreviewReceiptService
 from services.installation_book_discount import catalog_bundle_discounts
+
+
+@dataclass(frozen=True)
+class InstallationReadContext:
+    """One request's batch reads; never accepted for a persistent preview."""
+
+    scope_ref: str
+    book: InstallationPriceBook | None
+    products: dict[int, Product]
+    discounts: dict[int, Decimal]
 
 
 class InstallationPriceBookService:
@@ -449,6 +460,25 @@ class InstallationPriceBookService:
         )).scalars().first()
 
     @classmethod
+    async def read_context(
+        cls, session: AsyncSession, scope: TenantScope, product_ids: set[int],
+    ) -> InstallationReadContext:
+        """Batch only data reads; resolution and all money still use preview."""
+        canonical = await ProductCollectionCatalogAccess.is_canonical(
+            session, tenant_scope=replace(scope, is_canonical_storefront=None),
+        )
+        scope = replace(scope, is_canonical_storefront=canonical)
+        visible = await ProductCollectionCatalogAccess.visible_by_ids(
+            session, tenant_scope=scope, product_ids=product_ids,
+        )
+        return InstallationReadContext(
+            scope_ref=cls._scope_ref(scope), book=await cls.latest(session, scope),
+            products={key: projection.product for key, projection in visible.items()
+                      if projection.product.is_published},
+            discounts=await catalog_bundle_discounts(session, scope, product_ids),
+        )
+
+    @classmethod
     async def _profile(cls, session: AsyncSession, scope: TenantScope, target: InstallationTarget) -> tuple[TypedInstallationProfile | None, dict[str, str]]:
         if target.typed_profile is not None:
             return target.typed_profile, {key: "confirmed_manual" for key in target.typed_profile.model_fields_set}
@@ -541,8 +571,11 @@ class InstallationPriceBookService:
     @classmethod
     async def resolve(cls, session: AsyncSession, scope: TenantScope, target: InstallationTarget,
                       *, book: InstallationPriceBook | None = None,
-                      selected_tariff_code: str | None = None) -> tuple[InstallationResolveResponse, dict[str, Any] | None]:
+                      selected_tariff_code: str | None = None,
+                      _read_context: InstallationReadContext | None = None) -> tuple[InstallationResolveResponse, dict[str, Any] | None]:
         scope_ref = cls._scope_ref(scope)
+        if _read_context is not None and _read_context.scope_ref != scope_ref:
+            raise ValueError("Installation read context belongs to another scope")
         if selected_tariff_code is not None:
             # Only Manager's explicit service-only selection path supplies this argument.
             book = book or await cls.latest(session, scope)
@@ -564,8 +597,12 @@ class InstallationPriceBookService:
                 price_book_revision=book.revision,
                 included={"route_m": entry["included_route_m"], "holes_by_type": entry["included_holes"]},
                 base_price=Decimal(entry["base_price"]), price_mode=entry["mode"]), entry
-        profile, sources = await cls._profile(session, scope, target)
-        book = book or await cls.latest(session, scope)
+        if _read_context is not None and target.product_id is not None:
+            product = _read_context.products.get(target.product_id)
+            profile, sources = cls._product_profile(product) if product is not None else (None, {})
+        else:
+            profile, sources = await cls._profile(session, scope, target)
+        book = book or (_read_context.book if _read_context is not None else await cls.latest(session, scope))
         base = {"scope_ref": scope_ref, "profile": profile, "profile_sources": sources,
                 "price_book_id": book.id if book else None, "price_book_revision": book.revision if book else None}
         if profile is None:
@@ -646,7 +683,13 @@ class InstallationPriceBookService:
     @classmethod
     async def preview(cls, session: AsyncSession, scope: TenantScope, payload: InstallationPreviewPayload,
                       *, idempotency_key: str | None = None, persist: bool = True,
-                      tariff_selections: dict[str, str] | None = None) -> InstallationPreviewResponse:
+                      tariff_selections: dict[str, str] | None = None,
+                      _read_context: InstallationReadContext | None = None) -> InstallationPreviewResponse:
+        if _read_context is not None:
+            if persist:
+                raise ValueError("A persistent preview must re-read current installation data")
+            if _read_context.scope_ref != cls._scope_ref(scope):
+                raise ValueError("Installation read context belongs to another scope")
         selections = tariff_selections or {}
         if set(selections) - {item.key for item in payload.installations}:
             raise cls._bad("unknown_tariff_selection_key", "Selection must belong to this preview")
@@ -661,7 +704,7 @@ class InstallationPriceBookService:
                 session, scope, key_hash=key_hash, request_hash=request_hash)
             if replay is not None:
                 return replay
-        book = await cls.latest(session, scope)
+        book = _read_context.book if _read_context is not None else await cls.latest(session, scope)
         base = {"scope_ref": cls._scope_ref(scope), "price_book_id": book.id if book else None,
                 "price_book_revision": book.revision if book else None}
         if payload.expected_revision is not None and book and payload.expected_revision != book.revision:
@@ -674,13 +717,17 @@ class InstallationPriceBookService:
         site_work: list[InstallationSelectedWork] = []
         resolutions: list[dict[str, Any]] = []
         matched_entries: list[dict[str, Any]] = []
-        product_discounts = await catalog_bundle_discounts(session, scope, {
+        discount_product_ids = {
             item.product_id for item in payload.installations
             if item.product_id is not None and item.work_kind == "standard"
-        })
+        }
+        product_discounts = (
+            {key: amount for key, amount in _read_context.discounts.items() if key in discount_product_ids}
+            if _read_context is not None else await catalog_bundle_discounts(session, scope, discount_product_ids)
+        )
         status = "fixed"
         for installation in payload.installations:
-            result, entry = await cls.resolve(session, scope, installation, book=book,
+            result, entry = await cls.resolve(session, scope, installation, book=book, _read_context=_read_context,
                                               **({"selected_tariff_code": selections[installation.key]} if installation.key in selections else {}))
             if entry is None:
                 return InstallationPreviewResponse(status=result.status, reason_code=result.reason_code, **base)
