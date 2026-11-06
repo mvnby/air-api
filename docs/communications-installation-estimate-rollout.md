@@ -35,11 +35,14 @@ The two HA Compose files must carry the same immutable worker profile.
 - Exact canary: `true/false`.
 - Full allowlist: `true/true`, only after a separate reviewed activation.
 
-This preparation release pins both Patroni nodes to the dormant `false/false`
-profile so the reviewed old backlog can be reconciled. Before deployment, use
-the emergency-off command below and verify that in-flight work has drained.
-Deploying it does not activate `all` mode. Do not edit one node independently:
-profile changes use the existing attested HA rollout.
+The application compatibility release retains the currently attested canary
+`true/false` profile on both nodes. Keep runtime control `off` while deploying
+this code. Ordinary application deployment cannot change the attested Compose.
+Before reconciliation, prepare a separate fully CI-green dormant `false/false`
+profile change and execute the official atomic PITR transaction described in
+[the HA runbook](api-ha-runbook.md#postgresql-pitr), then merge and deploy that
+unchanged profile. After reconciliation, use the same reviewed procedure for
+an active `true/true` profile. Never change one node or its attestation by hand.
 
 An earlier deployment can leave `mode=all` with a canary profile. A fresh
 heartbeat with `status=paused` and `last_error_code=all_mode_not_enabled` proves
