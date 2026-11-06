@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from schemas_common import Meta
+from schemas_website_context import WebsiteInterests
 
 RefusalReason = Literal["profile", "region", "terms", "capacity", "unclear", "other"]
 ArchiveOutcome = Literal["refusal", "spam", "duplicate", "deadline_expired", "legacy_lost", "linked"]
@@ -95,6 +96,7 @@ class InboxRelatedRequest(BaseModel):
 
 
 class LeadsInboxItemResponse(BaseModel):
+    website_interests: WebsiteInterests | None = None
     id: int
     entity_kind: Literal["order", "lead"] = "order"
     related_requests: list[InboxRelatedRequest] = Field(default_factory=list)

@@ -191,6 +191,8 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
 
     async def fake_create_from_website(**kwargs):
         assert kwargs["notify_incoming"] is False
+        assert kwargs["order_technical_meta"]["submission_context"]["interests"]["items"][0]["active_seconds"] == 70
+        assert "История интереса" not in kwargs["comment"]
         assert kwargs["order_technical_meta"]["submission_context"]["product_id"] == product.id
         assert "Страница: /product/tcl-breezein" in kwargs["comment"]
         assert kwargs["items"] == []
@@ -227,7 +229,7 @@ async def test_create_product_availability_request_enqueues_with_single_commit(
             product_id=product.id,
             phone="+375 (29) 111-22-33",
             name="Иван",
-            submission_context={"page_path": "/product/tcl-breezein", "form_id": "product_availability", "product_id": 7},
+            submission_context={"page_path": "/product/tcl-breezein", "form_id": "product_availability", "product_id": 7, "interests": {"version": 1, "consent": True, "items": [{"kind": "article", "page_path": "/articles/quiet", "title": "История интереса", "active_seconds": 70}]}},
         ),
         tenant_scope=tenant_scope,
         idempotency_key="availability-request-unit-0001",

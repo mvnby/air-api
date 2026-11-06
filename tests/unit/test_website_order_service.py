@@ -128,7 +128,7 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
                 }
             ],
             "comment": "Нужен монтаж",
-            "submission_context": {"page_path": "/services/install", "form_id": form_id, "service_id": "installation"},
+            "submission_context": {"page_path": "/services/install", "form_id": form_id, "service_id": "installation", "interests": {"version": 1, "consent": True, "items": [{"kind": "article", "page_path": "/articles/quiet", "title": "История интереса", "active_seconds": 70}]}},
         }
     )
 
@@ -142,6 +142,8 @@ async def test_website_checkout_creates_negotiation_order(monkeypatch, tenant_sc
     assert captured_kwargs["comment"].startswith("Нужен монтаж\n")
     assert "Страница: /services/install" in captured_kwargs["comment"]
     assert captured_kwargs["order_technical_meta"]["submission_context"]["form_id"] == form_id
+    assert captured_kwargs["order_technical_meta"]["submission_context"]["interests"]["items"][0]["active_seconds"] == 70
+    assert "История интереса" not in captured_kwargs["comment"]
     assert captured_event["request"].submission_context.form_id == form_id
     assert response.id == 55
     assert response.status == OrderStatus.NEGOTIATION

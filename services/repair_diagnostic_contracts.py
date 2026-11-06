@@ -143,6 +143,8 @@ SYMPTOM_FAULT_TYPE = {
 }
 
 MAX_REPAIR_PAYLOAD_JSON_BYTES = 16 * 1024
+# Allow JSON-escaped bounded attention without raising the business-input limit.
+MAX_REPAIR_TRANSPORT_JSON_BYTES = 128 * 1024
 MAX_SYMPTOM_DETAILS = 4
 MAX_CLIENT_CHECKS = len(CLIENT_CHECK_LABELS)
 _ERROR_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,31}$")
@@ -242,7 +244,9 @@ class RepairDiagnosticLeadPayload(BaseModel):
             if key == "error_code" and not _ERROR_CODE_PATTERN.fullmatch(value):
                 raise ValueError("Invalid symptom_details.error_code value")
             self.symptom_details[key] = value
-        encoded = self.model_dump_json(exclude_none=False).encode("utf-8")
+        encoded = self.model_dump_json(
+            exclude={"submission_context": {"interests"}}, exclude_none=False,
+        ).encode("utf-8")
         if len(encoded) > MAX_REPAIR_PAYLOAD_JSON_BYTES:
             raise ValueError("Repair diagnostic payload is too large")
         return self
@@ -276,7 +280,7 @@ class RepairDiagnosticIncomingFile:
 def parse_repair_diagnostic_payload(raw_payload: str) -> RepairDiagnosticLeadPayload:
     if not isinstance(raw_payload, str):
         raise ValueError("Repair diagnostic payload must be JSON text")
-    if len(raw_payload.encode("utf-8")) > MAX_REPAIR_PAYLOAD_JSON_BYTES:
+    if len(raw_payload.encode("utf-8")) > MAX_REPAIR_TRANSPORT_JSON_BYTES:
         raise ValueError("Repair diagnostic payload is too large")
     try:
         data = json.loads(raw_payload)

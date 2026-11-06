@@ -102,7 +102,7 @@ async def test_multi_split_lead_forwards_context_and_preserves_configuration(mon
     payload = MultiSplitLeadPayload.model_validate({
         "configuration": {"outdoor_product_id": 42, "rooms": [{"name": "Кухня", "indoor_product_id": 11}]},
         "name": "Иван", "phone": "+375291112233", "consent": True, "message": "Original message",
-        "submission_context": {"page_path": "/multi-split", "form_id": "multi_split", "product_id": 42},
+        "submission_context": {"page_path": "/multi-split", "form_id": "multi_split", "product_id": 42, "interests": {"version": 1, "consent": True, "items": [{"kind": "article", "page_path": "/articles/quiet", "title": "История интереса", "active_seconds": 70}]}},
     })
     preview = MultiSplitPreviewResponse(
         status="requires_specialist", explanation="Проверка нужна", composition_complete=False,
@@ -144,6 +144,8 @@ async def test_multi_split_lead_forwards_context_and_preserves_configuration(mon
     assert "Форма: Подбор мультисплита" in captured["lead"].request_text
     assert "Страница: /multi-split" in captured["lead"].request_text
     assert "оборудование 1234 BYN" in captured["lead"].request_text
+    assert captured["event"]["submission_context"].interests.items[0].active_seconds == 70
+    assert "История интереса" not in captured["lead"].request_text
     assert captured["event"]["submission_context"] == payload.submission_context
     assert captured["configuration"].component_snapshot == [item.model_dump() for item in preview.components]
     assert captured["configuration"].verification_status == "requires_specialist"

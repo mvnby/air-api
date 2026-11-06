@@ -5,6 +5,8 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from schemas_website_context import website_interests_from_meta
+
 from models import Lead, LeadStatus
 from models.leads_inbox import InboxEvent, InboxReadState, InboxTriageState
 from models.tenancy import TenantScope
@@ -62,7 +64,7 @@ class RawLeadInboxService:
         location = meta.get('address_text') or meta.get('region_text') or location
         missing = ([] if lead.phone or lead.email else ['contact']) + ([] if meta.get('address_text') else ['address'])
         intake_state = ('needs_contact' if 'contact' in missing else 'needs_details' if missing else 'ready_for_review') if lead.intake_event_key else None
-        return LeadsInboxItemResponse(id=lead.id, entity_kind='lead', status=str(lead.status.value if hasattr(lead.status, 'value') else lead.status),
+        return LeadsInboxItemResponse(website_interests=website_interests_from_meta(meta), id=lead.id, entity_kind='lead', status=str(lead.status.value if hasattr(lead.status, 'value') else lead.status),
             is_new=not is_read and archive is None, is_read=is_read, read_at=read.read_at if read else None,
             title=(subject or 'Обращение с сайта')[:180], summary=lead.request_text[:400], comment=lead.request_text,
             customer_name=lead.company_name or lead.name, phone=lead.phone, email=lead.email, customer_inn=lead.inn,
@@ -70,7 +72,7 @@ class RawLeadInboxService:
             customer_delivery_address=meta.get('address_text') if lead.intake_event_key else location,
             source=lead.source, created_at=lead.created_at, source_created_at=meta.get('source_occurred_at') or lead.created_at,
             workflow_type=meta.get('workflow_type'), service_type=meta.get('service_type'),
-            intake_state=intake_state, intake_version=lead.version if intake_state else None,
+            intake_state=intake_state, intake_version=lead.version if lead.intake_meta else None,
             requested_time_text=meta.get('requested_time_text'), requested_at=meta.get('requested_at'),
             date_precision=meta.get('date_precision'), call_before_visit=meta.get('call_before_visit'),
             clarification_task_id=meta.get('clarification_task_id'),

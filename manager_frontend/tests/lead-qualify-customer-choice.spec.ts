@@ -65,7 +65,7 @@ describe('LeadQualifyModal customer choice', () => {
   });
   it('qualifies raw site leads through their dedicated contract and opens the resulting order', async () => {
     const qualify = vi.spyOn(ManagerLeadsService, 'qualifyManagerLead').mockResolvedValue({ order_id: 109, customer_id: 42, lead_id: 55 } as never);
-    const wrapper = mount(LeadQualifyModal, { props: { lead: { ...lead, entity_kind: 'lead', status: 'new' } as never } });
+    const wrapper = mount(LeadQualifyModal, { props: { lead: { ...lead, entity_kind: 'lead', status: 'new', intake_state: null, intake_version: 3 } as never } });
     wrappers.push(wrapper);
     await flushPromises();
     await wrapper.findAll('button').find(button => button.text().includes('Иван Петров'))!.trigger('click');
@@ -73,7 +73,7 @@ describe('LeadQualifyModal customer choice', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Обслуживание')!.trigger('click');
     await wrapper.findAll('button').find(button => button.text().includes('В переговоры'))!.trigger('click');
     await flushPromises();
-    expect(qualify).toHaveBeenCalledWith(55, expect.objectContaining({ customer_id: 42, workflow_type: 'maintenance', service_type: 'maintenance' }));
+    expect(qualify).toHaveBeenCalledWith(55, expect.objectContaining({ customer_id: 42, expected_version: 3, workflow_type: 'maintenance', service_type: 'maintenance' }));
     expect(api.patchManagerOrder).not.toHaveBeenCalled();
     expect(wrapper.emitted('success')).toEqual([[109]]);
   });

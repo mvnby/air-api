@@ -57,8 +57,28 @@ def _submission_context_lines(context: WebsiteSubmissionContext | None) -> list[
     if context.service_id:
         lines.append(f"Услуга на странице: {_escape_bounded(context.service_id, max_length=100)}")
     if context.product_id:
-        lines.append(f"Товар на странице: #{context.product_id}")
+        lines.append(f"Товар на странице: #{_escape_bounded(context.product_id, max_length=30)}")
     return lines
+
+
+def _finish_website_message(lines: list[str], context: WebsiteSubmissionContext | None) -> str:
+    text = _ensure_telegram_length("\n".join(lines))
+    interests = context.interests if context is not None else None
+    if interests is None:
+        return _ensure_telegram_length(text)
+    heading = "Интересы на сайте (примерное активное время):"
+    top = interests.items[:3]
+    budget = min(260, (MAX_TELEGRAM_MESSAGE_LENGTH - len(text) - len(heading) - 2 - len(top)) // len(top))
+    if budget < 25:
+        return text
+    labels = {"product": "Товар", "article": "Статья", "service": "Услуга", "topic": "Тема"}
+    summary = []
+    for item in top:
+        duration = f"≈ {max(1, (item.active_seconds + 30) // 60)} мин" if item.active_seconds >= 60 else "< 1 мин"
+        model = f" #{item.product_id}" if item.product_id is not None else ""
+        raw = f"• {duration} · {labels[item.kind]}{model}: {item.title} · {item.page_path}"
+        summary.append(_escape_bounded(raw, max_length=max(0, budget)))
+    return _ensure_telegram_length("\n".join([text, heading, *summary]))
 
 
 def _format_amount(value: Decimal) -> str:
@@ -127,7 +147,7 @@ def render_website_order_v1(
         ]
     )
     lines.extend(_submission_context_lines(payload.submission_context))
-    return _ensure_telegram_length("\n".join(lines))
+    return _finish_website_message(lines, payload.submission_context)
 
 
 def render_website_contact_lead_v1(
@@ -152,7 +172,7 @@ def render_website_contact_lead_v1(
             ["", f"💬 {_escape_bounded(payload.message, max_length=800)}"]
         )
     lines.extend(_submission_context_lines(payload.submission_context))
-    return _ensure_telegram_length("\n".join(lines))
+    return _finish_website_message(lines, payload.submission_context)
 
 
 def render_tenant_website_checkout_v1(
@@ -208,7 +228,7 @@ def render_installation_estimate_lead_v1(
         ]
     )
     lines.extend(_submission_context_lines(payload.submission_context))
-    return _ensure_telegram_length("\n".join(lines))
+    return _finish_website_message(lines, payload.submission_context)
 
 
 def render_tenant_website_availability_v1(
@@ -237,7 +257,7 @@ def render_tenant_website_availability_v1(
             f"👤 {_escape_bounded(payload.name, max_length=160)}",
         )
     lines.extend(_submission_context_lines(payload.submission_context))
-    return _ensure_telegram_length("\n".join(lines))
+    return _finish_website_message(lines, payload.submission_context)
 
 
 def render_tenant_website_repair_v1(
@@ -260,4 +280,4 @@ def render_tenant_website_repair_v1(
         )
     lines.append(f"Фото: {payload.photo_count}")
     lines.extend(_submission_context_lines(payload.submission_context))
-    return _ensure_telegram_length("\n".join(lines))
+    return _finish_website_message(lines, payload.submission_context)

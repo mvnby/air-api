@@ -24,10 +24,45 @@ it never selects a tenant, grants product access or confirms a requested service
 JSON requests carry the object directly. Photo-estimate multipart requests carry
 its JSON serialization in a `submission_context` form field; repair requests
 carry it inside their existing JSON `payload`. Capture the context once per
-submission attempt and retain it with the original idempotency key on retries.
+submission attempt and retain its source page/form with the original idempotency key on retries.
 Older clients may omit it. The API stores it with the incoming request, exposes
 readable form/page details in Manager and includes it in Telegram notifications.
-This contract does not collect browsing history, referrers or dwell time.
+With explicit opt-in, `submission_context.interests` may additionally carry
+`{version: 1, consent: true, items: [...]}`. An item contains `kind`
+(`product`, `article`, `service` or `topic`), a pathname, a public `title`
+(up to 160 characters), integer `active_seconds` (0–1800), optional positive
+`product_id`, and up to five public `topics` (up to 80 characters each).
+At most eight items are accepted. Invalid optional interests are ignored while
+the otherwise valid submission proceeds; invalid source page/form still fails.
+The API treats these values as untrusted descriptive evidence and never resolves
+an interested product into a selected product, price or work item.
+
+The website collects only declared public page metadata after opt-in, using the
+current tab's session storage. Attention expires after 30 minutes of inactivity
+or four hours from the start. Only visible, focused and recently active time is
+counted; hidden, idle or sleeping periods are excluded. The website sends visits
+of at least five active seconds, ranked by active time, without input values,
+query strings, referrers, stable visitor IDs, cross-site tracking or per-page
+server beacons. Disabling collection clears this tab's attention. Denied,
+expired or revoked consent omits interests from subsequent submissions and retries.
+
+Only passive interests are excluded from the business-request fingerprint;
+source context, customer fields, cart and attachments remain significant.
+Client retry storage never contains interests. A retry with changed, missing or
+revoked attention reuses its original business key: the first committed lead/order
+metadata and communication snapshot stay unchanged and no extra event is created.
+Immutable delivery snapshots continue to include captured interests in integrity
+checks; absent/null additive interests are omitted for older snapshots.
+
+Manager exposes a separate “Интересы на сайте” block in incoming details and order
+workspaces, including after qualification. Telegram includes a bounded, escaped
+summary of the top three items when space permits. Interests never enter the
+customer comment or business document text. Storage uses existing lead/order JSON
+metadata with tenant/storefront authorization inherited from the parent entity.
+Photo-estimate multipart JSON context is bounded to 65,536 characters. Repair JSON
+transport allows 128 KiB for escaped attention, while its existing 16 KiB logical
+business-input bound excludes the optional interests; the shared request-body
+limit is unchanged.
 
 ## Required signed headers
 

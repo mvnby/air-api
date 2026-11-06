@@ -140,7 +140,10 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     tenant_scope,
 ):
     storage = FakePrivateStorage()
-    context = {"page_path": "/services/installation", "form_id": "installation_estimate"}
+    context = {"page_path": "/services/installation", "form_id": "installation_estimate",
+               "interests": {"version": 1, "consent": True, "items": [{
+                   "kind": "article", "page_path": "/articles/quiet", "title": "Тихая работа", "active_seconds": 80,
+               }]}}
     payload = _payload(submission_context=context)
     uploads = [_upload()]
 
@@ -156,7 +159,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     replayed = await InstallationEstimateLeadService.create_lead(
         installation_estimate_session,
         tenant_scope=tenant_scope,
-        payload=payload,
+        payload=_payload(submission_context={key: value for key, value in context.items() if key != "interests"}),
         uploads=uploads,
         idempotency_key="estimate-request-0001",
         storage=storage,
@@ -175,6 +178,7 @@ async def test_installation_estimate_is_atomic_private_and_idempotent(
     assert order.storefront_id == tenant_scope.storefront_id
     assert order.source_fingerprint
     assert order.technical_meta["submission_context"] == context
+    assert "Тихая работа" not in order.comment
     assert payload.description in order.comment
     assert "Страница: /services/installation" in order.comment
     assert order.technical_meta["service_type"] == "pre_install"

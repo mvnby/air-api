@@ -86,7 +86,7 @@ async def installation_estimate_form_payload(
     address: Annotated[Optional[str], Form(max_length=500)] = None,
     description: Annotated[Optional[str], Form(max_length=2000)] = None,
     submission_context: Annotated[
-        Optional[str], Form(max_length=4000, description="Optional WebsiteSubmissionContext encoded as JSON text"),
+        Optional[str], Form(max_length=65536, description="Optional WebsiteSubmissionContext encoded as JSON text"),
     ] = None,
     object_type: Annotated[
         Optional[str],

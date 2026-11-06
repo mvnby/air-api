@@ -8,7 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from core.input_validation import normalize_phone_digits
-from schemas_website_context import append_submission_context, submission_context_meta
+from schemas_website_context import append_submission_context, submission_context_identity, submission_context_meta
 from models import LeadSource, Order, OrderStatus, Product
 from schemas import (
     LeadCreatePayload,
@@ -354,9 +354,13 @@ class WebsiteLeadService:
         order.comment = order.comment or WebsiteLeadService._build_request_text(product)
         if payload.submission_context is not None:
             context_meta = submission_context_meta(payload.submission_context)
-            if (order.technical_meta or {}).get("submission_context") != context_meta["submission_context"]:
+            existing_context = (order.technical_meta or {}).get("submission_context")
+            if not isinstance(existing_context, dict) or (
+                submission_context_identity(existing_context)
+                != submission_context_identity(context_meta["submission_context"])
+            ):
                 order.comment = append_submission_context(order.comment, payload.submission_context)
-            order.technical_meta = {**(order.technical_meta or {}), **context_meta}
+                order.technical_meta = {**(order.technical_meta or {}), **context_meta}
         order.status = OrderStatus.NEW_LEAD
         order.closing_result = None
         order.closed_at = None
