@@ -16,7 +16,14 @@ from schemas_installation_price_book import (
 
 class SalesInstallationInput(ConnectorInput):
     route_length_m: Decimal | None = Field(default=None, gt=0, le=1000, decimal_places=2)
-    holes_by_type: dict[str, Decimal] | None = None
+    holes_by_type: dict[str, Decimal] | None = Field(default=None, description=(
+        "Whole counts of declared wall penetrations. Native codes: through_thin = additional "
+        "interior-wall passages up to 20 cm; through_thick = main-wall passages up to 80 cm; "
+        "through_over_80 = walls thicker than 80 cm, requiring a manual quote; diamond = "
+        "explicit diamond drilling, only if priced by the published tariff. Do not substitute "
+        "diamond for a normal wall passage. Use null for unknown conditions, or {} only when "
+        "no passages are required. State any preliminary assumptions explicitly."
+    ))
     access: Literal["standard", "requires_assessment", "unknown"] = "unknown"
     extras: list[InstallationExtraInput] = Field(default_factory=list, max_length=20)
     assumptions: list[str] = Field(default_factory=list, max_length=20)

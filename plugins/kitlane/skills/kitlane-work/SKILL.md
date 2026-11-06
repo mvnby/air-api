@@ -17,6 +17,15 @@ as preliminary assumptions. Ask only for missing material facts; never invent
 site measurements or assume a tariff. Missing published tariffs or site facts
 return readiness. Explain the missing conditions and retain the request.
 
+Use the native wall-passage codes in `installation.holes_by_type`:
+`through_thin` for additional interior-wall passages up to 20 cm,
+`through_thick` for main-wall passages up to 80 cm, and `through_over_80`
+for thicker walls requiring an individual quote. `diamond` means explicitly
+requested diamond drilling, not an ordinary wall passage; it needs its own
+published price. Never change the requested work just to obtain a price.
+Unknown types/counts need clarification or explicit preliminary assumptions;
+an empty object means confirmed no passages, not unknown conditions.
+
 Each option is one alternative purchase. Show equipment, selected compatible
 accessories, installation and total separately, with installation assumptions.
 Use the optional comparison card when the host renders it; the structured and
