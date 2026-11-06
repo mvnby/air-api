@@ -110,13 +110,13 @@ port_for_slot() {
 atomic_write_line() {
   local path="$1"
   local value="$2"
-  local fallback_mode="${3:-600}"
+  local mode="${3:-600}"
   local tmp
 
   mkdir -p "$(dirname "${path}")"
   tmp="$(mktemp "${path}.tmp.XXXXXX")"
   printf '%s\n' "${value}" > "${tmp}"
-  chmod --reference="${path}" "${tmp}" 2>/dev/null || chmod "${fallback_mode}" "${tmp}"
+  chmod "${mode}" "${tmp}"
   chown --reference="${path}" "${tmp}" 2>/dev/null || true
   mv "${tmp}" "${path}"
 }

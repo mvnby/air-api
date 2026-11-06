@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -272,6 +273,20 @@ def test_bootstrap_only_installs_stable_proxy_without_container_changes(tmp_path
 
 def test_next_deploy_uses_green_and_stops_blue(tmp_path):
     env, project, site, command_log = _environment(tmp_path)
+    # Exercise GNU chmod's existing-file behavior even on macOS test hosts.
+    chmod = tmp_path / "bin/chmod"
+    chmod.write_text(
+        f"#!{sys.executable}\n"
+        "import os, stat, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[0].startswith('--reference='):\n"
+        "    mode = stat.S_IMODE(os.stat(args[0].split('=', 1)[1]).st_mode)\n"
+        "else:\n"
+        "    mode = int(args[0], 8)\n"
+        "os.chmod(args[1], mode)\n",
+        encoding="utf-8",
+    )
+    chmod.chmod(0o755)
     upstream = Path(env["API_NGINX_UPSTREAM_FILE"])
     upstream.parent.mkdir(parents=True, exist_ok=True)
     upstream.write_text("proxy_pass http://127.0.0.1:18001;\n", encoding="utf-8")
@@ -280,6 +295,7 @@ def test_next_deploy_uses_green_and_stops_blue(tmp_path):
         encoding="utf-8",
     )
     (project / ".active-api-slot").write_text("blue\n", encoding="utf-8")
+    (project / ".active-api-slot").chmod(0o644)
     env["FAKE_RUNTIME_APP_BLUE_IMAGE"] = OLD_IMAGE
 
     result = _run(env)
@@ -291,6 +307,7 @@ def test_next_deploy_uses_green_and_stops_blue(tmp_path):
     assert "stop -t 5 app-blue" in commands
     assert "rm -f app-blue" in commands
     assert (project / ".active-api-slot").read_text(encoding="utf-8").strip() == "green"
+    assert (project / ".active-api-slot").stat().st_mode & 0o777 == 0o600
     assert "proxy_pass http://127.0.0.1:18002;" in upstream.read_text(encoding="utf-8")
 
 
