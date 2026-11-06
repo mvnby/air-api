@@ -147,6 +147,14 @@ gates; the API container intentionally has different defaults. Only a plan
 without blockers permits `--enable`. The command rechecks the complete backlog
 and current recipients atomically. Never override a blocker with direct SQL.
 
+The recipient readiness gate checks the server-resolved canonical MVN tenant
+and storefront. Missing or ambiguous canonical scope, or invalid canonical
+owner/admin recipients, blocks activation. An unrelated partner without a
+linked Telegram account does not block MVN readiness. This gate does not alter
+routing: every event still resolves and revalidates its exact tenant's audience,
+and an unconfigured partner event cannot fall back to MVN recipients. Backlog
+and delivery safety checks continue to cover all six types across all tenants.
+
 Verify `--status`, a fresh heartbeat, `mode=all`, `status=running`, no runtime
 error, and the existing API smoke checks. A real new incoming must produce its
 outbox event and a provider-acknowledged `sent` delivery for each intended

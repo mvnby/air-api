@@ -16,7 +16,6 @@ from models import (
     CommunicationDeliveryAttempt,
     CommunicationRuntimeState,
     IntegrationOutboxEvent,
-    Storefront,
 )
 from services.communications.canary_errors import CommunicationsCanarySafetyError
 from services.communications.installation_activation_fence import (
@@ -36,6 +35,10 @@ from services.communications.tenant_website_events import (
     TENANT_WEBSITE_EVENT_TYPES,
 )
 from services.staff_user_service import StaffUserService
+from services.tenant_scope_service import (
+    SystemTenantScopeResolver,
+    TenantScopeResolutionError,
+)
 
 
 class InstallationNotificationControlRejected(RuntimeError):
@@ -431,24 +434,20 @@ class WebsiteNotificationOperations:
             blockers.append(database_blocker)
 
         owner_count = 0
-        active_storefronts = list(
-            (
-                await session.execute(
-                    select(Storefront)
-                    .where(Storefront.status == "active")
-                    .order_by(Storefront.tenant_id, Storefront.id)
-                )
-            ).scalars()
-        )
-        if not active_storefronts:
-            blockers.append("tenant_website_storefront_count_invalid")
-        for storefront in active_storefronts:
+        # MVN readiness is the activation bootstrap gate. Partner onboarding
+        # must not veto MVN delivery; every event still resolves its own exact
+        # tenant directory and fails closed if that scope is unconfigured.
+        try:
+            canonical_scope = await SystemTenantScopeResolver.resolve(session)
+        except TenantScopeResolutionError:
+            blockers.append("tenant_website_canonical_scope_invalid")
+        else:
             try:
                 recipients = (
                     await TenantWebsiteManagementRecipientDirectory.list_telegram(
                         session,
-                        tenant_id=int(storefront.tenant_id),
-                        storefront_id=int(storefront.id or 0),
+                        tenant_id=canonical_scope.tenant_id,
+                        storefront_id=canonical_scope.storefront_id,
                     )
                 )
                 if not recipients:
