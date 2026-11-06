@@ -175,7 +175,8 @@ async def test_preview_uses_included_overages_explicit_extras_and_one_site_lift(
     book = InstallationPriceBook(id=8, tenant_id=12, revision=2, fingerprint="x", entries=[entry])
     async def latest(_session, _scope):
         return book
-    async def resolve(_session, _scope, _target, *, book=None):
+    async def resolve(_session, _scope, _target, *, book=None, _read_context=None):
+        assert _read_context is None
         return InstallationResolveResponse(status="fixed", scope_ref="scope"), entry
     monkeypatch.setattr(BookService, "latest", latest)
     monkeypatch.setattr(BookService, "resolve", resolve)
@@ -236,7 +237,8 @@ async def test_named_bundle_discount_allocates_cents_without_new_charge(monkeypa
     book = InstallationPriceBook(id=9, tenant_id=12, revision=1, fingerprint="x", entries=[entry])
     async def latest(_session, _scope):
         return book
-    async def resolve(_session, _scope, _target, *, book=None):
+    async def resolve(_session, _scope, _target, *, book=None, _read_context=None):
+        assert _read_context is None
         return InstallationResolveResponse(status="fixed", scope_ref="scope"), entry
     monkeypatch.setattr(BookService, "latest", latest)
     monkeypatch.setattr(BookService, "resolve", resolve)
@@ -264,7 +266,8 @@ async def test_canonical_product_discount_replaces_book_rule_and_caps_at_base(mo
     book = InstallationPriceBook(id=9, tenant_id=12, revision=1, fingerprint='x', entries=[entry])
     async def latest(_session, _scope):
         return book
-    async def resolve(_session, _scope, _target, *, book=None):
+    async def resolve(_session, _scope, _target, *, book=None, _read_context=None):
+        assert _read_context is None
         return InstallationResolveResponse(status='fixed', scope_ref='scope'), entry
     async def discounts(_session, _scope, ids):
         assert ids == {1}
