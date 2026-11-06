@@ -18,6 +18,7 @@ from services.communications.backlog_reconciliation import (
     InstallationEstimateBacklogExecutionBlocked,
     InstallationEstimateBacklogReconciliation,
 )
+from services.communications.incoming_contracts import TENANT_INCOMING_CREATED_EVENT
 from services.communications.tenant_website_events import (
     TENANT_WEBSITE_EVENT_TEMPLATE_KEYS,
     TENANT_WEBSITE_EVENT_TYPES,
@@ -92,7 +93,8 @@ class _HeldRuntimeLock:
         return True
 
 
-def test_execute_manifest_requires_each_of_the_five_allowlisted_types():
+@pytest.mark.parametrize("missing_event_type", TENANT_WEBSITE_EVENT_TYPES)
+def test_execute_manifest_requires_each_reviewed_incoming_type(missing_event_type):
     now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
     manifest = _manifest(cutoff=now - timedelta(days=1))
 
@@ -102,6 +104,7 @@ def test_execute_manifest_requires_each_of_the_five_allowlisted_types():
     )
 
     assert tuple(item.event_type for item in ordered) == TENANT_WEBSITE_EVENT_TYPES
+    assert TENANT_INCOMING_CREATED_EVENT in {item.event_type for item in ordered}
     assert {
         item.event_type: WebsiteCommunicationBacklogReconciliation._typed_reconciler(
             item
@@ -113,7 +116,7 @@ def test_execute_manifest_requires_each_of_the_five_allowlisted_types():
         match="website_backlog_manifest_must_cover_allowlist",
     ):
         WebsiteCommunicationBacklogReconciliation._validate_manifest(
-            manifest[:-1],
+            tuple(item for item in manifest if item.event_type != missing_event_type),
             execute=True,
         )
 
@@ -144,12 +147,13 @@ def test_canonical_cli_requires_explicit_manifest_fields():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("retained_type", [TENANT_WEBSITE_EVENT_TYPES[0], TENANT_INCOMING_CREATED_EVENT])
 async def test_retain_is_reported_as_an_activation_blocker(
     backlog_manifest_session_factory,
+    retained_type,
 ):
     now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
     cutoff = now - timedelta(days=1)
-    retained_type = TENANT_WEBSITE_EVENT_TYPES[0]
     async with backlog_manifest_session_factory() as session:
         report = await WebsiteCommunicationBacklogReconciliation.reconcile_manifest(
             session,
@@ -164,9 +168,11 @@ async def test_retain_is_reported_as_an_activation_blocker(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("event_type", [TENANT_WEBSITE_EVENT_TYPES[1], TENANT_INCOMING_CREATED_EVENT])
 async def test_terminal_no_send_closes_ambiguous_attempt_without_resend(
     backlog_manifest_session_factory,
     monkeypatch,
+    event_type,
 ):
     async def skip_postgres_preflight(cls, session, **kwargs):
         return None
@@ -178,7 +184,6 @@ async def test_terminal_no_send_closes_ambiguous_attempt_without_resend(
     )
     now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
     cutoff = now - timedelta(days=1)
-    event_type = TENANT_WEBSITE_EVENT_TYPES[1]
     event = _event(51, event_type, now - timedelta(days=3))
     delivery = CommunicationDelivery(
         delivery_id="5" * 32,
@@ -259,7 +264,7 @@ async def test_terminal_no_send_closes_ambiguous_attempt_without_resend(
     assert attempts[0].ambiguous is True
     assert operation is not None and operation.state == "succeeded"
     assert operation.outcome_code == "succeeded"
-    assert len(operation.aggregate_counts["event_types"]) == 5
+    assert len(operation.aggregate_counts["event_types"]) == len(TENANT_WEBSITE_EVENT_TYPES)
 
 
 @pytest.mark.asyncio
@@ -307,8 +312,8 @@ async def test_zero_and_retain_manifest_is_audited_and_replays_idempotently(
             operation_id,
         )
         assert operation is not None and operation.state == "succeeded"
-        assert len(operation.manifest_summary["event_types"]) == 5
-        assert len(operation.aggregate_counts["event_types"]) == 5
+        assert len(operation.manifest_summary["event_types"]) == len(TENANT_WEBSITE_EVENT_TYPES)
+        assert len(operation.aggregate_counts["event_types"]) == len(TENANT_WEBSITE_EVENT_TYPES)
 
     changed = tuple(
         WebsiteBacklogManifestItem(
@@ -377,7 +382,7 @@ async def test_blocked_operation_is_durable_without_event_mutation(
         assert stored_event is not None and stored_event.status == "pending"
         assert operation is not None and operation.state == "blocked"
         assert operation.outcome_code == "website_backlog_expected_count_changed"
-        assert len(operation.aggregate_counts["event_types"]) == 5
+        assert len(operation.aggregate_counts["event_types"]) == len(TENANT_WEBSITE_EVENT_TYPES)
 
 
 @pytest.mark.asyncio
@@ -462,4 +467,4 @@ async def test_unexpected_failure_is_durable_without_partial_mutation(
         )
         assert operation is not None and operation.state == "failed"
         assert operation.outcome_code == "website_backlog_operation_failed"
-        assert len(operation.aggregate_counts["event_types"]) == 5
+        assert len(operation.aggregate_counts["event_types"]) == len(TENANT_WEBSITE_EVENT_TYPES)
