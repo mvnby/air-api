@@ -125,6 +125,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const loading = ref(false);
   const templatesLoading = ref(false);
   const templateVersionsLoading = ref(false);
+  const templateLoadError = ref('');
+  const versionLoadError = ref('');
   const voidTarget = ref<ManagedDocumentItem | null>(null);
   const voidReason = ref('');
   let workspaceActive = true;
@@ -398,6 +400,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     const legalEntityId = selectedLegalEntityId.value;
     const templateId = selectedTemplateId.value;
     const currentRequest = ++versionRequestId;
+    versionLoadError.value = '';
     if (templateVersions.value.some((version) => version.template_id !== templateId)) templateVersions.value = [];
     if (!legalEntityId || !templateId) {
       templateVersionsLoading.value = false;
@@ -412,8 +415,11 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         && selectedTemplateId.value === templateId
         && selectedLegalEntityId.value === legalEntityId
       ) templateVersions.value = response.items;
-    } catch {
-      if (currentRequest === versionRequestId) templateVersions.value = [];
+    } catch (error) {
+      if (currentRequest === versionRequestId) {
+        templateVersions.value = [];
+        versionLoadError.value = getApiErrorMessage(error);
+      }
     } finally {
       if (currentRequest === versionRequestId) templateVersionsLoading.value = false;
     }
@@ -423,6 +429,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     const legalEntityId = selectedLegalEntityId.value;
     const type = documentType.value;
     const currentRequest = ++templateRequestId;
+    templateLoadError.value = '';
+    versionLoadError.value = '';
     templatesLoading.value = true;
     templates.value = [];
     selectedTemplateId.value = null;
@@ -472,7 +480,8 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (currentRequest === templateRequestId) {
         templates.value = [];
         selectedTemplateId.value = null;
-        input.notify(`Не удалось загрузить шаблоны: ${getApiErrorMessage(error)}`, 'error');
+        templateLoadError.value = getApiErrorMessage(error);
+        input.notify(`Не удалось загрузить шаблоны: ${templateLoadError.value}`, 'error');
       }
     } finally {
       if (currentRequest === templateRequestId) templatesLoading.value = false;
@@ -524,7 +533,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
       resetConsumerTerms();
     }
-    if (['tn2', 'ttn1'].includes(nextType) && !['tn2', 'ttn1'].includes(previousType)) {
+    if (nextType === 'ttn1' && previousType !== 'ttn1') {
       resetTransportTerms();
     }
     if (
@@ -617,7 +626,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       ? serializeBusinessTerms(documentType.value, businessTerms.value)
       : undefined,
     act_terms: documentType.value === 'act' ? actTerms.value : undefined,
-    transport_terms: ['tn2', 'ttn1'].includes(documentType.value)
+    transport_terms: documentType.value === 'ttn1'
       ? serializeTransportTerms(transportTerms.value)
       : undefined,
   }));
@@ -920,6 +929,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     repairDefect,
     templates,
     templatesLoading,
+    templateVersionsLoading,
+    templateLoadError,
+    versionLoadError,
+    loadTemplates,
     transportTerms,
     voidDocument,
     voidReason,

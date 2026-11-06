@@ -51,6 +51,20 @@ describe('saved draft parameters', () => {
     });
   });
 
+  it('edits an old TN-2 without exposing, validating or replacing its saved vehicle details', async () => {
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentDraftParameters).mockResolvedValue({
+      issue_date: '2026-11-05', revision: 'c'.repeat(64), has_editable_copy: false, template_version_id: 3,
+      transport_terms: { driver_name: 'Из прежнего бланка', car_number: 'АА-01' },
+    });
+    const wrapper = await mountEditor({ ...document, doc_type: 'tn2' });
+    expect(wrapper.find('[data-testid="transport-terms-panel"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="draft-issue-date"]').setValue('2026-11-06');
+    await wrapper.get('form').trigger('submit'); await flushPromises();
+    expect(ManagerDocumentSystemService.updateManagerManagedDocumentDraftParameters).toHaveBeenCalledWith(77, {
+      issue_date: '2026-11-06', expected_revision: 'c'.repeat(64), reset_editable_copy: false,
+    });
+  });
+
   it('requires explicit confirmation before rebuilding an edited working copy', async () => {
     const wrapper = await mountEditor();
     await wrapper.get('[data-testid="draft-issue-city"]').setValue('Минск');

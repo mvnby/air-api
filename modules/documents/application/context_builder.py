@@ -284,9 +284,10 @@ class DocumentContextBuilder:
             )
         except BusinessDocumentContextError as exc:
             raise DocumentContextError(str(exc)) from exc
-        transport_context = build_transport_document_context(
-            selection.transport_terms
-        )
+        try:
+            transport_context = build_transport_document_context(selection.transport_terms, document_type=document_type)
+        except ValueError as exc:
+            raise DocumentContextError(str(exc)) from exc
         seller_entity_type = legal_entity.entity_type
         seller_signing_mode = normalize_signing_mode(
             seller_entity_type,

@@ -203,6 +203,9 @@ class ManagedDocumentDraftMutationService:
         if any(name in changes and not allowed for name, allowed in scopes.items()):
             raise ValueError("Эти параметры не соответствуют типу документа")
         current = read_draft_parameters(document)
+        if document.doc_type == "ttn1" and isinstance(changes.get("transport_terms"), dict):
+            # Older clients send only the vehicle fields. Keep newer route facts unless explicitly changed.
+            changes = {**changes, "transport_terms": {**(current.get("transport_terms") or {}), **changes["transport_terms"]}}
         changed = {
             key: value for key, value in changes.items() if value != current.get(key)
         }
@@ -272,7 +275,7 @@ class ManagedDocumentDraftMutationService:
             snapshot["conditions"].update(context.conditions)
         if "transport_terms" in changed:
             values.update(
-                build_transport_document_context(terms["transport_terms"]).values
+                build_transport_document_context(terms["transport_terms"], document_type=document.doc_type).values
             )
         if "repair_defect" in changed:
             terms["repair_defect"].update_snapshot(snapshot)

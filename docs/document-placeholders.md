@@ -109,9 +109,21 @@ These block markers and excluded blocks are removed during generation. Inline
 and block conditions can coexist, but an inline condition cannot close a block
 condition or continue into another paragraph or cell.
 
-For printable TN-2/TTN-1 templates, transport values are available as
-`transport.car_model`, `transport.car_number`, `transport.driver_name`, and
-`transport.carrier`. This does not submit an electronic waybill to EDI.
+Manager creates TN-2 from the goods and basis document for the selected issuer.
+TTN-1 additionally supports optional vehicle, driver, carrier, trip sheet and
+route details. They can be entered when creating the draft or added later.
+Each issuer needs an active DOCX version for the selected waybill type.
+
+The TTN-1 template can print `transport.car_model`, `transport.car_number`,
+`transport.driver_name`, and `transport.carrier`. Existing custom TN-2
+templates retain access to these four legacy placeholders. TTN-1 also supports
+`transport.trip_sheet_number`, `transport.freight_payer`,
+`transport.loading_point`, and `transport.unloading_point`. Each of
+`transport.loading` and `transport.unloading` has fields `performer`, `method`,
+`arrived_at`, `departed_at`, and `downtime`. For example,
+`{{ transport.loading.arrived_at }}` prints the local arrival date and time.
+Downtime is entered in minutes and printed in hours and minutes. Missing route
+and operation facts print as empty fields. These are printable forms.
 
 ## Legacy Google templates
 

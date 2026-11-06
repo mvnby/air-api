@@ -31,6 +31,7 @@ import NativeActComposition from './NativeActComposition.vue';
 import { formatDocumentDate as formatDate, useNativeDocumentBasis } from '../composables/use-native-document-basis';
 import { useNativeActComposition } from '../composables/use-native-act-composition';
 import TransportTermsPanel from './TransportTermsPanel.vue';
+import { transportTermsError } from '../model/transport-terms';
 import GoogleDocumentEditorActions from './GoogleDocumentEditorActions.vue';
 import { useGoogleDocumentEditor } from '../composables/use-google-document-editor';
 import type { GoogleDocumentEditTarget } from '../integrations/google-document-editor-api';
@@ -225,6 +226,10 @@ const selectionError = computed(() => {
     if (!proposalServices.value.some(line => line.quantity > 0)) return 'Добавьте работы в выбранное предложение';
     if (proposalProducts.value.length && materialIds.value === null) return 'Выберите состав заказ-акта';
   }
+  if (workspace.documentType.value === 'ttn1') {
+    const error = transportTermsError(workspace.transportTerms.value);
+    if (error) return error;
+  }
   if (workspace.documentType.value === 'repair_defect_act') return repairDefectFormError(workspace.repairDefect.value);
   if (workspace.documentType.value === 'retail_receipt') {
     if (props.order.customer?.type !== 'individual') return 'Для товарного чека выберите покупателя-физлицо';
@@ -241,7 +246,21 @@ const selectionError = computed(() => {
     return 'Выберите хотя бы одну выполненную работу';
   return '';
 });
-const draftBlockedReason = computed(() => selectionError.value || workspace.draftBlockedReason.value);
+const waybillName = computed(() => ({ tn2: 'ТН-2', ttn1: 'ТТН-1' }[workspace.documentType.value] || ''));
+const waybillTemplateState = computed(() => {
+  if (!waybillName.value || !workspace.selectedLegalEntityId.value) return null;
+  const issuer = workspace.legalEntities.value.find(item => item.id === workspace.selectedLegalEntityId.value)?.display_name;
+  if (workspace.templatesLoading.value || workspace.templateVersionsLoading.value)
+    return { kind: 'loading', text: `Загружаем шаблон ${waybillName.value}…` };
+  if (workspace.templateLoadError.value || workspace.versionLoadError.value)
+    return { kind: 'error', text: `Не удалось загрузить шаблон ${waybillName.value} для «${issuer}».` };
+  if (!workspace.selectedTemplateId.value)
+    return { kind: 'missing', text: `Для «${issuer}» нужно подключить шаблон ${waybillName.value}.` };
+  if (!workspace.activeTemplateVersionId.value)
+    return { kind: 'inactive', text: `У выбранного шаблона ${waybillName.value} для «${issuer}» нет активной версии DOCX.` };
+  return null;
+});
+const draftBlockedReason = computed(() => waybillTemplateState.value?.text || selectionError.value || workspace.draftBlockedReason.value);
 const partyRolesSupported = computed(() => ['contract', 'invoice', 'act', 'offer'].includes(workspace.documentType.value));
 const isConsumerDocument = computed(() => isConsumerDocumentType(workspace.documentType.value));
 const isBusinessTermsDocument = computed(() => isBusinessTermsDocumentType(workspace.documentType.value));
@@ -659,8 +678,18 @@ defineExpose({
         />
         <template v-else-if="workspace.legalEntities.value.length">
           <ContractScenarioChooser v-if="workspace.documentType.value === 'contract'" :model-value="workspace.businessTerms.value.contract_scenario" @update:model-value="setContractScenario" @attach-contract="contractSource = 'customer'" />
-          <details class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
-            <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Шаблон и реквизиты <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (hasInitialTemplate ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
+          <div v-if="waybillTemplateState" role="status" data-testid="waybill-template-status" class="mt-3 rounded-xl bg-slate-100 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-200">
+            <p class="font-semibold">{{ waybillTemplateState.text }}</p>
+            <button v-if="waybillTemplateState.kind === 'error'" type="button" class="mt-2 font-semibold underline" @click="workspace.templateLoadError.value ? workspace.loadTemplates() : workspace.loadTemplateVersions()">Повторить загрузку</button>
+            <template v-else-if="waybillTemplateState.kind !== 'loading'">
+              <p v-if="workspace.templates.value.length > 1" class="mt-1">Можно выбрать другой шаблон ниже.</p>
+              <button v-if="canManageDocumentSettings" type="button" class="mt-2 font-semibold underline" @click="openSettings">Юрлица и шаблоны</button>
+              <p v-else class="mt-1">Подключить шаблон может владелец или администратор.</p>
+            </template>
+          </div>
+          <details v-if="!waybillTemplateState || workspace.templates.value.length" :open="Boolean(waybillName)"
+            class="mt-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-document-options">
+            <summary class="cursor-pointer break-words text-sm font-semibold text-slate-700 dark:text-slate-200">{{ waybillTemplateState ? 'Шаблон' : 'Шаблон и реквизиты' }} <span class="font-normal text-slate-500">· {{ workspace.templates.value.find((item) => item.id === workspace.selectedTemplateId.value)?.name || (hasInitialTemplate ? 'Начальная редактируемая форма' : 'не выбран') }}</span></summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-3">
               <div class="min-w-0">
                 <label class="native-field"><span>Шаблон</span><select v-model="workspace.selectedTemplateId.value" class="native-input" data-testid="native-document-template"><option v-if="hasInitialTemplate && !workspace.templates.value.length" :value="null">Начальная редактируемая форма</option><option v-for="template in workspace.templates.value" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
@@ -668,11 +697,12 @@ defineExpose({
                   class="mt-1 min-h-8 text-left text-xs font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
                   data-testid="edit-selected-template" @click="editTemplate()">Редактировать шаблон</button>
               </div>
-              <label class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
-              <label class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
+              <label v-if="!waybillTemplateState" class="native-field"><span>Дата документа</span><input v-model="workspace.issueDate.value" class="native-input" data-testid="native-document-issue-date" type="date" /></label>
+              <label v-if="!waybillTemplateState" class="native-field"><span>Город документа</span><input v-model="workspace.issueCity.value" class="native-input" data-testid="native-document-issue-city" placeholder="Витебск" /></label>
             </div>
           </details>
 
+          <template v-if="!waybillTemplateState">
           <div v-if="customerWarnings.length || audienceMismatchWarning" class="mt-4 rounded-xl px-3 py-2 text-sm"
             :class="audienceMismatchWarning ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300'" data-testid="native-customer-readiness-warning">
             <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
@@ -761,14 +791,14 @@ defineExpose({
             @update-terms="workspace.actTerms.value = $event"
           />
           <TransportTermsPanel
-            v-if="['tn2', 'ttn1'].includes(workspace.documentType.value)"
-            :document-type="workspace.documentType.value"
+            v-if="workspace.documentType.value === 'ttn1'"
             :terms="workspace.transportTerms.value"
             @update-terms="workspace.transportTerms.value = $event"
           />
-          <p v-if="draftBlockedReason && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ draftBlockedReason }}. <button v-if="canManageDocumentSettings && !selectionError" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
+          </template>
+          <p v-if="!waybillTemplateState && draftBlockedReason && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ draftBlockedReason }}. <button v-if="canManageDocumentSettings && !selectionError" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <span class="text-xs text-slate-500">{{ workspace.documentType.value === 'ttn1' ? 'В черновике укажите грузовые места и массу по строкам.' : 'Черновик можно проверить до присвоения номера.' }}</span>
+            <span v-if="!waybillTemplateState" class="text-xs text-slate-500">{{ workspace.documentType.value === 'ttn1' ? 'В черновике укажите грузовые места и массу по строкам.' : 'Черновик можно проверить до присвоения номера.' }}</span>
             <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(draftBlockedReason)" :title="draftBlockedReason" @click="createDraft()">Создать черновик</button>
           </div>
         </template>
