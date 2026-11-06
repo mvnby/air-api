@@ -995,6 +995,8 @@ export type { TypedInstallationProfile_Input } from './models/TypedInstallationP
 export type { TypedInstallationProfile_Output } from './models/TypedInstallationProfile_Output';
 export type { UpdateMaintenanceObservation } from './models/UpdateMaintenanceObservation';
 export type { ValidationError } from './models/ValidationError';
+export type { WaybillCargoLine } from './models/WaybillCargoLine';
+export type { WaybillCargoMeasure } from './models/WaybillCargoMeasure';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
 export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';
 export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';

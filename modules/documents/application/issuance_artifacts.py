@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 from datetime import date
 
 from modules.documents.infrastructure.artifact_storage import (
@@ -13,6 +12,7 @@ from modules.documents.infrastructure.artifact_storage import (
 from modules.documents.infrastructure.renderers import NativeDocxRenderer, PdfConverter
 from modules.documents.infrastructure.template_source_storage import TemplateSourceStorage
 
+from .waybill_cargo import draft_snapshot_copy
 from .artifact_helpers import artifact_basename, build_render_inputs
 from .editable_draft import finalize_editable_draft
 
@@ -29,7 +29,7 @@ def assign_official_identity(
     """Apply one reserved official identity to the persisted render snapshot."""
 
     official_number = f"{reservation.number_value:0{policy.minimum_width}d}"
-    snapshot = deepcopy(document.render_snapshot)
+    snapshot = draft_snapshot_copy(document.render_snapshot)
     values = snapshot.setdefault("values", {})
     values.update(
         {

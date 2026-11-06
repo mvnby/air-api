@@ -2,6 +2,7 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from modules.documents.application.waybill_cargo import WaybillCargoLine, WaybillCargoMeasure
 from .schemas import ConsumerDocumentTermsPayload, TransportTermsPayload
 from .business_schemas import ActTermsPayload, BusinessDocumentTermsPayload
 from modules.documents.domain.repair_defect import RepairDefect
@@ -17,6 +18,7 @@ class ManagedDocumentDraftParameters(BaseModel):
     transport_terms: TransportTermsPayload | None = None
     repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
+    waybill_cargo: list[WaybillCargoLine] | None = None
     revision: str
     template_version_id: int
     has_editable_copy: bool
@@ -38,6 +40,8 @@ class ManagedDocumentDraftParameterUpdate(BaseModel):
     transport_terms: TransportTermsPayload | None = None
     repair_defect: RepairDefect | None = None
     participant_statement: ParticipantStatementPayload | None = None
+
+    waybill_cargo: list[WaybillCargoMeasure] | None = None
 
     @model_validator(mode="after")
     def validate_changes(self):

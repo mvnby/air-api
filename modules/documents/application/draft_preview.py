@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +14,7 @@ from modules.documents.infrastructure.template_source_storage import (
     TemplateSourceStorage,
 )
 
+from .waybill_cargo import draft_snapshot_copy
 from .artifact_helpers import build_render_inputs, stored_artifact
 from .customer_readiness import source_customer_readiness
 from .editable_draft import (
@@ -96,7 +96,7 @@ class ManagedDocumentDraftPreviewService:
                 filename=str(version.source_filename or "template.docx"),
                 checksum_sha256=version.checksum_sha256,
             )
-            snapshot = deepcopy(document.render_snapshot)
+            snapshot = draft_snapshot_copy(document.render_snapshot)
             snapshot.setdefault("values", {}).update(displayed_values)
             render_template, render_context = build_render_inputs(
                 template=template,
