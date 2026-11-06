@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kitlane · Подбор и предложение</title>
+<style>
+:root { color-scheme:light dark; font-family:var(--font-sans,system-ui,sans-serif); color:var(--color-text-primary,light-dark(#192826,#edf3f1)); background:var(--color-background-primary,light-dark(#fff,#17211f)); font-size:14px; line-height:1.5 }
+* { box-sizing:border-box } body { margin:0; padding:16px } h1 { font-size:19px; margin:0 0 4px } h2 { font-size:16px; margin:4px 0 10px } h3 { font-size:14px; margin:12px 0 4px } p { margin:6px 0 } .muted { color:var(--color-text-secondary,light-dark(#55645f,#b4c6bd)) }
+.options { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr)); gap:12px; margin-top:14px } article { min-width:0; border:1px solid var(--color-border-primary,light-dark(#d6e1db,#53655b)); border-radius:14px; padding:14px; overflow-wrap:anywhere } article.selected { border:2px solid light-dark(#176749,#8cddb7); padding:13px }
+.tag { font-size:12px; color:var(--color-text-secondary,light-dark(#55645f,#b4c6bd)) } dl { display:grid; grid-template-columns:1fr auto; gap:5px 12px; margin:12px 0 } dt,dd { margin:0 } dd { text-align:right; font-variant-numeric:tabular-nums } .total { font-size:16px; font-weight:650; border-top:1px solid var(--color-border-primary,light-dark(#d6e1db,#53655b)); padding-top:7px }
+ul { margin:5px 0; padding-left:20px } a { color:light-dark(#0e6744,#9ce1bf) } button { font:inherit; min-height:44px; width:100%; margin-top:12px; border-radius:9px; padding:9px 12px; border:1px solid currentColor; color:inherit; background:transparent; cursor:pointer } button:focus-visible,a:focus-visible { outline:3px solid #50a77d; outline-offset:3px } button:disabled { cursor:default; opacity:.55 } .notice { padding:10px 12px; border-radius:10px; background:var(--color-background-secondary,light-dark(#f1f5f2,#29372f)); margin:12px 0 }
+img { width:100%; height:140px; object-fit:contain; border-radius:8px } .saved a { display:inline-block; margin:4px 16px 4px 0; min-height:28px } #action-status { min-height:24px; margin-top:10px } .safety { font-size:12px; margin-top:14px } @media(max-width:480px) { body { padding:12px } .options { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<header><h1>Подбор с монтажом</h1><p class="muted">Альтернативы для одной комнаты. Выберите один вариант.</p></header>
+<main id="result" aria-live="polite"><p class="notice">Ожидаем результат подбора…</p></main>
+<p id="action-status" role="status" aria-live="polite"></p>
+<p class="muted safety">Выбор передаётся в чат для подготовки черновика. Отправка писем и выпуск документов требуют отдельного подтверждения в Manager.</p>
+<script>
+(() => {
+  'use strict';
+  const imageOrigins = /*IMAGE_ORIGINS*/[];
+  const result = document.getElementById('result');
+  const actionStatus = document.getElementById('action-status');
+  let current = null, selected = null, sequence = 0, initialized = false, canMessage = false;
+  const pending = new Map();
+  const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const list = value => Array.isArray(value) ? value : [];
+  const str = value => typeof value === 'string' ? value : '';
+  const number = value => (typeof value === 'number' || typeof value === 'string') && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  const el = (tag, text, className) => {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = String(text);
+    if (className) node.className = className;
+    return node;
+  };
+  const money = value => number(value) === null ? 'Цена не определена' : new Intl.NumberFormat('ru-BY', {style:'currency',currency:'BYN'}).format(number(value));
+  const post = message => { if (window.parent !== window) window.parent.postMessage({jsonrpc:'2.0',...message}, '*'); };
+  function request(method, params) {
+    if (window.parent === window) return Promise.reject(new Error('host_unavailable'));
+    const id = ++sequence;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('host_timeout')); }, 15000);
+      pending.set(id, {resolve, reject, timer}); post({id, method, params});
+    });
+  }
+  function safeUrl(value) {
+    try { const url = new URL(str(value)); return url.protocol === 'https:' && !url.username && !url.password ? url : null; } catch { return null; }
+  }
+  function link(parent, title, value) {
+    const url = safeUrl(value); if (!url) return;
+    const anchor = el('a', title); anchor.href = url.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; parent.append(anchor);
+    anchor.addEventListener('click', event => {
+      if (!initialized) return;
+      event.preventDefault();
+      request('ui/open-link', {url:url.href}).then(response => {
+        if (response.isError) throw new Error('link_denied');
+      }).catch(() => { actionStatus.textContent = 'Ссылка не открыта. Откройте её из текстового ответа в чате.'; });
+    });
+  }
+  function bulletSection(parent, title, values) {
+    const strings = list(values).filter(value => typeof value === 'string' && value);
+    if (!strings.length) return;
+    parent.append(el('h3', title)); const ul = el('ul');
+    strings.forEach(value => ul.append(el('li', value))); parent.append(ul);
+  }
+  function priceRow(dl, label, value, total = false) {
+    dl.append(el('dt', label, total ? 'total' : undefined), el('dd', money(value), total ? 'total' : undefined));
+  }
+  function displayOption(option, index, data) {
+    option = object(option); const product = object(option.product), input = object(option.installation_input);
+    const rawId = str(option.calculation_fingerprint);
+    const id = /^[0-9a-f]{64}$/.test(rawId) ? rawId : '';
+    const card = el('article', undefined, selected === id && id ? 'selected' : ''); card.dataset.selectionId = id;
+    card.append(el('p', str(option.label) || `Вариант ${index + 1}`, 'tag'), el('h2', str(product.title) || 'Оборудование не указано'));
+    const image = safeUrl(option.image_url || product.main_image || product.image_url);
+    if (image && imageOrigins.includes(image.origin)) {
+      const img = el('img'); img.src = image.href; img.alt = str(product.title); img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => img.remove(), {once:true}); card.append(img);
+    }
+    const features = [];
+    if (typeof product.is_inverter === 'boolean') features.push(product.is_inverter ? 'Инвертор' : 'On/off');
+    if (number(product.cooling_power_kw) !== null) features.push(`Охлаждение ${product.cooling_power_kw} кВт`);
+    if (number(product.area_m2) !== null) features.push(`Каталожная площадь до ${product.area_m2} м²`);
+    if (typeof product.heating_min_c === 'number') features.push(`Обогрев до ${product.heating_min_c} °C`);
+    const wifi = {builtin:'Wi-Fi встроен',ready:'Wi-Fi Ready: модуль приобретается отдельно',none:'Wi-Fi нет',unknown:'Wi-Fi не подтверждён'};
+    if (wifi[product.wifi]) features.push(wifi[product.wifi]);
+    bulletSection(card, 'Характеристики', features);
+    card.append(el('p', ({in_stock:'В наличии',on_request:'Под заказ'})[product.availability] || 'Наличие не подтверждено'));
+    link(card, 'Карточка оборудования', product.site_url);
+    const prices = el('dl'); priceRow(prices, 'Оборудование', option.equipment_total_byn);
+    priceRow(prices, 'Аксессуары', option.accessories_total_byn); priceRow(prices, 'Монтаж', option.installation_total_byn);
+    priceRow(prices, 'Итого за этот вариант', option.total_byn, true); card.append(prices);
+    const selectedAccessories = list(option.selected_accessories);
+    bulletSection(card, 'Включённые аксессуары', selectedAccessories.map(item => str(object(item).title)));
+    const installation = object(option.installation);
+    if (str(installation.customer_text)) card.append(el('p', installation.customer_text, 'muted'));
+    const assumptions = [...new Set([...list(input.assumptions), ...list(option.assumptions)])];
+    if (number(input.route_length_m) !== null) assumptions.unshift(`Длина трассы: ${input.route_length_m} м`);
+    if (input.access) assumptions.push(({standard:'Стандартный доступ',requires_assessment:'Доступ требует оценки',unknown:'Доступ не уточнён'})[input.access] || 'Доступ не уточнён');
+    bulletSection(card, 'Условия расчёта монтажа', assumptions);
+    bulletSection(card, 'Не хватает данных', [...list(option.missing_inputs), ...list(option.missing_fields)]);
+    if (option.price_kind === 'estimate') card.append(el('p', 'Предварительный расчёт. Условия проверяются на объекте.', 'muted'));
+    const ready = data.status === 'ready' && id && Number.isInteger(product.product_id) && product.product_id > 0 &&
+      [option.equipment_total_byn,option.accessories_total_byn,option.installation_total_byn,option.total_byn].every(value => number(value) !== null) &&
+      !list(data.missing_inputs).length && !list(option.missing_inputs).length && !list(option.missing_fields).length;
+    const button = el('button', selected === id && id ? 'Выбран · передать в чат ещё раз' : 'Выбрать для черновика');
+    button.type = 'button'; button.disabled = !ready || !canMessage; button.setAttribute('aria-pressed', String(selected === id && Boolean(id)));
+    if (!ready) card.append(el('p', 'Подготовка черновика недоступна: расчёт не готов.', 'muted'));
+    button.addEventListener('click', async () => {
+      if (!ready || !canMessage || current !== data) return;
+      selected = id; button.disabled = true; actionStatus.textContent = 'Передаём выбор в чат…';
+      // Only stable identities; source titles/notes cannot become chat instructions.
+      const text = `Выбираю вариант подбора ${id}, product_id=${product.product_id}. Подготовь черновик предложения по этому варианту после проверки актуального расчёта. Это не подтверждение отправки или выпуска документа.`;
+      try {
+        const response = await request('ui/message', {role:'user',content:[{type:'text',text}]});
+        if (response.isError) throw new Error('message_denied');
+        if (current === data) actionStatus.textContent = 'Выбор передан в чат. Черновик ещё не сохранён.';
+      } catch { if (current === data) actionStatus.textContent = 'Выбор не передан. Укажите выбранный вариант в чате.'; }
+      if (current === data) render(data);
+    });
+    card.append(button); return card;
+  }
+  function displaySaved(data) {
+    const saved = el('section', undefined, 'saved'); saved.append(el('h2', 'Сохранённый результат'));
+    if (data.document_id) {
+      link(saved, 'Черновик предложения в Manager', data.manager_url);
+      saved.append(el('p', data.customer_ready_and_current === true ? 'Данные документа заполнены; отправка не выполнена.' : 'Документ пока не готов для клиента.'));
+      if (data.stale) saved.append(el('p', 'Предложение изменено после подготовки документа. Требуется обновить черновик.', 'notice'));
+      const readiness = object(data.readiness);
+      bulletSection(saved, 'Не хватает данных', list(readiness.missing_fields).map(field => str(object(field).label) || str(object(field).field) || str(object(field).message)));
+    } else {
+      link(saved, 'Заказ и предложение в Manager', data.order_url || data.manager_url);
+      const prices = el('dl'); priceRow(prices, 'Оборудование', data.equipment_total_byn);
+      priceRow(prices, 'Аксессуары', data.accessories_total_byn); priceRow(prices, 'Монтаж', data.installation_total_byn);
+      priceRow(prices, 'Итого по предложению', data.total_byn, true); saved.append(prices);
+      bulletSection(saved, 'Оборудование в предложении', list(data.products).map(item => str(object(item).title)));
+      bulletSection(saved, 'Работы в предложении', list(data.services).map(item => str(object(item).title)));
+    }
+    link(saved, 'Предложение в Manager', data.proposal_url);
+    list(data.documents).forEach(document => { document = object(document); link(saved, str(document.title) || 'Документ', document.manager_url || document.url); });
+    bulletSection(saved, 'Не хватает данных', data.missing_inputs);
+    return saved;
+  }
+  function render(data) {
+    current = data; result.replaceChildren();
+    const statuses = {ready:'Расчёт готов',needs_input:'Нужно уточнение',not_ready:'Расчёт пока не готов',no_matches:'Подходящие варианты не найдены'};
+    result.append(el('p', statuses[data.status] || 'Результат', 'notice'));
+    if (str(data.checked_at)) result.append(el('p', `Проверено: ${data.checked_at}`, 'muted'));
+    if (str(data.message_text)) result.append(el('p', data.message_text));
+    bulletSection(result, 'Нужно уточнить', data.missing_inputs); bulletSection(result, 'Условия и ограничения', data.warnings);
+    const options = list(data.options).slice(0,3);
+    if (options.length) {
+      if (!options.some(option => str(object(option).calculation_fingerprint) === selected)) selected = null;
+      const cards = el('section', undefined, 'options'); cards.setAttribute('aria-label', 'Альтернативные варианты');
+      options.forEach((option,index) => cards.append(displayOption(option,index,data))); result.append(cards);
+      if (!canMessage) result.append(el('p', 'Для выбора укажите вариант в чате.', 'muted'));
+    }
+    if (data.manager_url || data.order_url || data.proposal_url || list(data.documents).length) result.append(displaySaved(data));
+  }
+  function hostContext(context) {
+    if (context.theme === 'dark' || context.theme === 'light') document.documentElement.style.colorScheme = context.theme;
+    if (str(context.locale)) document.documentElement.lang = context.locale;
+  }
+  window.addEventListener('message', event => {
+    if (event.source !== window.parent || event.source === window) return;
+    const message = object(event.data); if (message.jsonrpc !== '2.0') return;
+    if (pending.has(message.id) && ('result' in message || 'error' in message)) {
+      const call = pending.get(message.id); pending.delete(message.id); clearTimeout(call.timer);
+      message.error ? call.reject(new Error('host_error')) : call.resolve(object(message.result)); return;
+    }
+    if (message.method === 'ui/notifications/host-context-changed') hostContext(object(message.params));
+    if (message.method === 'ui/resource-teardown') {
+      for (const call of pending.values()) { clearTimeout(call.timer); call.reject(new Error('teardown')); }
+      pending.clear(); canMessage = false; if (current) render(current);
+      post({id:message.id,result:{}}); return;
+    }
+    if (message.method === 'ui/notifications/tool-cancelled') {
+      current = null; result.replaceChildren(el('p', 'Подбор отменён.', 'notice')); return;
+    }
+    if (message.method !== 'ui/notifications/tool-result') return;
+    actionStatus.textContent = '';
+    const params = object(message.params), structured = object(params.structuredContent);
+    const data = structured.result && typeof structured.result === 'object' ? object(structured.result) : structured;
+    if (params.isError || data.error) { current = null; result.replaceChildren(el('p', 'Не удалось получить результат. Проверьте сообщение в чате.', 'notice')); return; }
+    render(data);
+  });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
+    if (initialized) post({method:'ui/notifications/size-changed',params:{height:document.body.scrollHeight}});
+  }).observe(document.body);
+  request('ui/initialize', {appInfo:{name:'Kitlane sales',version:'1.0.0'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'})
+    .then(response => {
+      if (response.protocolVersion !== '2026-01-26') throw new Error('unsupported_protocol');
+      initialized = true; canMessage = Boolean(object(response.hostCapabilities).message);
+      hostContext(object(response.hostContext)); post({method:'ui/notifications/initialized',params:{}});
+      if (current) render(current);
+    }).catch(() => { actionStatus.textContent = 'Интерактивный выбор недоступен. Продолжите в чате.'; });
+})();
+</script>
+</body>
+</html>

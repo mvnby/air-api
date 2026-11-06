@@ -18,7 +18,7 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 48
+    assert len(TOOLS) == 55
     assert {"create_service_order", "get_service_order_intake", "get_service_order_proposal", "edit_service_order_proposal",
             "prepare_service_order_contract", "get_service_order_contract"} <= TOOLS.keys()
     definition = TOOLS['upload_maintenance_finding_photo'].definition().model_dump(by_alias=True)

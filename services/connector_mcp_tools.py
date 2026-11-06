@@ -46,6 +46,14 @@ from schemas_connector_service_order_create import ConnectorServiceOrderResult, 
 from schemas_connector_service_order_lines import ServiceOrderProposalEditInput, ServiceOrderProposalInput, ServiceOrderProposalResult
 from schemas_connector_service_order_document import ServiceOrderContractPrepareInput, ServiceOrderContractReadInput, ServiceOrderContractResult
 from services.connector_service_order_commands import execute_service_order_tool
+from schemas_connector_sales_pricing import SalesSelectionInput, SalesSelectionResult, SalesPreviewInput, SalesSelectionOption
+from schemas_connector_sales_order import (
+    SalesCustomerCreateInput, SalesCustomerResult, SalesOrderSaveInput, SalesOrderReadInput,
+    SalesOrderResult, SalesOrderOfferPrepareInput, SalesOrderOfferReadInput, SalesOrderOfferResult,
+)
+from services.connector_sales_pricing import ConnectorSalesPricingService
+from services.connector_sales_order import execute_sales_order_tool
+from services.connector_sales_ui import SALES_UI_URI
 
 
 READ_SCOPE = "kitlane:read"
@@ -54,6 +62,7 @@ TASK_SCOPE = "kitlane:tasks:write"
 MAINTENANCE_SCOPE = "kitlane:maintenance:write"
 CATALOG_SCOPE = "kitlane:catalog:write"
 ORDER_SCOPE = "kitlane:orders:write"
+CUSTOMER_SCOPE = "kitlane:customers:write"
 CONTRACT_SCOPE = "kitlane:contracts:drafts:write"
 MAIL_READ_SCOPE = "kitlane:mail:read"
 MAIL_DRAFT_SCOPE = "kitlane:mail:drafts:write"
@@ -71,13 +80,18 @@ class ConnectorTool:
     file_params: tuple[str, ...] = ()
     read_only: bool | None = None
     open_world: bool = False
+    additional_scopes: tuple[str, ...] = ()
+    ui_resource: str | None = None
 
     def definition(self) -> Tool:
         read_only = self.scope == READ_SCOPE if self.read_only is None else self.read_only
         # Reading private mail has its own scope; a read-only annotation does
         # not grant access or reduce the OAuth scopes required by the tool.
         scopes = [READ_SCOPE] if self.scope == READ_SCOPE else [READ_SCOPE, self.scope]
+        scopes.extend(scope for scope in self.additional_scopes if scope not in scopes)
         meta = {"securitySchemes": [{"type": "oauth2", "scopes": scopes}]}
+        if self.ui_resource:
+            meta["ui"] = {"resourceUri": self.ui_resource}
         if self.file_params:
             meta["openai/fileParams"] = list(self.file_params)
         return Tool(
@@ -165,7 +179,32 @@ _MAIL_TOOLS = (
     ConnectorTool("send_mail_draft", "Send only the saved exact draft version already explicitly approved by the user in Manager after full preview. Requires separate mail-send scope. Never set or synthesize consent; no confirmed flag is accepted. Edits require fresh Manager approval. On timeout read get_mail_send_result; an uncertain SMTP outcome must never be blindly retried or copied into another draft.", MailDraftVersionInput, ConnectorWriteResult[MailMessageResponse], MAIL_SEND_SCOPE, True, open_world=True),
     ConnectorTool("get_mail_send_result", "Read the current saved send status and Manager link. sent means accepted by the configured SMTP server, not delivery to the recipient. pending/sending may still run; unknown means verify in Manager before any further sending.", MailMessageInput, MailMessageResponse, MAIL_READ_SCOPE, read_only=True),
 )
-TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_MAIL_TOOLS)}
+_SALES_TOOLS = (
+    ConnectorTool("select_sales_installation_options",
+        "Compare up to three single-room wall split alternatives within the TOTAL equipment, selected accessories and installation budget. Declare route length, hole types/counts and access conditions, including explicit assumptions. Uses the company's published installation tariffs. Missing site facts or tariffs return readiness, never guessed prices. Show each independent option and its calculation fingerprint; no order or booking is created.",
+        SalesSelectionInput, SalesSelectionResult, ui_resource=SALES_UI_URI),
+    ConnectorTool("preview_sales_installation",
+        "Recalculate one chosen product with compatible accessories and declared installation conditions before saving or changing a sales proposal. Returns current totals, tariff provenance and calculation fingerprint. Does not save, reserve stock or promise a delivery/installation date.",
+        SalesPreviewInput, SalesSelectionOption),
+    ConnectorTool("create_sales_customer",
+        "On explicit user instruction create a minimal customer for a sales draft after searching existing customers. Require the factual party type: individual, company or individual_entrepreneur. Missing optional requisites may be completed later. A duplicate returns the existing match for verification. Reuse the same key and payload after timeout; this does not create an order.",
+        SalesCustomerCreateInput, ConnectorWriteResult[SalesCustomerResult], CUSTOMER_SCOPE),
+    ConnectorTool("save_sales_order",
+        "Save ONE explicitly chosen equipment-and-installation option for a verified customer as a native sales_installation negotiation order with its tariff-backed installation estimate. Requires the current calculation fingerprint; changed prices/tariffs/availability are rejected. To edit, read get_sales_order and supply exact order_id, proposal_id and expected_version; other variants remain unchanged. Preserve original request, requirements and installation assumptions. Returns saved IDs; never issue/send/reserve/book or claim customer acceptance.",
+        SalesOrderSaveInput, ConnectorWriteResult[SalesOrderResult], ORDER_SCOPE, destructive=True,
+        additional_scopes=(CATALOG_SCOPE,)),
+    ConnectorTool("get_sales_order",
+        "Resume a saved equipment-and-installation deal in a new conversation. Read its exact proposal, current lines/totals/version, original request, requirements and saved installation assumptions before editing. If several proposals are possible choose explicitly. Saved prices describe the proposal; recalculate before changing its composition.",
+        SalesOrderReadInput, SalesOrderResult, ui_resource=SALES_UI_URI),
+    ConnectorTool("prepare_sales_order_offer",
+        "Prepare a native commercial offer DRAFT from one current saved sales-and-installation proposal, including its equipment and installation. Use get_sales_order's version and a verified/default issuer. Preserves existing documents, reports readiness and returns the exact Manager draft link. No issue, signature, send, payment, customer acceptance or scheduling. On failure resume using saved order/proposal IDs.",
+        SalesOrderOfferPrepareInput, ConnectorWriteResult[SalesOrderOfferResult], CATALOG_SCOPE),
+    ConnectorTool("get_sales_order_offer",
+        "Read a saved native sales offer draft, its readiness, missing fields, current/stale proposal version and exact Manager review link. A draft is not an issued or delivered offer.",
+        SalesOrderOfferReadInput, SalesOrderOfferResult, ui_resource=SALES_UI_URI),
+)
+TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_MAIL_TOOLS, *_SALES_TOOLS)}
+SALES_TOOLS = frozenset(tool.name for tool in _SALES_TOOLS)
 MAINTENANCE_TOOLS = frozenset(tool.name for tool in _MAINTENANCE_TOOLS)
 CATALOG_TOOLS = frozenset(tool.name for tool in _CATALOG_TOOLS)
 MAIL_TOOLS = frozenset(tool.name for tool in _MAIL_TOOLS)
@@ -185,7 +224,14 @@ async def execute_tool(
     if hasattr(inputs, "payload"):
         kwargs["payload"] = inputs.payload
     name = tool.name
-    if tool.scope in {ORDER_SCOPE, CONTRACT_SCOPE}:
+    if name in SALES_TOOLS:
+        if name == "select_sales_installation_options":
+            result = await ConnectorSalesPricingService.select(session, actor, inputs)
+        elif name == "preview_sales_installation":
+            result = await ConnectorSalesPricingService.preview(session, actor, inputs)
+        else:
+            result = await execute_sales_order_tool(session, actor, name, inputs)
+    elif tool.scope in {ORDER_SCOPE, CONTRACT_SCOPE}:
         result = await execute_service_order_tool(session, actor, name, inputs)
     elif name in MAIL_TOOLS:
         if tool.scope == MAIL_READ_SCOPE:
