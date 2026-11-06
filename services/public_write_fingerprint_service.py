@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from schemas_website_context import submission_context_identity
+
 
 @dataclass(frozen=True)
 class PublicWriteAttachmentFingerprint:
@@ -61,6 +63,8 @@ class PublicWriteFingerprintService:
         # Keep fingerprints for legacy requests stable across this additive field.
         if data.get("submission_context") is None:
             data.pop("submission_context", None)
+        elif isinstance(data.get("submission_context"), Mapping):
+            data["submission_context"] = submission_context_identity(data["submission_context"])
         return data
 
     @staticmethod

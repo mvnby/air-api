@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 import math
 from typing import Any, Optional
 
+from schemas_website_context import website_interests_from_meta
+
 from models import Order, LeadSource
 from schemas_leads_inbox import LeadsInboxArchiveResponse, LeadsInboxItemResponse
 
@@ -61,6 +63,7 @@ class LeadsInboxProjection:
         if not summary and order.lead_source != LeadSource.BELZAKUPKI:
             summary = cls._clean_order_title(order.comment)
         return LeadsInboxItemResponse(
+            website_interests=website_interests_from_meta(meta),
             id=order.id, status="linked" if order.linked_order_id else getattr(order.status, "value", order.status),
             is_new=active and not is_read, is_read=is_read, read_at=read.read_at if read else None,
             source_kind="tender" if tender or tender_workflow or order.lead_source == LeadSource.BELZAKUPKI else "customer_request",

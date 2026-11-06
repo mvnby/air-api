@@ -14,6 +14,7 @@ from schemas_common import Meta
 from schemas_manager_installers import ManagerInstallerResponse
 from schemas_belzakupki_enrichment import ManagerOrderSourceEnrichment
 from schemas_incoming import IncomingOrderContext
+from schemas_website_context import WebsiteInterests
 
 
 class CalendarEventType(str, Enum):
@@ -580,6 +581,7 @@ class OrderProposalListResponse(BaseModel):
 
 
 class ManagerOrderDetailResponse(ManagerOrderListItemResponse):
+    website_interests: WebsiteInterests | None = None
     maintenance_source_order_id: Optional[int] = None
     incoming_context: Optional[IncomingOrderContext] = None
     source_enrichment: Optional[ManagerOrderSourceEnrichment] = None

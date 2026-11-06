@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 
+from schemas_website_context import WebsiteSubmissionContext
+
 from models import (
     IntegrationOutboxEvent,
     LeadSource,
@@ -155,6 +157,13 @@ async def test_repair_diagnostic_creates_private_manager_attachments_and_replays
 ):
     storage = FakePrivateStorage()
     payload = _payload()
+    payload.submission_context = WebsiteSubmissionContext.model_validate({
+        "page_path": "/repair", "form_id": "repair_diagnostic", "interests": {
+            "version": 1, "consent": True, "items": [{
+                "kind": "service", "page_path": "/services/clean", "title": "Чистка оборудования", "active_seconds": 90,
+            }],
+        },
+    })
     uploads = _uploads()
 
     response, nameplate_files, replayed = await RepairDiagnosticIntakeService.create_lead(
@@ -167,7 +176,9 @@ async def test_repair_diagnostic_creates_private_manager_attachments_and_replays
     )
     replay_response, _, replayed_again = await RepairDiagnosticIntakeService.create_lead(
         sqlite_repair_diagnostic_session,
-        payload=payload,
+        payload=payload.model_copy(update={"submission_context": WebsiteSubmissionContext(
+            page_path="/repair", form_id="repair_diagnostic",
+        )}),
         uploads=uploads,
         tenant_scope=tenant_scope,
         idempotency_key="repair-request-unit-0001",
@@ -190,6 +201,8 @@ async def test_repair_diagnostic_creates_private_manager_attachments_and_replays
     assert order.lead_source == LeadSource.SITE
     assert order.tenant_id == tenant_scope.tenant_id
     assert order.storefront_id == tenant_scope.storefront_id
+    assert order.technical_meta["submission_context"]["interests"]["items"][0]["active_seconds"] == 90
+    assert "Чистка оборудования" not in order.comment
     assert order.workflow_type == "repair"
     assert order.delivery_address == "Витебск, центр"
     assert order.title == "Ремонт кондиционера: Не охлаждает / слабо охлаждает"

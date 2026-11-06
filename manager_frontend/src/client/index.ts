@@ -1007,6 +1007,8 @@ export type { WaybillSourceLine } from './models/WaybillSourceLine';
 export type { WebRebuildCompletePayload } from './models/WebRebuildCompletePayload';
 export type { WebRebuildStatusResponse } from './models/WebRebuildStatusResponse';
 export type { WebRebuildTriggerResponse } from './models/WebRebuildTriggerResponse';
+export type { WebsiteInterestItem } from './models/WebsiteInterestItem';
+export type { WebsiteInterests } from './models/WebsiteInterests';
 export type { WebsiteSubmissionContext } from './models/WebsiteSubmissionContext';
 export type { WorkerAssignmentCreate } from './models/WorkerAssignmentCreate';
 export type { WorkerAssignmentPublicationUpdate } from './models/WorkerAssignmentPublicationUpdate';

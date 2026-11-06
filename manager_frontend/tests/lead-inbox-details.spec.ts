@@ -46,4 +46,15 @@ describe('Incoming source context', () => {
     wrapper.unmount();
   });
 
+  it.each(['lead', 'order'] as const)('keeps consented website interests separate from the %s request text', (entityKind) => {
+    const wrapper = mount(LeadInboxDetails, { props: { item: {
+      ...item, entity_kind: entityKind, source: 'site', comment: 'Нужен монтаж', website_interests: {
+        version: 1, consent: true, items: [{ kind: 'article', page_path: '/articles/quiet', title: 'Тихие модели', active_seconds: 80 }],
+      },
+    }, history: [] } });
+    expect(wrapper.get('[data-testid="website-interests"]').text()).toContain('Тихие модели');
+    expect(wrapper.get('p.whitespace-pre-line').text()).toBe('Нужен монтаж');
+    wrapper.unmount();
+  });
+
 });

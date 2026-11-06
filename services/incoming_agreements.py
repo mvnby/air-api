@@ -22,6 +22,8 @@ def explicit_instructions(text: str) -> tuple[bool, bool]:
 def qualification_context(lead) -> dict:
     return {
         **deepcopy(lead.intake_meta),
+        "original_text": (lead.intake_meta or {}).get("original_text", lead.request_text),
+        "source_timezone": (lead.intake_meta or {}).get("source_timezone", "Europe/Minsk"),
         "lead_id": lead.id,
         "lead_version": lead.version,
         "request_text": lead.request_text,

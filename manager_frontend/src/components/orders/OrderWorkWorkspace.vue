@@ -14,6 +14,7 @@ import MaintenanceObservationsPanel from '../maintenance-observations/Maintenanc
 import OrderWorkerPayPanel from './OrderWorkerPayPanel.vue';
 import OrderWorkerAssignmentsPanel from './OrderWorkerAssignmentsPanel.vue';
 import OrderSalesInstallationWorkspace from './OrderSalesInstallationWorkspace.vue';
+import WebsiteInterests from '../WebsiteInterests.vue';
 import OrderIncomingContext from './OrderIncomingContext.vue';
 import OrderWebsiteIntakePanel from './OrderWebsiteIntakePanel.vue';
 import OrderPlanningPanel from './OrderPlanningPanel.vue';
@@ -81,6 +82,7 @@ const getFieldError = props.fieldError;
 
     <OrderWorkerAssignmentsPanel v-if="order" :key="`worker-assignments-${order.id}`" :order-id="order.id" :work-stages="order.work_stages" :context-version="workerContextVersion" :disabled="disabled || payBusy" :before-action="beforeAction" @busy="emit('assignment-busy', $event)" />
     <OrderWorkerPayPanel v-if="order" :key="`worker-pay-${order.id}`" :order-id="order.id" :context-version="workerPayContextVersion" :disabled="disabled || assignmentBusy" :before-action="beforeAction" @busy="emit('pay-busy', $event)" @changed="emit('reload', order.id)" />
+    <WebsiteInterests :interests="order?.website_interests" />
     <OrderIncomingContext v-if="order?.incoming_context" :context="order.incoming_context" />
     <OrderSalesInstallationWorkspace
       v-if="workflowType === 'sales_installation'"

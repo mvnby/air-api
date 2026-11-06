@@ -42281,7 +42281,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 4000
+                "maxLength": 65536
               },
               {
                 "type": "null"
@@ -60469,6 +60469,16 @@
       },
       "LeadsInboxDetailResponse": {
         "properties": {
+          "website_interests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -61080,6 +61090,16 @@
       },
       "LeadsInboxItemResponse": {
         "properties": {
+          "website_interests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -77059,6 +77079,16 @@
             "type": "number",
             "title": "Balance Due",
             "default": 0.0
+          },
+          "website_interests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "maintenance_source_order_id": {
             "anyOf": [
@@ -105132,6 +105162,108 @@
         ],
         "title": "WebRebuildTriggerResponse"
       },
+      "WebsiteInterestItem": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "product",
+              "article",
+              "service",
+              "topic"
+            ],
+            "title": "Kind"
+          },
+          "page_path": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Page Path"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "active_seconds": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 0.0,
+            "title": "Active Seconds"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "topics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "minLength": 1
+                },
+                "type": "array",
+                "maxItems": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "page_path",
+          "title",
+          "active_seconds"
+        ],
+        "title": "WebsiteInterestItem"
+      },
+      "WebsiteInterests": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version"
+          },
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebsiteInterestItem"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "consent",
+          "items"
+        ],
+        "title": "WebsiteInterests",
+        "description": "Optional consented attention, separate from the customer's requested work."
+      },
       "WebsiteSubmissionContext": {
         "properties": {
           "page_path": {
@@ -105177,6 +105309,16 @@
               }
             ],
             "title": "Product Id"
+          },
+          "interests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

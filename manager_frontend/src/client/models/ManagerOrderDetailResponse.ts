@@ -16,6 +16,7 @@ import type { OrderServiceLineResponse } from './OrderServiceLineResponse';
 import type { OrderWorkStageResponse } from './OrderWorkStageResponse';
 import type { PaymentCurrency } from './PaymentCurrency';
 import type { PaymentResponse } from './PaymentResponse';
+import type { WebsiteInterests } from './WebsiteInterests';
 export type ManagerOrderDetailResponse = {
     id: number;
     responsible_person?: (ManagerOrderResponsiblePerson | null);
@@ -76,6 +77,7 @@ export type ManagerOrderDetailResponse = {
     execution_status_changed_at?: (string | null);
     total_payments?: number;
     balance_due?: number;
+    website_interests?: (WebsiteInterests | null);
     maintenance_source_order_id?: (number | null);
     incoming_context?: (IncomingOrderContext | null);
     source_enrichment?: (ManagerOrderSourceEnrichment | null);
