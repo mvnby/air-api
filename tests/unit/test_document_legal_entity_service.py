@@ -175,6 +175,11 @@ def test_tax_profile_blank_text_is_normalized_to_missing():
         entity_type="organization",
     )
     assert "tax_profile" not in requisites
+    with pytest.raises(DocumentLegalEntityError, match="налогового профиля"):
+        DocumentLegalEntityService._requisites(
+            {"tax_profile": {"regime": 123}},
+            entity_type="organization",
+        )
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,8 @@ class IssuerTaxProfile(BaseModel):
     def trim_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
+        if not isinstance(value, str):
+            raise ValueError("Значение налогового профиля должно быть строкой")
         normalized = value.strip()
         return normalized or None
 
