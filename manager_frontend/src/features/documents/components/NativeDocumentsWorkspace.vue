@@ -225,7 +225,7 @@ const issuerProfileUrl = computed(() => {
   return `/manager/customers/profile?${params}`;
 });
 const selectionError = computed(() => {
-  if (isCustomerEquipmentWorkAct(workspace.documentType.value)) {
+  if (isCustomerEquipmentWorkAct(workspace.documentType.value) && !workspace.replacesDocumentId.value) {
     if (!proposalServices.value.some(line => line.quantity > 0)) return 'Добавьте работы в выбранное предложение';
     if (proposalProducts.value.length && materialIds.value === null) return 'Выберите состав заказ-акта';
   }
@@ -773,13 +773,16 @@ defineExpose({
             <label class="native-field"><span>Текст заявления о соответствии</span><textarea v-model="workspace.participantStatement.value.declaration_text" class="native-input participant-statement-text" rows="8" maxlength="20000" data-testid="participant-statement-text" placeholder="Введите подтверждаемые сведения согласно требованиям закупки" /></label>
             <p class="text-xs text-slate-500">Участник и подписант берутся из выбранного нашего юрлица или ИП. Дата — в реквизитах выше. После создания черновика проверьте предпросмотр; текст можно отредактировать до выпуска.</p>
           </div>
-          <ConsumerWorkComposition v-if="isCustomerEquipmentWorkAct(workspace.documentType.value)" v-model="materialIds"
+          <p v-if="isConsumerDocument && workspace.replacesDocumentId.value" class="mt-3 text-sm text-slate-600 dark:text-slate-300" data-testid="replacement-frozen-composition">Состав и сумма наследуются из исходного документа: {{ (workspace.consumerProposalTotalCents.value ?? 0) / 100 }} BYN.</p>
+          <ConsumerWorkComposition v-if="isCustomerEquipmentWorkAct(workspace.documentType.value) && !workspace.replacesDocumentId.value" v-model="materialIds"
             :services="proposalServices" :products="proposalProducts" :total="compositionTotalCents(workspace.documentType.value)" />
           <ConsumerDocumentTermsPanel
             v-if="isConsumerDocument"
             :document-type="workspace.documentType.value"
             :terms="workspace.consumerTerms.value"
-            :proposal-total-cents="compositionTotalCents(workspace.documentType.value)"
+            :order-id="order.id"
+            :source-document-id="workspace.replacesDocumentId.value"
+            :proposal-total-cents="workspace.consumerProposalTotalCents.value"
             @update-terms="workspace.updateConsumerTerms"
           />
           <B2BContractTermsPanel

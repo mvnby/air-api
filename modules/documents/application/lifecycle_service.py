@@ -21,6 +21,7 @@ from modules.documents.domain import (
     DocumentLifecycleState,
     DocumentNumberScope,
     DocumentStatus,
+    B2C_NATIVE_DOCUMENT_TYPES,
     new_internal_reference,
     numbering_policy_key,
     transition_document,
@@ -234,8 +235,9 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "Обновите шаблон заказ-акта: выбранная версия не поддерживает монтаж в два этапа"
             )
+        replacement_source = None
         if replaces_document_id is not None:
-            await lock_replacement_target(
+            replacement_source = await lock_replacement_target(
                 session,
                 tenant_scope=tenant_scope,
                 order_id=selection.order_id,
@@ -243,14 +245,19 @@ class ManagedDocumentService:
                 target_document_id=replaces_document_id,
             )
 
-        snapshot = await DocumentContextBuilder.build(
-            session,
-            tenant_scope=tenant_scope,
-            selection=selection,
-            template=template,
-            template_version=version,
-            template_storage=template_storage,
-        )
+        if replacement_source is not None and selection.document_type in B2C_NATIVE_DOCUMENT_TYPES:
+            from .consumer_replacement import consumer_replacement_snapshot
+            snapshot = await consumer_replacement_snapshot(session, tenant_scope=tenant_scope,
+                source=replacement_source, selection=selection, version=version)
+        else:
+            snapshot = await DocumentContextBuilder.build(
+                session,
+                tenant_scope=tenant_scope,
+                selection=selection,
+                template=template,
+                template_version=version,
+                template_storage=template_storage,
+            )
         readiness = await source_customer_readiness(
             snapshot,
             template=template,
@@ -294,6 +301,11 @@ class ManagedDocumentService:
             google_edit_url=None,
         )
         session.add(document)
+        if replacement_source is not None and selection.document_type in B2C_NATIVE_DOCUMENT_TYPES:
+            document.scope_customer_branch_id = replacement_source.scope_customer_branch_id
+            document.scope_title = replacement_source.scope_title
+            document.scope_address = replacement_source.scope_address
+            document.scope_meta = dict(replacement_source.scope_meta or {})
         if commit:
             await cls._commit(session, "Не удалось создать черновик документа")
             await session.refresh(document)
@@ -386,7 +398,9 @@ class ManagedDocumentService:
         connector_version = (document.render_snapshot.get("meta") or {}).get(
             "connector_proposal_version"
         )
-        if connector_version is not None:
+        inherits_consumer_snapshot = (document.doc_type in B2C_NATIVE_DOCUMENT_TYPES
+            and document.replaces_document_id is not None)
+        if connector_version is not None and not inherits_consumer_snapshot:
             from services.order_proposal_version import proposal_version
 
             await session.execute(

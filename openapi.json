@@ -16369,7 +16369,7 @@
           "manager-document-system"
         ],
         "summary": "Update Draft Parameters",
-        "description": "Save parameters on the same tenant/storefront-scoped draft without reserving a number.\n\nexpected_revision prevents overwriting a concurrent edit. A date-only update preserves\nmanual DOCX edits; other changes require reset_editable_copy when a working copy exists.\nConfirmed reset detaches old editor sessions; the next editor open creates a new copy.\nPass template_version_id alone with the revision to apply an active DOCX version of\nthe same template. This keeps frozen facts, rechecks requirements and uses the same\nexplicit working-copy reset. Unavailable template storage returns 503.\nTerm groups replace their saved group. Issued/reserved/closed drafts and stale revisions\nreturn 409, missing documents 404, incompatible terms 400. Requires Manager access.",
+        "description": "Save parameters on the same tenant/storefront-scoped draft without reserving a number.\n\nexpected_revision prevents overwriting a concurrent edit. A date-only update preserves\nmanual DOCX edits; other changes require reset_editable_copy when a working copy exists.\nConfirmed reset detaches old editor sessions; the next editor open creates a new copy.\nPass template_version_id alone with the revision to apply an active DOCX version of\nthe same template. This keeps frozen facts, rechecks requirements and uses the same\nexplicit working-copy reset. Unavailable template storage returns 503.\nConsumer terms merge explicitly provided fields with saved facts. Other term groups\nreplace their saved group. Issued/reserved/closed drafts and stale revisions\nreturn 409, missing documents 404, incompatible terms 400. Requires Manager access.",
         "operationId": "update_manager_managed_document_draft_parameters",
         "security": [
           {
@@ -26181,6 +26181,150 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/equipment-identities": {
+      "get": {
+        "tags": [
+          "manager-order-equipment"
+        ],
+        "summary": "Get Manager Order Equipment Identities",
+        "description": "Read saved physical units and their version in the accessible order.\n\nAn optional existing candidate must belong to the same customer/object. This\nnever creates a unit or refreshes a document snapshot. Inaccessible records\nreturn 404; an incompatible customer/object returns 400. Manager membership\nand tenant/storefront isolation apply to the order and equipment.",
+        "operationId": "get_manager_order_equipment_identities",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "equipment_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Equipment Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderEquipmentState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-order-equipment"
+        ],
+        "summary": "Save Manager Order Equipment Identity",
+        "description": "Save a confirmed physical unit or associate an existing unit with this order.\n\nReuse the exact idempotency key and payload after a timeout. The order version\nprevents stale saves; editing an existing identity also requires its own\nversion. Omitted identity fields survive. A source document supplies saved\nsnapshot facts and is never rewritten; repeated adoption reuses its unit.\nMissing records return 404, stale versions or changed key payloads 409,\ninvalid fields/relationships 400 and temporary receipt contention 503.\nRequires an active Manager staff membership in the scoped tenant/storefront.",
+        "operationId": "save_manager_order_equipment_identity",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderEquipmentSavePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderEquipmentSaveResult_"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -50089,8 +50233,38 @@
         ],
         "title": "ConnectorTokenResponse"
       },
+      "ConnectorWriteResult_OrderEquipmentSaveResult_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderEquipmentSaveResult"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderEquipmentSaveResult]"
+      },
       "ConsumerDocumentTermsPayload": {
         "properties": {
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id",
+            "description": "Physical equipment linked to this order; identity is frozen in the document snapshot."
+          },
           "equipment_brand": {
             "anyOf": [
               {
@@ -63669,6 +63843,15 @@
             ],
             "title": "Replaces Document Id"
           },
+          "consumer_term_overrides": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Consumer Term Overrides",
+            "description": "For a consumer replacement, explicitly name corrected consumer_terms fields. All other facts come from the source snapshot; a default/empty form never replaces them."
+          },
           "consumer_terms": {
             "anyOf": [
               {
@@ -63775,6 +63958,27 @@
       },
       "ManagedDocumentItem": {
         "properties": {
+          "consumer_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsumerDocumentTermsPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snapshot_total_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Total Amount"
+          },
           "scope_product_line_ids": {
             "anyOf": [
               {
@@ -90083,6 +90287,306 @@
           "label"
         ],
         "title": "OrderEmailTemplateOptionResponse"
+      },
+      "OrderEquipmentIdentity": {
+        "properties": {
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "customer_id": {
+            "type": "integer",
+            "title": "Customer Id"
+          },
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
+          "catalog_product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Product Id"
+          },
+          "equipment_source": {
+            "type": "string",
+            "title": "Equipment Source"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "equipment_id",
+          "version",
+          "customer_id",
+          "customer_branch_id",
+          "catalog_product_id",
+          "equipment_source",
+          "brand",
+          "model",
+          "serial",
+          "roles"
+        ],
+        "title": "OrderEquipmentIdentity"
+      },
+      "OrderEquipmentSavePayload": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Expected Version"
+          },
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "expected_equipment_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Equipment Version"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "equipment_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "customer_owned",
+                  "sold_by_us"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Source"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "installation",
+              "maintenance",
+              "repair",
+              "diagnostic",
+              "warranty_case",
+              "other"
+            ],
+            "title": "Role",
+            "default": "installation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version"
+        ],
+        "title": "OrderEquipmentSavePayload"
+      },
+      "OrderEquipmentSaveResult": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/OrderEquipmentIdentity"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "equipment_id",
+          "version",
+          "equipment",
+          "manager_url"
+        ],
+        "title": "OrderEquipmentSaveResult"
+      },
+      "OrderEquipmentState": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderEquipmentIdentity"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderEquipmentIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "version",
+          "items",
+          "total",
+          "manager_url"
+        ],
+        "title": "OrderEquipmentState"
       },
       "OrderMultiSplitConfigurationResponse": {
         "properties": {

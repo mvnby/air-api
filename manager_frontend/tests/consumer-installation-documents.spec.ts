@@ -1,6 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ManagerDocumentSystemService, type ManagerOrderDetailResponse } from '../src/client';
+import { ManagerDocumentSystemService, ManagerOrderEquipmentService, type ManagerOrderDetailResponse } from '../src/client';
 import { MANAGER_CAPABILITY } from '../src/manager-capabilities';
 import { managerSession } from '../src/services/manager-session';
 import NativeDocumentsWorkspace from '../src/features/documents/components/NativeDocumentsWorkspace.vue';
@@ -53,6 +53,7 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeDocumentTemplates').mockImplementation(async (_id, docType) => ({ items: [{ id: 100, tenant_id: 1, legal_entity_id: 5, name: 'Шаблон', doc_type: docType || 'contract', is_default: true, is_active: true, sort_order: 0, created_at: NOW }] }));
   vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeTemplateVersions').mockResolvedValue({ items: [{ id: 101, template_id: 100, version: 1, status: 'active', renderer: 'docx', checksum_sha256: 'a'.repeat(64), placeholder_schema: {}, created_at: NOW }] });
   vi.spyOn(ManagerDocumentSystemService, 'getManagerConsumerEquipmentDefaults').mockResolvedValue(defaults);
+  vi.spyOn(ManagerOrderEquipmentService, 'getManagerOrderEquipmentIdentities').mockResolvedValue({ order_id: 42, version: 'a'.repeat(64), items: [], total: 0, manager_url: '/orders/42' });
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
 });
 afterEach(() => {
@@ -83,6 +84,28 @@ const prepareReplacementFromDocumentList = async (wrapper: VueWrapper) => {
 };
 
 describe('consumer installation documents', () => {
+  it('restores saved equipment after reopening and keeps it when only the date changes', async () => {
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({
+      items: [{ ...issuedSupplyInstallationDocument,
+        consumer_terms: { equipment_brand: 'TEST', equipment_model: 'TEST-09',
+          equipment_serial: 'TEST-SN-001', work_warranty_months: 19 },
+      }],
+    });
+    const wrapper = await mountConsumerWorkspace();
+    await prepareReplacementFromDocumentList(wrapper);
+    expect(wrapper.find('[data-testid="consumer-equipment-choice"]').exists()).toBe(true);
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-model"]').element.value).toBe('TEST-09');
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-serial"]').element.value).toBe('TEST-SN-001');
+    await wrapper.get('input[type="date"]').setValue('2026-11-10');
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-model"]').element.value).toBe('TEST-09');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ issue_date: '2026-11-10', consumer_terms: expect.objectContaining({
+        equipment_brand: 'TEST', equipment_model: 'TEST-09', equipment_serial: 'TEST-SN-001', work_warranty_months: 19,
+      }) }));
+  });
   it.each(['b2c_supply_installation_act', 'b2c_customer_equipment_installation_act'])('calculates editable 100/200 BYN per unit and submits custom contract terms for %s', async (documentType) => {
     const wrapper = await mountConsumerWorkspace();
     await wrapper.get(`[data-testid="native-document-type-${documentType}"]`).trigger('click');
@@ -147,15 +170,16 @@ describe('consumer installation documents', () => {
   });
 
   it.each([
-    { saved: [21], expected: true }, { saved: [88], expected: false }, { saved: null, expected: false },
-  ])('reviews saved materials when replacing a customer work act ($saved)', async ({ saved, expected }) => {
+    { saved: [21] }, { saved: [88] }, { saved: null },
+  ])('inherits saved composition even when its materials no longer exist in the live proposal ($saved)', async ({ saved }) => {
     vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [{
-      ...issuedSupplyInstallationDocument, doc_type: 'b2c_maintenance_repair_act', scope_product_line_ids: saved,
+      ...issuedSupplyInstallationDocument, doc_type: 'b2c_maintenance_repair_act', scope_product_line_ids: saved, snapshot_total_amount: '600.00',
     }] });
     const wrapper = await mountConsumerWorkspace();
     await prepareReplacementFromDocumentList(wrapper);
-    expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-material-21"]').element.checked).toBe(expected);
-    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled') === undefined).toBe(expected);
+    expect(wrapper.find('[data-testid="consumer-material-21"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="replacement-frozen-composition"]').text()).toContain('600 BYN');
+    expect(wrapper.get('[data-testid="create-native-draft"]').attributes('disabled')).toBeUndefined();
   });
 
   it('serializes exact two-stage amounts, the default first-stage outdoor unit, and clears them with the direct toggle', async () => {

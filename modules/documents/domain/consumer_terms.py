@@ -25,6 +25,7 @@ B2C_NATIVE_DOCUMENT_TYPES = frozenset(
 class ConsumerDocumentTerms:
     """Typed B2C facts captured into a document's immutable render snapshot."""
 
+    equipment_id: int | None = None
     equipment_brand: str | None = None
     equipment_model: str | None = None
     equipment_serial: str | None = None

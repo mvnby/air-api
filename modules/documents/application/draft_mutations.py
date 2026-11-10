@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, datetime, time
 from decimal import Decimal
 
@@ -203,6 +204,11 @@ class ManagedDocumentDraftMutationService:
         if any(name in changes and not allowed for name, allowed in scopes.items()):
             raise ValueError("Эти параметры не соответствуют типу документа")
         current = read_draft_parameters(document)
+        consumer_fields = set(changes.get("consumer_terms") or {})
+        if isinstance(changes.get("consumer_terms"), dict):
+            changes = {**changes, "consumer_terms": {
+                **(current.get("consumer_terms") or {}), **changes["consumer_terms"],
+            }}
         if document.doc_type == "ttn1" and isinstance(changes.get("transport_terms"), dict):
             # Older clients send only the vehicle fields. Keep newer route facts unless explicitly changed.
             previous = current.get("transport_terms") or {}
@@ -229,6 +235,18 @@ class ManagedDocumentDraftMutationService:
             )
         values, meta = snapshot["values"], snapshot.setdefault("meta", {})
         parameters = {**current, **changed}
+        if "consumer_terms" in changed:
+            before = (current.get("consumer_terms") or {}).get("equipment_id")
+            selected = (parameters.get("consumer_terms") or {}).get("equipment_id")
+            if selected is not None and selected != before:
+                from .consumer_equipment import resolve_linked_equipment
+                from services.tenant_entity_access_service import TenantEntityAccessService
+                order = await TenantEntityAccessService.get_order(session, document.order_id, tenant_scope=tenant_scope)
+                resolved = await resolve_linked_equipment(session, tenant_scope=tenant_scope, order=order,
+                    terms=domain_terms("consumer_terms", parameters["consumer_terms"]))
+                resolved = replace(resolved, **{name: parameters["consumer_terms"][name] for name in
+                    ("equipment_brand", "equipment_model", "equipment_serial") if name in consumer_fields})
+                parameters["consumer_terms"] = json_terms(resolved)
         new_date = date.fromisoformat(parameters["issue_date"])
         values["document.issued_on"] = new_date.strftime("%d.%m.%Y")
         values["document.issue_city"] = str(parameters.get("issue_city") or "").strip()

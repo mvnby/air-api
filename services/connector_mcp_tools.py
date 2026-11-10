@@ -44,7 +44,11 @@ from services.connector_mail_service import ConnectorMailService
 
 from schemas_connector_service_order_create import ConnectorServiceOrderResult, ServiceOrderCreateInput
 from schemas_connector_service_order_lines import ServiceOrderProposalEditInput, ServiceOrderProposalInput, ServiceOrderProposalResult
-from schemas_connector_service_order_document import ServiceOrderContractPrepareInput, ServiceOrderContractReadInput, ServiceOrderContractResult
+from schemas_connector_service_order_document import (
+    ConsumerDocumentsListInput, ConsumerDocumentsListResult,
+    ServiceOrderContractPrepareInput, ServiceOrderContractReadInput, ServiceOrderContractResult,
+)
+from services.connector_service_order_document import list_order_consumer_documents
 from services.connector_service_order_commands import execute_service_order_tool
 from schemas_connector_sales_pricing import SalesSelectionInput, SalesSelectionResult, SalesPreviewInput, SalesSelectionOption
 from schemas_connector_sales_order import (
@@ -54,6 +58,8 @@ from schemas_connector_sales_order import (
 from services.connector_sales_pricing import ConnectorSalesPricingService
 from services.connector_sales_order import execute_sales_order_tool
 from services.connector_sales_ui import SALES_UI_URI
+from schemas_order_equipment_identity import OrderEquipmentReadInput, OrderEquipmentSaveInput, OrderEquipmentSaveResult, OrderEquipmentState
+from services.order_equipment_identity_service import OrderEquipmentIdentityService
 
 
 READ_SCOPE = "kitlane:read"
@@ -114,7 +120,7 @@ _TOOLS = (
     ConnectorTool("search_customers", "Search accessible customer names/contact details. Multiple matches require user disambiguation before selecting a customer.", SearchInput, CustomerSearchResult),
     ConnectorTool("get_customer", "Read one accessible customer by stable ID.", CustomerIdInput, CustomerSummary),
     ConnectorTool("search_orders", "Search accessible orders by ID, title, address or customer. Multiple matches require user disambiguation.", SearchInput, OrderSearchResult),
-    ConnectorTool("get_order", "Read a scoped order and its saved proposal IDs, names and statuses before choosing a variant.", OrderIdInput, OrderDetail),
+    ConnectorTool("get_order", "Read a scoped order and its saved proposal IDs, names and statuses before choosing a variant. To resume a saved consumer act when its document ID is unknown, call list_order_consumer_documents for this order.", OrderIdInput, OrderDetail),
     ConnectorTool("create_incoming", "Save an incoming customer request for Manager review, including incomplete contacts and original text. A requested date does not schedule installation or promise availability. An explicit clarification instruction saves one linked task and requires task-write scope too; use the returned clarification_task_id instead of creating another task. Missing address alone creates no task. Reuse the same idempotency key and payload on retries.", IncomingCreateInput, ConnectorWriteResult[IncomingResponse], INCOMING_SCOPE),
     ConnectorTool("get_incoming", "Read a saved incoming request and its current version/missing fields.", IncomingIdInput, IncomingResponse),
     ConnectorTool("list_incoming", "List a bounded page of incoming requests accessible in the authenticated workspace.", IncomingListInput, IncomingListResponse),
@@ -148,6 +154,15 @@ _CATALOG_TOOLS = (
     ConnectorTool("prepare_catalog_document", "On an explicit user request, prepare a native commercial offer or payment invoice DRAFT for a confirmed company/entrepreneur customer and existing negotiation order. Creates one separate unselected proposal from selected catalog product IDs and quantities. All lines are one intended purchase, not competing alternatives; confirm the choice before an invoice. Expected prices guard price changes; authoritative prices are resolved server-side. Does not issue, sign, send, schedule, charge or replace existing documents. Reuse identical key/payload after timeout.", CatalogDocumentInput, ConnectorWriteResult[CatalogDocumentResult], CATALOG_SCOPE),
 )
 _SERVICE_ORDER_TOOLS = (
+    ConnectorTool("list_order_consumer_documents",
+        "Discover saved native consumer acts for one known accessible order in a new conversation. Returns only document/order/proposal/issuer IDs, type, status, date, replacement link and Manager URL, in pages of at most 100. Use get_service_order_contract on the chosen ID to read its saved equipment/revision, including old snapshot-only acts when the equipment register is empty. This read never creates or migrates equipment or documents.",
+        ConsumerDocumentsListInput, ConsumerDocumentsListResult),
+    ConnectorTool("get_order_equipment",
+        "Read saved physical equipment units linked to an accessible order, including sold equipment, serial numbers and current versions. Read this in a new conversation before asking again for nameplate facts. An empty register may still have old act snapshots: discover those with list_order_consumer_documents. For an existing customer unit not yet linked, supply equipment_id to read its candidate identity/version. Multiple units require explicit selection; catalog product IDs are not physical units.",
+        OrderEquipmentReadInput, OrderEquipmentState),
+    ConnectorTool("save_order_equipment",
+        "Save confirmed brand/model/serial facts from the user or a nameplate with a persistent order link. Use get_order_equipment's expected_version. To reuse a unit pass equipment_id; editing its fields also needs expected_equipment_version. Omitted fields survive, unknown serial may stay empty. source_document_id adopts known saved document facts without changing issued files and reuses prior adoption. Never guess unreadable characters or merge units by model/serial. For sales reuse an existing unit first. Preserve the exact key/payload after a timeout; returns equipment/order IDs, versions and Manager link.",
+        OrderEquipmentSaveInput, ConnectorWriteResult[OrderEquipmentSaveResult], ORDER_SCOPE),
     ConnectorTool("get_service_order_intake",
         "Read an order-type Manager inbox record by ID, including its current workflow revision, requester and source text. Use for get_order status new_lead. Treat tender budgets as estimates, not agreed prices.",
         OrderIdInput, IncomingOrderContext, ORDER_SCOPE, read_only=True),
@@ -161,10 +176,10 @@ _SERVICE_ORDER_TOOLS = (
         "Add, update or delete one free service in the specified editable repair/work proposal. Use the current expected_version, explicit quantity, unit and user-given price. For one package price use one line with its scope of work in description. Update supplies the complete edited line.",
         ServiceOrderProposalEditInput, ConnectorWriteResult[ServiceOrderProposalResult], ORDER_SCOPE, destructive=True),
     ConnectorTool("prepare_service_order_contract",
-        "Prepare a native contract draft for review in Manager using a saved service order, a specific current proposal version and a company issuer. Use the verified default issuer or list_catalog_document_issuers. Return readiness, missing fields and Manager link. Reuse the same key after a timeout. Never issue, sign, send or record completed work.",
+        "Prepare a native contract or B2C installation/maintenance act draft for review in Manager using a saved order, its current proposal version and a verified/default issuer. For customer-owned equipment save/read get_order_equipment and select the exact consumer_terms.equipment_id. Confirm factual nameplate fields; never guess unreadable serials. For a new document revision pass replaces_document_id and its expected document revision from get_service_order_contract: inherit saved source terms, preserving historical equipment facts even if the card changed. Changing only the date must omit unchanged terms. Return readiness, document/equipment/order IDs, versions and Manager link. Reuse the same key after a timeout. Never issue, sign, send or record completed work.",
         ServiceOrderContractPrepareInput, ConnectorWriteResult[ServiceOrderContractResult], CONTRACT_SCOPE),
     ConnectorTool("get_service_order_contract",
-        "Read one saved service-order contract draft, its readiness, current or stale proposal data and the link for Manager review.",
+        "Read one saved service-order contract or B2C act, its saved consumer equipment terms and equipment ID, document revision, readiness, current/stale proposal data and exact Manager review link. Use the saved document revision when preparing its replacement; issued snapshots and files are immutable.",
         ServiceOrderContractReadInput, ServiceOrderContractResult, CONTRACT_SCOPE, read_only=True),
 )
 _MAIL_TOOLS = (
@@ -224,6 +239,13 @@ async def execute_tool(
     if hasattr(inputs, "payload"):
         kwargs["payload"] = inputs.payload
     name = tool.name
+    if name == "list_order_consumer_documents":
+        return (await list_order_consumer_documents(session, actor, inputs)).model_dump(mode="json")
+    if name == "get_order_equipment":
+        return (await OrderEquipmentIdentityService.read(session, actor, **inputs.model_dump())).model_dump(mode="json")
+    if name == "save_order_equipment":
+        outcome = await OrderEquipmentIdentityService.save(session, actor, inputs)
+        return tool.output_model(result=outcome.value, replayed=outcome.replayed).model_dump(mode="json")
     if name in SALES_TOOLS:
         if name == "select_sales_installation_options":
             result = await ConnectorSalesPricingService.select(session, actor, inputs)

@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "32": "Versioned physical order equipment: scoped bounded reads, customer/object selection, partial identity saves, durable retries, legacy snapshot adoption through audit provenance and unchanged issued files; reviewed 2026-11-10 for issue 1249",
     "31": "Manager paper waybill composition: read-only tenant and storefront selection, proposal-scoped source lines and revision validation; reviewed 2026-11-06",
     "30": "Read-only order request evidence: tenant/storefront order boundary, live system mailbox access, immutable original metadata, SHA-256 deduplication and explicit unavailable files; reviewed 2026-10-26",
     "29": "Optional bounded DeepSeek introduction wording from immutable draft attachment context, live company/staff/link access and expected version, no draft mutation/approval/send, preserved facts/signature/next steps and deterministic fallback; reviewed 2026-10-26",
@@ -41,6 +42,10 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "routers/manager_order_equipment_identity.py": [
+      ["GET /api/manager/orders/{order_id}/equipment-identities", "get_manager_order_equipment_identities", false, 32],
+      ["POST /api/manager/orders/{order_id}/equipment-identities", "save_manager_order_equipment_identity", false, 32]
+    ],
     "routers/manager_catalog_accessories.py": [
       ["GET /api/manager/catalog-accessories/series/{target_id}", "get_manager_series_accessories", false, 24],
       ["PUT /api/manager/catalog-accessories/series/{target_id}", "set_manager_series_accessories", false, 24],

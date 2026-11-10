@@ -324,6 +324,10 @@ class ManagedDocumentDraftPayload(BaseModel):
     ))
     business_role: str | None = Field(default=None, pattern="^(payment_request|offer)$")
     replaces_document_id: int | None = Field(default=None, gt=0)
+    consumer_term_overrides: list[str] = Field(default_factory=list, max_length=40, description=(
+        "For a consumer replacement, explicitly name corrected consumer_terms fields. "
+        "All other facts come from the source snapshot; a default/empty form never replaces them."
+    ))
     consumer_terms: "ConsumerDocumentTermsPayload | None" = None
     business_terms: BusinessDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
@@ -336,6 +340,11 @@ class ManagedDocumentDraftPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_terms_scope(self) -> "ManagedDocumentDraftPayload":
+        if self.consumer_term_overrides:
+            if self.replaces_document_id is None or self.consumer_terms is None:
+                raise ValueError("Consumer overrides require a replacement and consumer terms")
+            if set(self.consumer_term_overrides) - set(ConsumerDocumentTermsPayload.model_fields):
+                raise ValueError("Unknown consumer term override")
         if (self.document_type == "repair_defect_act") != (self.repair_defect is not None):
             raise ValueError("Заключение требуется только для дефектного акта ремонта")
         if self.receipt_note is not None and self.document_type != "retail_receipt":
@@ -420,6 +429,7 @@ class ConsumerDocumentTermsPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    equipment_id: int | None = Field(default=None, gt=0, description="Physical equipment linked to this order; identity is frozen in the document snapshot.")
     equipment_brand: str | None = Field(default=None, max_length=200)
     equipment_model: str | None = Field(default=None, max_length=300)
     equipment_serial: str | None = Field(default=None, max_length=300)
@@ -497,6 +507,8 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 
 
 class ManagedDocumentItem(BaseModel):
+    consumer_terms: ConsumerDocumentTermsPayload | None = None
+    snapshot_total_amount: str | None = None
     scope_product_line_ids: list[int] | None = None
     waybill_composition: WaybillComposition | None = None
     repair_defect: RepairDefect | None = None

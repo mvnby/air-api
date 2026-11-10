@@ -121,7 +121,7 @@ const save = async () => {
         <label class="native-field"><span>Город документа</span><input v-model="form.issue_city" class="native-input" data-testid="draft-issue-city" maxlength="160" /></label>
       </div>
       <B2BContractTermsPanel v-if="form.business_terms" :document-type="document.doc_type" :terms="form.business_terms" :order-conditions="form.order_conditions" @update-terms="form.business_terms = $event" />
-      <ConsumerDocumentTermsPanel v-if="form.consumer_terms" :document-type="document.doc_type" :terms="form.consumer_terms" :proposal-total-cents="Math.round(Number(form.total_amount) * 100)" @update-terms="form.consumer_terms = $event" />
+      <ConsumerDocumentTermsPanel v-if="form.consumer_terms" :order-id="document.order_id" :source-document-id="document.id" :document-type="document.doc_type" :terms="form.consumer_terms" :proposal-total-cents="Math.round(Number(form.total_amount) * 100)" @update-terms="form.consumer_terms = $event" />
       <RepairDefectFields v-if="form.repair_defect" :terms="form.repair_defect" @update-terms="form.repair_defect = $event" />
       <ActTermsPanel v-if="form.act_terms" :terms="form.act_terms" @update-terms="form.act_terms = $event" />
       <TransportTermsPanel v-if="form.transport_terms" expanded :terms="form.transport_terms" @update-terms="form.transport_terms = $event" />

@@ -176,7 +176,8 @@ def read_draft_parameters(document) -> dict:
             in values.get("installation.first_stage_works", "")
             or not terms["installation_two_stages"]
         )
-        result["consumer_terms"] = saved.get("consumer_terms") or terms
+        # Recover fields missing in partially migrated typed facts from the saved values.
+        result["consumer_terms"] = {**terms, **(saved.get("consumer_terms") or {})}
         # Older drafts have no count; never infer it from prose or replace their amounts.
         result["consumer_terms"].setdefault("installation_unit_count", 1)
         if terms["installation_two_stages"]:

@@ -88,7 +88,8 @@ async def update_draft_parameters(
     Pass template_version_id alone with the revision to apply an active DOCX version of
     the same template. This keeps frozen facts, rechecks requirements and uses the same
     explicit working-copy reset. Unavailable template storage returns 503.
-    Term groups replace their saved group. Issued/reserved/closed drafts and stale revisions
+    Consumer terms merge explicitly provided fields with saved facts. Other term groups
+    replace their saved group. Issued/reserved/closed drafts and stale revisions
     return 409, missing documents 404, incompatible terms 400. Requires Manager access.
     """
     try:
