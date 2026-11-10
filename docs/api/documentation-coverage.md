@@ -54,7 +54,6 @@ owner/admin, tenant/issuer/customer scope, source/context/legal evidence hashes,
 неактивные версии и отдельная активация. MCP исходник выдаётся приватным
 EmbeddedResource; контракты и план runtime-приёмки — [проверка шаблонов](../template-audits.md).
 
-
 Этап 32 добавляет GET/POST оборудования конкретного заказа
 `/api/manager/orders/{order_id}/equipment-identities`. Проверены текущие права
 Manager, компания/витрина заказа, заказчик/объект оборудования, страницы до 100,
