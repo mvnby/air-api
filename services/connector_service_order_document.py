@@ -7,10 +7,11 @@ rewritten: a new draft preserves both prior drafts and issued documents.
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlmodel import select
 
 from core.config import settings
-from models import DocumentLegalEntity
+from models import DocumentLegalEntity, OrderDocument
 from modules.documents.application import DocumentContextSelection, ManagedDocumentService
 from modules.documents.application.customer_readiness import check_saved_document_readiness
 from modules.documents.application.errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
@@ -18,7 +19,9 @@ from modules.documents.domain.business_terms import BusinessDocumentTerms, Payme
 from modules.documents.domain import B2C_NATIVE_DOCUMENT_TYPES, ConsumerDocumentTerms
 from modules.documents.application.draft_parameters import read_draft_parameters, draft_revision
 from modules.documents.infrastructure.template_source_storage import PrivateTemplateSourceStorage
-from schemas_connector_service_order_document import ServiceOrderContractResult
+from schemas_connector_service_order_document import (
+    ConsumerDocumentSummary, ConsumerDocumentsListResult, ServiceOrderContractResult,
+)
 from services.order_proposal_version import proposal_version
 from services.order_proposal_command_service import OrderProposalCommandService
 from services.order_service import OrderService
@@ -32,6 +35,30 @@ def _storage():
 
 def _url(order_id, proposal_id, document_id):
     return f"{settings.MANAGER_BASE_URL.rstrip('/')}/orders/{order_id}?proposalId={proposal_id}&section=documents&documentId={document_id}"
+
+
+async def list_order_consumer_documents(session, ctx, data):
+    """Discover saved act IDs from an order, without exposing files or live defaults."""
+    order = await TenantEntityAccessService.get_order(session, data.order_id, tenant_scope=ctx.tenant_scope)
+    if order is None:
+        raise HTTPException(404, "Order not found")
+    filters = (
+        OrderDocument.order_id == order.id,
+        OrderDocument.tenant_id == ctx.tenant_scope.tenant_id,
+        OrderDocument.doc_type.in_(B2C_NATIVE_DOCUMENT_TYPES),
+        OrderDocument.template_version_id.is_not(None),
+    )
+    total = int(await session.scalar(select(func.count()).select_from(OrderDocument).where(*filters)) or 0)
+    documents = (await session.execute(select(OrderDocument).where(*filters)
+        .order_by(OrderDocument.created_at.desc(), OrderDocument.id.desc())
+        .offset(data.offset).limit(data.limit))).scalars().all()
+    return ConsumerDocumentsListResult(items=[ConsumerDocumentSummary(
+        document_id=document.id, order_id=document.order_id, proposal_id=document.proposal_id,
+        legal_entity_id=document.legal_entity_id, document_type=document.doc_type, status=document.status,
+        issue_date=document.official_date or document.date.date(),
+        replaces_document_id=document.replaces_document_id,
+        manager_url=_url(document.order_id, document.proposal_id, document.id),
+    ) for document in documents], total=total, has_more=data.offset + len(documents) < total)
 
 
 async def _issuer(session, scope, requested):

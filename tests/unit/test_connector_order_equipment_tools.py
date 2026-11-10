@@ -20,6 +20,15 @@ def test_equipment_tools_publish_shared_versioned_contracts():
     assert write.inputSchema["additionalProperties"] is False
 
 
+def test_consumer_document_discovery_is_bounded_read_only_metadata():
+    tool = TOOLS["list_order_consumer_documents"].definition()
+    assert tool.annotations.readOnlyHint
+    assert tool.meta["securitySchemes"][0]["scopes"] == ["kitlane:read"]
+    assert tool.inputSchema["properties"]["limit"]["maximum"] == 100
+    from schemas_connector_service_order_document import ConsumerDocumentSummary
+    assert not {"render_snapshot", "artifacts", "equipment_serial"} & ConsumerDocumentSummary.model_fields.keys()
+
+
 @pytest.mark.asyncio
 async def test_equipment_tools_require_order_write_and_keep_saved_identity(mcp_client, monkeypatch):
     client, access, checks, _ = mcp_client

@@ -38,6 +38,30 @@ class ServiceOrderContractReadInput(ConnectorInput):
     document_id: int = Field(gt=0)
 
 
+class ConsumerDocumentsListInput(ConnectorInput):
+    order_id: int = Field(gt=0)
+    limit: int = Field(default=30, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class ConsumerDocumentSummary(BaseModel):
+    document_id: int
+    order_id: int
+    proposal_id: int | None
+    legal_entity_id: int | None
+    document_type: str
+    status: str
+    issue_date: date
+    replaces_document_id: int | None
+    manager_url: str
+
+
+class ConsumerDocumentsListResult(BaseModel):
+    items: list[ConsumerDocumentSummary]
+    total: int
+    has_more: bool
+
+
 class ServiceOrderContractResult(BaseModel):
     order_id: int
     proposal_id: int

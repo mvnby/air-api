@@ -15,6 +15,13 @@ several units require an explicit selection. For an unlinked customer unit use
 a candidate before saving it. Never combine units just because their models or
 serial numbers look alike.
 
+If a new conversation knows only order_id, call `list_order_consumer_documents`
+to discover its saved native acts. Choose the relevant type/status/version chain,
+then call `get_service_order_contract` with that document_id. An empty equipment
+register does not mean the saved document lacks nameplate facts: read its
+snapshot first and use source_document_id for explicit registry adoption.
+Follow has_more with offset; discovery is read-only and never creates equipment.
+
 Use `save_order_equipment` to persist confirmed brand, model and serial from the
 user or a nameplate photograph. Save readable fields; leave an unknown serial
 empty and ask only about material unreadable facts. Use the current order
