@@ -18,6 +18,7 @@ from modules.documents.domain.waybill_composition import WaybillComposition
 from modules.documents.domain.repair_defect import RepairDefect
 from .participant_statement_schemas import ParticipantStatementPayload
 from services.envelope_branding_service import EnvelopeBranding
+from modules.documents.domain.contract_amendment import ContractAmendmentTerms
 
 
 DocumentPartyRoleType = Literal[
@@ -328,6 +329,8 @@ class ManagedDocumentDraftPayload(BaseModel):
         "For a consumer replacement, explicitly name corrected consumer_terms fields. "
         "All other facts come from the source snapshot; a default/empty form never replaces them."
     ))
+    amendment_terms: ContractAmendmentTerms | None = None
+    amendment_basis_revision: str | None = Field(default=None, pattern="^[a-f0-9]{64}$")
     consumer_terms: "ConsumerDocumentTermsPayload | None" = None
     business_terms: BusinessDocumentTermsPayload | None = None
     act_terms: ActTermsPayload | None = None
@@ -345,6 +348,11 @@ class ManagedDocumentDraftPayload(BaseModel):
                 raise ValueError("Consumer overrides require a replacement and consumer terms")
             if set(self.consumer_term_overrides) - set(ConsumerDocumentTermsPayload.model_fields):
                 raise ValueError("Unknown consumer term override")
+        if self.document_type == "contract_amendment":
+            if not self.replaces_document_id and (not self.base_document_id or not self.amendment_terms or not self.amendment_basis_revision):
+                raise ValueError("Выберите договор, его актуальную версию и дополнительные работы")
+        elif self.amendment_terms is not None or self.amendment_basis_revision is not None:
+            raise ValueError("Параметры допсоглашения доступны только для допсоглашения")
         if (self.document_type == "repair_defect_act") != (self.repair_defect is not None):
             raise ValueError("Заключение требуется только для дефектного акта ремонта")
         if self.receipt_note is not None and self.document_type != "retail_receipt":
@@ -509,6 +517,13 @@ class ManagedDocumentReadinessResponse(DocumentCustomerReadiness):
 class ManagedDocumentItem(BaseModel):
     consumer_terms: ConsumerDocumentTermsPayload | None = None
     snapshot_total_amount: str | None = None
+    amendment_terms: ContractAmendmentTerms | None = None
+    amendment_original_amount: str | None = None
+    amendment_new_total: str | None = None
+    amendment_change_amount: str | None = None
+    basis_number: str | None = None
+    basis_date: str | None = None
+
     scope_product_line_ids: list[int] | None = None
     waybill_composition: WaybillComposition | None = None
     repair_defect: RepairDefect | None = None

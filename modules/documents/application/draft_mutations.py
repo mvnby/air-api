@@ -45,6 +45,9 @@ from .transport_context import build_transport_document_context
 def domain_terms(name, data):
     if data is None:
         return None
+    if name == "amendment_terms":
+        from modules.documents.domain.contract_amendment import ContractAmendmentTerms
+        return ContractAmendmentTerms.model_validate(data)
     data = dict(data)
     for key in (
         "delivery_deadline",
@@ -200,6 +203,7 @@ class ManagedDocumentDraftMutationService:
             "waybill_cargo": document.doc_type == "ttn1",
             "repair_defect": document.doc_type == "repair_defect_act",
             "participant_statement": document.doc_type == "participant_statement",
+            "amendment_terms": document.doc_type == "contract_amendment",
         }
         if any(name in changes and not allowed for name, allowed in scopes.items()):
             raise ValueError("Эти параметры не соответствуют типу документа")
@@ -303,6 +307,9 @@ class ManagedDocumentDraftMutationService:
             )
         if "repair_defect" in changed:
             terms["repair_defect"].update_snapshot(snapshot)
+        if "amendment_terms" in changed:
+            from .contract_amendments import apply_terms
+            apply_terms(snapshot, terms["amendment_terms"])
         if "participant_statement" in changed:
             values.update(terms["participant_statement"].values())
         meta["draft_parameters"] = {

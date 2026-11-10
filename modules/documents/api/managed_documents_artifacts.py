@@ -331,6 +331,10 @@ async def issue_managed_document(
     immutable DOCX/PDF artifacts. Participant statements require explicit factual
     confirmation of the current text using participant_statement_confirmed=true;
     the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+    Contract amendments register the agreed additional scope only on successful issuance;
+    this does not certify signature, payment or performed work. Their frozen contract and
+    effective amendment revision are checked before reservation and after rendering;
+    a stale total returns 409 without rewriting the saved text.
     The first act continuing an unverified open-contract series returns 409
     contract_act_number_confirmation_required with previous_act. Inspect that
     original and repeat with confirmed_previous_act_number and expected_previous_act_id.
@@ -686,6 +690,11 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         snapshot_total_amount=statement_values.get("totals.amount"),
         consumer_terms=(read_draft_parameters(document)["consumer_terms"]
             if document.doc_type in B2C_NATIVE_DOCUMENT_TYPES else None),
+        amendment_terms=((document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("amendment_terms")),
+        amendment_original_amount=statement_values.get("amendment.original_amount"),
+        amendment_new_total=statement_values.get("amendment.new_total"),
+        amendment_change_amount=statement_values.get("totals.amount") if document.doc_type == "contract_amendment" else None,
+        basis_number=statement_values.get("basis.number"), basis_date=statement_values.get("basis.date"),
         scope_product_line_ids=scoped_products,
         waybill_composition=((document.render_snapshot or {}).get("meta") or {}).get("waybill_composition"),
         repair_defect=(

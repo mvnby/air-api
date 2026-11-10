@@ -18,10 +18,15 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 58
+    assert len(TOOLS) == 61
     assert {"create_service_order", "get_service_order_intake", "get_service_order_proposal", "edit_service_order_proposal",
             "prepare_service_order_contract", "get_service_order_contract",
             "get_order_equipment", "save_order_equipment", "list_order_consumer_documents"} <= TOOLS.keys()
+    assert {"list_contract_amendment_bases", "prepare_contract_amendment", "get_contract_amendment"} <= TOOLS.keys()
+    for name in ("list_contract_amendment_bases", "prepare_contract_amendment", "get_contract_amendment"):
+        tool = TOOLS[name].definition().model_dump(by_alias=True)
+        assert tool['_meta']['securitySchemes'][0]['scopes'] == ['kitlane:read', 'kitlane:contracts:drafts:write']
+        assert tool['annotations']['readOnlyHint'] is (name != "prepare_contract_amendment")
     definition = TOOLS['upload_maintenance_finding_photo'].definition().model_dump(by_alias=True)
     assert definition['_meta']['openai/fileParams'] == ['file']
     schema = definition['inputSchema']['$defs']['OpenAIFile']

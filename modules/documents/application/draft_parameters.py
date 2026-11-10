@@ -63,10 +63,13 @@ TERM_GROUPS = (
     "transport_terms",
     "participant_statement",
     "repair_defect",
+    "amendment_terms",
 )
 
 
 def json_terms(terms):
+    if hasattr(terms, "model_dump"):
+        return terms.model_dump(mode="json")
     return (
         json.loads(json.dumps(asdict(terms), default=str))
         if terms is not None
@@ -198,6 +201,8 @@ def read_draft_parameters(document) -> dict:
         result["transport_terms"] = saved.get("transport_terms") or _fields(
             values, TRANSPORT_FIELDS
         )
+    if document.doc_type == "contract_amendment":
+        result["amendment_terms"] = saved["amendment_terms"]
     if document.doc_type == "repair_defect_act":
         result["repair_defect"] = saved["repair_defect"]
     if document.doc_type == "participant_statement":

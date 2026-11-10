@@ -10,6 +10,7 @@
   ],
   "review_stages": {
     "32": "Versioned physical order equipment: scoped bounded reads, customer/object selection, partial identity saves, durable retries, legacy snapshot adoption through audit provenance and unchanged issued files; reviewed 2026-11-10 for issue 1249",
+    "33": "Native additional-work amendments: explicit frozen contract basis, current effective totals, tenant/storefront and revision fence; reviewed 2026-11-10",
     "31": "Manager paper waybill composition: read-only tenant and storefront selection, proposal-scoped source lines and revision validation; reviewed 2026-11-06",
     "30": "Read-only order request evidence: tenant/storefront order boundary, live system mailbox access, immutable original metadata, SHA-256 deduplication and explicit unavailable files; reviewed 2026-10-26",
     "29": "Optional bounded DeepSeek introduction wording from immutable draft attachment context, live company/staff/link access and expected version, no draft mutation/approval/send, preserved facts/signature/next steps and deterministic fallback; reviewed 2026-10-26",
@@ -223,6 +224,9 @@
     "modules/documents/api/managed_document_readiness.py": [
       ["GET /api/manager/document-system/documents/{document_id}/readiness", "get_manager_managed_document_readiness", false, 7],
       ["POST /api/manager/document-system/orders/{order_id}/documents/readiness", "check_manager_managed_document_readiness", false, 7]
+    ],
+    "modules/documents/api/amendments.py": [
+      ["GET /api/manager/document-system/orders/{order_id}/contract-amendments/bases", "list_manager_contract_amendment_bases", false, 33]
     ],
     "modules/documents/api/draft_parameters.py": [
       ["GET /api/manager/document-system/documents/{document_id}/draft/parameters", "get_manager_managed_document_draft_parameters", false, 13],

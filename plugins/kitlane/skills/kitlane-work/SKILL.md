@@ -1,6 +1,6 @@
 ---
 name: kitlane-work
-description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
+description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare separate additional-work amendment drafts to saved contracts. Save physical equipment and preserve consumer document revisions. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend
@@ -156,6 +156,27 @@ customer acceptance and recording completed work are separate Manager actions.
 Order editing requires `kitlane:orders:write`, preparing/reading contract drafts
 requires `kitlane:contracts:drafts:write`, and qualifying an incoming also
 requires `kitlane:incoming:write`. Reconnect if these permissions are missing.
+
+For additional work to an existing contract, find the order, then call
+`list_contract_amendment_bases`. Read the frozen contract number/date, parties,
+original work, original amount, effective additions and revision. Explicitly choose
+the right contract; when several match, ask the user. Call
+`prepare_contract_amendment` with that ID/revision, the requested date and only the
+additional structured works (title, quantity, unit, unit price). Preserve the original
+contract. Do not copy installation or commissioning from the original quote.
+For example: one package “Закладка межблочных коммуникаций для кондиционера”,
+1 компл. × 250 BYN, against a frozen 4160 BYN basis gives 4410 BYN when no other
+amendments are effective. Acceptance, payment and legal effective clauses are
+explicit document parameters. Defaults retain the original payment conditions;
+never add an exemption from the original advance without the user's instruction.
+Use `get_contract_amendment` to read the saved draft and return the order, basis
+and document IDs, revision, change amount, new total, missing fields and exact
+Manager draft link. Reuse the same idempotency key after a timeout. After a
+conflict reread the basis; do not silently overwrite or recalculate a saved draft.
+A new independent amendment differs from a replacement revision, which Manager
+creates from the saved amendment. Saving is a draft only. Successful Manager
+issuance registers the agreed change internally; it does not certify signature,
+payment or performed work. The legal effective text remains separate.
 
 For an equipment recommendation, use `select_catalog_products` with the stated
 capacity or room area, quantity, inverter, heating temperature and Wi-Fi needs.

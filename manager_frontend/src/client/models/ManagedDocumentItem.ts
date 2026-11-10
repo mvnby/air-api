@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
+import type { ContractAmendmentTerms_Output } from './ContractAmendmentTerms_Output';
 import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
@@ -11,6 +12,12 @@ import type { WaybillComposition_Output } from './WaybillComposition_Output';
 export type ManagedDocumentItem = {
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
     snapshot_total_amount?: (string | null);
+    amendment_terms?: (ContractAmendmentTerms_Output | null);
+    amendment_original_amount?: (string | null);
+    amendment_new_total?: (string | null);
+    amendment_change_amount?: (string | null);
+    basis_number?: (string | null);
+    basis_date?: (string | null);
     scope_product_line_ids?: (Array<number> | null);
     waybill_composition?: (WaybillComposition_Output | null);
     repair_defect?: (RepairDefect | null);

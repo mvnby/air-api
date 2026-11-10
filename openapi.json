@@ -16317,6 +16317,66 @@
         }
       }
     },
+    "/api/manager/document-system/orders/{order_id}/contract-amendments/bases": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "List Contract Amendment Bases",
+        "description": "List explicit native contract choices with frozen original amounts and current\neffective amendments for a tenant/storefront order. Requires Manager membership.\nRead-only; never chooses a basis automatically. Returns 404 for an inaccessible\norder. Legacy documents without a frozen BYN amount are excluded. Pass the\nreturned revision on draft creation; changes to effective agreements return 409.",
+        "operationId": "list_manager_contract_amendment_bases",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmendmentBasisList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/documents/{document_id}/draft/parameters": {
       "get": {
         "tags": [
@@ -17353,7 +17413,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
               "title": "Doc Type"
             }
           }
@@ -18607,7 +18667,7 @@
           "manager-document-system"
         ],
         "summary": "Issue Managed Document",
-        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Participant statements require explicit factual\nconfirmation of the current text using participant_statement_confirmed=true;\nthe issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.\nThe first act continuing an unverified open-contract series returns 409\ncontract_act_number_confirmation_required with previous_act. Inspect that\noriginal and repeat with confirmed_previous_act_number and expected_previous_act_id.\nDrafts reserve neither number. Retries reuse the same CRM and printed numbers.\nSaved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Issue a current-tenant managed draft by reserving its official number and rendering\nimmutable DOCX/PDF artifacts. Participant statements require explicit factual\nconfirmation of the current text using participant_statement_confirmed=true;\nthe issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.\nContract amendments register the agreed additional scope only on successful issuance;\nthis does not certify signature, payment or performed work. Their frozen contract and\neffective amendment revision are checked before reservation and after rendering;\na stale total returns 409 without rewriting the saved text.\nThe first act continuing an unverified open-contract series returns 409\ncontract_act_number_confirmation_required with previous_act. Inspect that\noriginal and repeat with confirmed_previous_act_number and expected_previous_act_id.\nDrafts reserve neither number. Retries reuse the same CRM and printed numbers.\nSaved external edits must be synchronized and their remote\nrevision verified first. Missing document returns 404, state/edit conflicts 409 and\ngeneration failure 503. A failed render retains its reservation; retry the same document\nrather than creating a new draft. Already issued/sent/signed records reuse their\nissuance result. See the [document lifecycle\ncontract](https://github.com/mvnby/air-api/blob/main/docs/document-module-architecture.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "issue_manager_managed_document",
         "security": [
           {
@@ -41121,6 +41181,201 @@
         ],
         "title": "AddressSuggestionItem"
       },
+      "AmendmentBasisItem": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "title": "Legal Entity Id"
+          },
+          "number": {
+            "type": "string",
+            "title": "Number"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "original_amount": {
+            "type": "string",
+            "title": "Original Amount"
+          },
+          "effective_additions": {
+            "type": "string",
+            "title": "Effective Additions"
+          },
+          "agreed_total": {
+            "type": "string",
+            "title": "Agreed Total"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "seller_name": {
+            "type": "string",
+            "title": "Seller Name"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "lines": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "legal_entity_id",
+          "number",
+          "date",
+          "status",
+          "original_amount",
+          "effective_additions",
+          "agreed_total",
+          "currency",
+          "revision",
+          "seller_name",
+          "customer_name",
+          "lines"
+        ],
+        "title": "AmendmentBasisItem"
+      },
+      "AmendmentBasisList": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AmendmentBasisItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "items"
+        ],
+        "title": "AmendmentBasisList"
+      },
+      "AmendmentWork-Input": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 1500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              }
+            ],
+            "title": "Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit",
+          "unit_price"
+        ],
+        "title": "AmendmentWork"
+      },
+      "AmendmentWork-Output": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 1500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,3}0*$",
+            "title": "Quantity"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Unit"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$",
+            "title": "Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit",
+          "unit_price"
+        ],
+        "title": "AmendmentWork"
+      },
       "AnalyticsAuthorizationUrlResponse": {
         "properties": {
           "url": {
@@ -50582,6 +50837,98 @@
           "goods_warranty_months"
         ],
         "title": "ConsumerEquipmentDefaultsResponse"
+      },
+      "ContractAmendmentTerms-Input": {
+        "properties": {
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/AmendmentWork-Input"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Works"
+          },
+          "equipment": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Equipment",
+            "default": ""
+          },
+          "acceptance_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Acceptance Terms",
+            "default": "\u041f\u0440\u0438\u0451\u043c\u043a\u0430 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 \u0440\u0430\u0431\u043e\u0442 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u0445 \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430."
+          },
+          "payment_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Payment Terms",
+            "default": "\u041e\u043f\u043b\u0430\u0442\u0430 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 \u0440\u0430\u0431\u043e\u0442 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u0445 \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430."
+          },
+          "effective_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Effective Terms",
+            "default": "\u041d\u0430\u0441\u0442\u043e\u044f\u0449\u0435\u0435 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0435 \u0432\u0441\u0442\u0443\u043f\u0430\u0435\u0442 \u0432 \u0441\u0438\u043b\u0443 \u043f\u043e\u0441\u043b\u0435 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0438\u044f \u043e\u0431\u0435\u0438\u043c\u0438 \u0441\u0442\u043e\u0440\u043e\u043d\u0430\u043c\u0438."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "works"
+        ],
+        "title": "ContractAmendmentTerms"
+      },
+      "ContractAmendmentTerms-Output": {
+        "properties": {
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/AmendmentWork-Output"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Works"
+          },
+          "equipment": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Equipment",
+            "default": ""
+          },
+          "acceptance_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Acceptance Terms",
+            "default": "\u041f\u0440\u0438\u0451\u043c\u043a\u0430 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 \u0440\u0430\u0431\u043e\u0442 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u0445 \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430."
+          },
+          "payment_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Payment Terms",
+            "default": "\u041e\u043f\u043b\u0430\u0442\u0430 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 \u0440\u0430\u0431\u043e\u0442 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u0445 \u0438\u0441\u0445\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430."
+          },
+          "effective_terms": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Effective Terms",
+            "default": "\u041d\u0430\u0441\u0442\u043e\u044f\u0449\u0435\u0435 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0435 \u0432\u0441\u0442\u0443\u043f\u0430\u0435\u0442 \u0432 \u0441\u0438\u043b\u0443 \u043f\u043e\u0441\u043b\u0435 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0438\u044f \u043e\u0431\u0435\u0438\u043c\u0438 \u0441\u0442\u043e\u0440\u043e\u043d\u0430\u043c\u0438."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "works"
+        ],
+        "title": "ContractAmendmentTerms"
       },
       "ContractReviewJobResponse": {
         "properties": {
@@ -63422,6 +63769,16 @@
             ],
             "title": "Template Version Id"
           },
+          "amendment_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractAmendmentTerms-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "issue_date": {
             "anyOf": [
               {
@@ -63530,6 +63887,16 @@
       },
       "ManagedDocumentDraftParameters": {
         "properties": {
+          "amendment_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractAmendmentTerms-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "issue_date": {
             "type": "string",
             "format": "date",
@@ -63691,7 +64058,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -63852,6 +64219,28 @@
             "title": "Consumer Term Overrides",
             "description": "For a consumer replacement, explicitly name corrected consumer_terms fields. All other facts come from the source snapshot; a default/empty form never replaces them."
           },
+          "amendment_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractAmendmentTerms-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amendment_basis_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Basis Revision"
+          },
           "consumer_terms": {
             "anyOf": [
               {
@@ -63978,6 +64367,71 @@
               }
             ],
             "title": "Snapshot Total Amount"
+          },
+          "amendment_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractAmendmentTerms-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amendment_original_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Original Amount"
+          },
+          "amendment_new_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment New Total"
+          },
+          "amendment_change_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Change Amount"
+          },
+          "basis_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Number"
+          },
+          "basis_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Date"
           },
           "scope_product_line_ids": {
             "anyOf": [
@@ -89065,7 +89519,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
             "title": "Doc Type"
           },
           "description": {

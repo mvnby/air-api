@@ -9,6 +9,7 @@ import { createDefaultActTerms, type ActTerms } from '../model/act-terms';
 import { createDefaultTransportTerms, transportTermsError, type TransportTerms } from '../model/transport-terms';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
+import ContractAmendmentFields from './ContractAmendmentFields.vue';
 import ActTermsPanel from './ActTermsPanel.vue';
 import RepairDefectFields from './RepairDefectFields.vue';
 import { repairDefectFormError, repairDefectPayload, type RepairDefectForm } from '../model/repair-defect';
@@ -32,7 +33,7 @@ const saving = ref(false);
 const error = ref('');
 let active = true;
 onBeforeUnmount(() => { active = false; });
-const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement', 'repair_defect', 'waybill_cargo'] as const;
+const fields = ['issue_date', 'issue_city', 'business_terms', 'consumer_terms', 'act_terms', 'transport_terms', 'participant_statement', 'repair_defect', 'waybill_cargo', 'amendment_terms'] as const;
 const changes = computed(() => {
   const result: Record<string, unknown> = {};
   if (!form.value || !baseline.value) return result;
@@ -120,6 +121,7 @@ const save = async () => {
         <label class="native-field"><span>Дата документа</span><input v-model="form.issue_date" type="date" class="native-input" data-testid="draft-issue-date" required /></label>
         <label class="native-field"><span>Город документа</span><input v-model="form.issue_city" class="native-input" data-testid="draft-issue-city" maxlength="160" /></label>
       </div>
+      <ContractAmendmentFields v-if="form.amendment_terms" v-model="form.amendment_terms" />
       <B2BContractTermsPanel v-if="form.business_terms" :document-type="document.doc_type" :terms="form.business_terms" :order-conditions="form.order_conditions" @update-terms="form.business_terms = $event" />
       <ConsumerDocumentTermsPanel v-if="form.consumer_terms" :order-id="document.order_id" :source-document-id="document.id" :document-type="document.doc_type" :terms="form.consumer_terms" :proposal-total-cents="Math.round(Number(form.total_amount) * 100)" @update-terms="form.consumer_terms = $event" />
       <RepairDefectFields v-if="form.repair_defect" :terms="form.repair_defect" @update-terms="form.repair_defect = $event" />

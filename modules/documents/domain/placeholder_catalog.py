@@ -20,6 +20,12 @@ class ConditionDescriptor:
 
 
 SCALAR_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
+    *(PlaceholderDescriptor(f"amendment.{key}", label, "Дополнительное соглашение") for key, label in (
+        ("original_amount", "Первоначальная сумма договора"), ("other_amount", "Другие действующие изменения"),
+        ("previous_total", "Сумма без этого соглашения"), ("new_total", "Новая общая сумма"),
+        ("equipment", "Оборудование дополнительных работ"), ("acceptance_terms", "Условия приёмки"),
+        ("payment_terms", "Условия оплаты"), ("effective_terms", "Условия вступления в силу"),
+    )),
     PlaceholderDescriptor(
         "document.internal_reference", "Внутренний номер CRM", "Документ"
     ),
@@ -424,7 +430,7 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
 )
 
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
-    frozenset({"offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act", "retail_receipt", "warranty_certificate"})
+    frozenset({"contract_amendment", "offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act", "retail_receipt", "warranty_certificate"})
     | B2C_NATIVE_DOCUMENT_TYPES
 )
 

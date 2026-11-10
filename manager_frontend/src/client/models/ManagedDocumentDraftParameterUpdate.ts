@@ -5,6 +5,7 @@
 import type { ActTermsPayload } from './ActTermsPayload';
 import type { BusinessDocumentTermsPayload_Input } from './BusinessDocumentTermsPayload_Input';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
+import type { ContractAmendmentTerms_Input } from './ContractAmendmentTerms_Input';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
@@ -13,6 +14,7 @@ export type ManagedDocumentDraftParameterUpdate = {
     expected_revision: string;
     reset_editable_copy?: boolean;
     template_version_id?: (number | null);
+    amendment_terms?: (ContractAmendmentTerms_Input | null);
     issue_date?: (string | null);
     issue_city?: (string | null);
     business_terms?: (BusinessDocumentTermsPayload_Input | null);

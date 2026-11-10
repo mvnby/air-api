@@ -63,6 +63,7 @@ from .logistics_rows import build_logistics_rows, waybill_composition_source
 from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
 from .draft_parameters import json_terms
+from modules.documents.domain.contract_amendment import ContractAmendmentTerms
 
 
 class DocumentContextError(ValueError):
@@ -97,6 +98,8 @@ class DocumentContextSelection:
     maintenance_preparation_id: int | None = None
     participant_statement: ParticipantStatement | None = None
     repair_defect: RepairDefect | None = None
+    amendment_terms: ContractAmendmentTerms | None = None
+    amendment_basis_revision: str | None = None
     receipt_note: str | None = None
     warranty_equipment_id: int | None = None
 
@@ -178,6 +181,11 @@ class DocumentContextBuilder:
         )
         if order is None:
             raise DocumentContextError("Заказ не найден")
+        if document_type == "contract_amendment":
+            from .contract_amendments import build_snapshot
+            return await build_snapshot(session, scope=tenant_scope, selection=selection)
+        if selection.amendment_terms is not None or selection.amendment_basis_revision is not None:
+            raise DocumentContextError("Параметры допсоглашения доступны только для допсоглашения")
         if document_type == "repair_defect_act" and (order.workflow_type != "repair" or order.customer_id is None):
             raise DocumentContextError("Для дефектного акта нужен заказ на ремонт с выбранным клиентом")
         if (document_type == "contract" and selection.business_terms

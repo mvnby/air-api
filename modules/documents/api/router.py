@@ -16,6 +16,7 @@ from modules.documents.infrastructure.renderers import (
 from services.private_attachment_storage_service import get_private_attachment_storage
 
 from . import (
+    amendments,
     draft_parameters,
     condition_presets,
     consumer_defaults,
@@ -45,6 +46,7 @@ def _pdf_converter():
 
 
 router = APIRouter()
+router.include_router(amendments.router)
 router.include_router(draft_parameters.router)
 router.include_router(condition_presets.router)
 router.include_router(consumer_defaults.router)

@@ -1,6 +1,10 @@
 """Explicit MCP tool catalogue and calls to shared application services."""
 
 from dataclasses import dataclass
+from schemas_connector_contract_amendment import (
+    ContractBasisInput, AmendmentBasisList, ContractAmendmentPrepareInput, ContractAmendmentReadInput, ContractAmendmentResult,
+)
+from services.connector_contract_amendment import execute_amendment_tool
 
 from mcp.types import CallToolResult, Tool, ToolAnnotations
 from pydantic import BaseModel
@@ -218,7 +222,13 @@ _SALES_TOOLS = (
         "Read a saved native sales offer draft, its readiness, missing fields, current/stale proposal version and exact Manager review link. A draft is not an issued or delivered offer.",
         SalesOrderOfferReadInput, SalesOrderOfferResult, ui_resource=SALES_UI_URI),
 )
-TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_MAIL_TOOLS, *_SALES_TOOLS)}
+_AMENDMENT_TOOLS = (
+    ConnectorTool("list_contract_amendment_bases", "Read frozen native contracts for an order: number, date, status, original amount, effective amendments, current total and revision. Explicitly choose one basis; never use current proposal totals.", ContractBasisInput, AmendmentBasisList, CONTRACT_SCOPE, read_only=True),
+    ConnectorTool("prepare_contract_amendment", "Save a separate native additional-work amendment draft to an explicit frozen contract. Does not issue, sign, pay or perform work. Pass the basis revision and reuse idempotency_key after timeout; returns saved IDs, totals, readiness and exact Manager draft link.", ContractAmendmentPrepareInput, ConnectorWriteResult[ContractAmendmentResult], CONTRACT_SCOPE),
+    ConnectorTool("get_contract_amendment", "Read the saved native amendment, structured work and conditions, revision, totals, readiness and exact Manager link. Resume by saved document ID after failures.", ContractAmendmentReadInput, ContractAmendmentResult, CONTRACT_SCOPE, read_only=True),
+)
+
+TOOLS = {tool.name: tool for tool in (*_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_MAIL_TOOLS, *_SALES_TOOLS, *_AMENDMENT_TOOLS)}
 SALES_TOOLS = frozenset(tool.name for tool in _SALES_TOOLS)
 MAINTENANCE_TOOLS = frozenset(tool.name for tool in _MAINTENANCE_TOOLS)
 CATALOG_TOOLS = frozenset(tool.name for tool in _CATALOG_TOOLS)
@@ -253,6 +263,8 @@ async def execute_tool(
             result = await ConnectorSalesPricingService.preview(session, actor, inputs)
         else:
             result = await execute_sales_order_tool(session, actor, name, inputs)
+    elif name in {t.name for t in _AMENDMENT_TOOLS}:
+        result = await execute_amendment_tool(session, actor, name, inputs)
     elif tool.scope in {ORDER_SCOPE, CONTRACT_SCOPE}:
         result = await execute_service_order_tool(session, actor, name, inputs)
     elif name in MAIL_TOOLS:

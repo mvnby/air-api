@@ -11,6 +11,7 @@ import { readOrderPage } from '../../../services/order-navigation';
 import { navigateManager, openManagerChild } from '../../../services/manager-navigation-history';
 import { useManagedDocumentWorkspace } from '../composables/use-managed-document-workspace';
 import ConsumerDocumentTermsPanel from './ConsumerDocumentTermsPanel.vue';
+import ContractAmendmentFields from './ContractAmendmentFields.vue';
 import DraftParametersEditor from './DraftParametersEditor.vue';
 import DocumentVersionHistory from './DocumentVersionHistory.vue';
 import { groupDocumentVersions } from '../model/document-version-history';
@@ -283,7 +284,7 @@ const audienceMismatchWarning = computed(() => (
     : ''
 ));
 watch(workspace.documentType, (type) => {
-  if (!['repair_defect_act', 'warranty_certificate'].includes(type))
+  if (!['contract_amendment', 'repair_defect_act', 'warranty_certificate'].includes(type))
     documentAudience.value = isConsumerDocumentType(type) || type === 'retail_receipt' ? 'consumer' : 'business';
 });
 
@@ -440,7 +441,7 @@ const createDraft = async () => {
   const type = workspace.documentType.value;
   const proposal = proposalId.value;
   try {
-    const result = await props.beforeGenerate?.(workspace.documentType.value);
+    const result = type === 'contract_amendment' ? undefined : await props.beforeGenerate?.(workspace.documentType.value);
     if (result === false || (result && typeof result === 'object' && result.proceed === false)) {
       emit('toast', { message: 'Сначала сохраните изменения заказа перед созданием черновика.', type: 'error' });
       return;
@@ -521,6 +522,7 @@ defineExpose({
           <template v-else>Для онлайн-редактирования обратитесь к владельцу аккаунта.</template>
         </p>
       </div>
+      <button v-if="access.canCreate" type="button" class="btn-mini min-h-9 px-3" data-testid="create-contract-amendment" @click="workspace.cancelReplacement(); workspace.documentType.value = 'contract_amendment'; openCreateForm()">Создать дополнительное соглашение</button>
       <button v-if="access.canCreate" type="button" class="btn-mini min-h-9 w-fit shrink-0 px-3 focus-visible:ring-2 focus-visible:ring-brand-500" @click="openCreateForm">Новый документ</button>
     </div>
 
@@ -552,10 +554,13 @@ defineExpose({
               <p class="mt-1 text-xs text-slate-500">от {{ formatDate(document.official_date || document.date) }} · CRM: <span class="font-mono">{{ document.internal_reference || `#${document.id}` }}</span></p>
               <div v-if="['draft', 'issued', 'sent'].includes(document.status) && document.customer_readiness?.missing_fields?.length"
                 class="mt-2 min-w-0 break-words text-xs leading-5 text-slate-600 dark:text-slate-300" data-testid="native-manual-fields">
-                <p class="font-semibold">Можно вписать от руки</p>
+                <p class="font-semibold">{{ document.doc_type === 'contract_amendment' ? 'Проверьте заполненность' : 'Можно вписать от руки' }}</p>
                 <p>{{ manualFieldLabels(document.customer_readiness).join(', ') }}</p>
                 <button v-if="document.status === 'draft' && order.customer?.id" type="button" class="mt-1 text-brand-700 underline underline-offset-2 dark:text-brand-300" @click="openCustomerProfile">Открыть карточку клиента</button>
               </div>
+              <p v-if="document.doc_type === 'contract_amendment'" class="mt-2 text-sm" data-testid="amendment-summary">
+                К договору № {{ document.basis_number || 'не указан' }} от {{ document.basis_date || 'не указана' }} (CRM #{{ document.base_document_id }}). Допработы: {{ document.amendment_change_amount }} BYN; расчётный итог: {{ document.amendment_new_total }} BYN.
+              </p>
               <p v-if="document.replaces_document_id" class="mt-1 text-xs font-semibold text-blue-600">Заменяет CRM-документ #{{ document.replaces_document_id }}</p>
               <p v-if="document.void_reason" class="mt-1 text-xs text-rose-600">Причина: {{ document.void_reason }}</p>
             </div>
@@ -773,6 +778,18 @@ defineExpose({
             <label class="native-field"><span>Текст заявления о соответствии</span><textarea v-model="workspace.participantStatement.value.declaration_text" class="native-input participant-statement-text" rows="8" maxlength="20000" data-testid="participant-statement-text" placeholder="Введите подтверждаемые сведения согласно требованиям закупки" /></label>
             <p class="text-xs text-slate-500">Участник и подписант берутся из выбранного нашего юрлица или ИП. Дата — в реквизитах выше. После создания черновика проверьте предпросмотр; текст можно отредактировать до выпуска.</p>
           </div>
+          <div v-if="workspace.documentType.value === 'contract_amendment'" class="mt-4">
+            <label class="native-field"><span>Исходный договор</span>
+              <select v-model="workspace.amendmentBasisId.value" class="native-input" data-testid="amendment-basis" :disabled="Boolean(workspace.replacesDocumentId.value)">
+                <option :value="null">Выберите договор</option>
+                <option v-for="base in workspace.amendmentBases.value" :key="base.document_id" :value="base.document_id">№ {{ base.number }} · {{ base.date || 'дата не указана' }} · {{ managedDocumentStatus(base.status) }} · {{ base.agreed_total }} BYN</option>
+              </select>
+            </label>
+            <p v-if="!workspace.amendmentBases.value.length" class="mt-2 text-sm text-amber-700">Нет доступных нативных договоров с зафиксированной суммой в BYN. Обновите основания или сверьте договор.</p>
+            <button type="button" class="mt-2 text-xs underline" @click="workspace.loadAmendmentBases">Обновить основания</button>
+            <p v-if="workspace.selectedAmendmentBasis.value" class="mt-2 text-sm">Первоначальная сумма: {{ workspace.selectedAmendmentBasis.value.original_amount }} BYN; действующие изменения: {{ workspace.selectedAmendmentBasis.value.effective_additions }} BYN.</p>
+            <ContractAmendmentFields v-model="workspace.amendmentTerms.value" />
+          </div>
           <p v-if="isConsumerDocument && workspace.replacesDocumentId.value" class="mt-3 text-sm text-slate-600 dark:text-slate-300" data-testid="replacement-frozen-composition">Состав и сумма наследуются из исходного документа: {{ (workspace.consumerProposalTotalCents.value ?? 0) / 100 }} BYN.</p>
           <ConsumerWorkComposition v-if="isCustomerEquipmentWorkAct(workspace.documentType.value) && !workspace.replacesDocumentId.value" v-model="materialIds"
             :services="proposalServices" :products="proposalProducts" :total="compositionTotalCents(workspace.documentType.value)" />
@@ -807,7 +824,7 @@ defineExpose({
             @update-terms="workspace.transportTerms.value = $event"
           />
           </template>
-          <p v-if="!waybillTemplateState && draftBlockedReason && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ draftBlockedReason }}. <button v-if="canManageDocumentSettings && !selectionError" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
+          <p v-if="!waybillTemplateState && draftBlockedReason && !workspace.hasInstallationTwoStagesError.value" class="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300" data-testid="native-draft-blocked-reason">{{ draftBlockedReason }}. <button v-if="canManageDocumentSettings && !selectionError && workspace.documentType.value !== 'contract_amendment'" class="underline" type="button" @click="openSettings">Исправить в настройках</button></p>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
             <span v-if="!waybillTemplateState" class="text-xs text-slate-500">{{ workspace.documentType.value === 'ttn1' ? 'В черновике укажите грузовые места и массу по строкам.' : 'Черновик можно проверить до присвоения номера.' }}</span>
             <button class="inline-flex h-10 items-center justify-center rounded-xl bg-brand-600 px-5 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50" type="button" data-testid="create-native-draft" data-order-usage="document_create" :disabled="preparingDraft || workspace.busy.value || Boolean(draftBlockedReason)" :title="draftBlockedReason" @click="createDraft()">Создать черновик</button>
