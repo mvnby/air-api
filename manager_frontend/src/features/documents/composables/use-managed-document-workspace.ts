@@ -99,6 +99,11 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const baseDocumentId = ref<number | null>(null);
   const baseCustomerContractId = ref<number | null>(null);
   const consumerTerms = ref<ConsumerDocumentTerms>(createDefaultConsumerDocumentTerms());
+  const replacementConsumerBaseline = ref<ConsumerDocumentTerms | null>(null);
+  const replacementTotalCents = ref<number | null>(null);
+  const replacementProposalId = ref<number | null>(null);
+  const consumerProposalTotalCents = computed(() => replacesDocumentId.value && replacementTotalCents.value !== null
+    ? replacementTotalCents.value : input.proposalTotalCents(documentType.value));
   const businessTerms = ref<BusinessDocumentTerms>(createDefaultBusinessDocumentTerms());
   const actTerms = ref<ActTerms>(createDefaultActTerms());
   const transportTerms = ref<TransportTerms>(createDefaultTransportTerms());
@@ -222,6 +227,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const resetSoldEquipmentTerms = () => {
     consumerTerms.value = {
       ...consumerTerms.value,
+      equipment_id: null,
       equipment_brand: null,
       equipment_model: null,
       equipment_serial: null,
@@ -336,7 +342,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     }
     return installationTermsError(
       consumerTerms.value,
-      input.proposalTotalCents(documentType.value),
+      consumerProposalTotalCents.value,
     );
   });
 
@@ -531,6 +537,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     documentRoleType.value = ['contract', 'offer', 'invoice'].includes(type) ? suggestedDocumentRole() : null;
   }, { flush: 'sync' });
   watch(documentType, (nextType, previousType) => {
+    if (replacesDocumentId.value) return;
     if (isConsumerDocumentType(nextType) && !isConsumerDocumentType(previousType)) {
       resetConsumerTerms();
     }
@@ -577,6 +584,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       consumerDefaultsScope = scope;
       consumerDefaultsContext = context;
       ++consumerDefaultsRequestId;
+      if (replacesDocumentId.value) {
+        consumerDefaultsLoading.value = false;
+        return;
+      }
       if (!context) {
         consumerDefaultsLoading.value = false;
         consumerDefaultsLoaded.value = false;
@@ -603,12 +614,20 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     issue_date: issueDate.value,
     issue_city: issueCity.value.trim() || null,
     template_id: selectedTemplateId.value,
-    proposal_id: input.proposalId() || null,
+    proposal_id: replacesDocumentId.value && isConsumerDocumentType(documentType.value)
+      ? replacementProposalId.value : input.proposalId() || null,
     business_role: documentType.value === 'invoice' ? businessRole.value : null,
     document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
     base_document_id: baseDocumentId.value,
     base_customer_contract_id: baseCustomerContractId.value,
     replaces_document_id: replacesDocumentId.value,
+    consumer_term_overrides: replacesDocumentId.value && replacementConsumerBaseline.value
+      ? [...new Set([
+        ...(Object.keys(consumerTerms.value) as (keyof ConsumerDocumentTerms)[])
+          .filter(key => consumerTerms.value[key] !== replacementConsumerBaseline.value?.[key]),
+        ...(consumerTerms.value.equipment_id !== replacementConsumerBaseline.value.equipment_id
+          ? ['equipment_brand', 'equipment_model', 'equipment_serial'] : []),
+      ])] : [],
     consumer_terms: isConsumerDocumentType(documentType.value)
       ? {
         ...serializeInstallationTerms(consumerTerms.value),
@@ -798,6 +817,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const cancelReplacement = () => {
     if (!replacesDocumentId.value) return;
     replacesDocumentId.value = null;
+    replacementTotalCents.value = null;
+    replacementProposalId.value = null;
+    replacementConsumerBaseline.value = null;
     receiptNote.value = '';
     warrantyEquipmentId.value = null;
     repairDefect.value = newRepairDefectForm(input.repairOrder?.());
@@ -826,9 +848,19 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     businessRole.value = document.business_role === 'offer' ? 'offer' : 'payment_request';
     documentRoleType.value = document.document_role_type || null;
     issueDate.value = (document.official_date || document.date).slice(0, 10);
-    issueCity.value = document.issue_city
+    issueCity.value = isConsumerDocumentType(document.doc_type) ? document.issue_city || '' : document.issue_city
       || String(legalEntities.value.find((item) => item.id === selectedLegalEntityId.value)?.requisites.city || '').trim();
     replacesDocumentId.value = document.id;
+    replacementProposalId.value = document.proposal_id || null;
+    replacementTotalCents.value = document.snapshot_total_amount == null ? null : Math.round(Number(document.snapshot_total_amount) * 100);
+    if (isConsumerDocumentType(document.doc_type) && document.consumer_terms) {
+      ++consumerDefaultsRequestId;
+      consumerDefaultsLoading.value = false;
+      consumerDefaultsLoaded.value = true;
+      consumerTerms.value = { ...createDefaultConsumerDocumentTerms(), ...document.consumer_terms };
+      replacementConsumerBaseline.value = { ...consumerTerms.value };
+      for (const field of consumerDefaultFields) manuallyEditedConsumerDefaultFields.add(field);
+    }
   };
 
   const downloadArtifact = async (artifactId: string, filename: string) => {
@@ -891,6 +923,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     businessTerms,
     busy,
     consumerTerms,
+    consumerProposalTotalCents,
     customerReadiness,
     checkDocumentReadiness,
     beginIssueAction,

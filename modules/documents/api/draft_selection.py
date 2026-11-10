@@ -41,6 +41,8 @@ def selection_from_payload(order_id: int, payload: ManagedDocumentDraftPayload) 
             if payload.consumer_terms is not None
             else None
         ),
+        consumer_terms_fields=(frozenset(payload.consumer_term_overrides) if payload.replaces_document_id is not None
+            else frozenset(payload.consumer_terms.model_fields_set) if payload.consumer_terms is not None else None),
         business_terms=(
             BusinessDocumentTerms(
                 **{

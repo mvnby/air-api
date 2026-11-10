@@ -34,6 +34,10 @@ export type ManagedDocumentDraftPayload = {
     scope_product_line_ids?: Array<number>;
     business_role?: (string | null);
     replaces_document_id?: (number | null);
+    /**
+     * For a consumer replacement, explicitly name corrected consumer_terms fields. All other facts come from the source snapshot; a default/empty form never replaces them.
+     */
+    consumer_term_overrides?: Array<string>;
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
     business_terms?: (BusinessDocumentTermsPayload_Input | null);
     act_terms?: (ActTermsPayload | null);

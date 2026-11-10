@@ -7,11 +7,14 @@ import {
   isStagedInstallationDocumentType,
 } from '../model/consumer-document-terms';
 import InstallationTwoStagesPanel from './InstallationTwoStagesPanel.vue';
+import ConsumerEquipmentRegistry from './ConsumerEquipmentRegistry.vue';
 
 const props = defineProps<{
   documentType: string;
   terms: ConsumerDocumentTerms;
   proposalTotalCents: number | null;
+  orderId?: number;
+  sourceDocumentId?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +47,7 @@ const updateMonths = (field: 'goods_warranty_months' | 'work_warranty_months', e
       <p class="mt-1 text-xs leading-5 text-brand-900/75 dark:text-brand-200/75">Эти данные попадут в снимок черновика и не изменятся вслед за карточкой заказа.</p>
     </div>
 
+    <ConsumerEquipmentRegistry v-if="orderId" :order-id="orderId" :terms="terms" :source-document-id="sourceDocumentId" @update-terms="emit('updateTerms', $event)" />
     <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label class="consumer-field"><span>Бренд оборудования</span><input :value="terms.equipment_brand || ''" class="consumer-input" data-testid="consumer-equipment-brand" placeholder="Например, Midea" @input="updateText('equipment_brand', $event)" /></label>
       <label class="consumer-field"><span>Модель</span><input :value="terms.equipment_model || ''" class="consumer-input" data-testid="consumer-equipment-model" placeholder="MSAG-09HRN1" @input="updateText('equipment_model', $event)" /></label>

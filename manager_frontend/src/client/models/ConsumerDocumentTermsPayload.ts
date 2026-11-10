@@ -6,6 +6,10 @@
  * B2C-only facts frozen on draft creation, never read from mutable CRM state.
  */
 export type ConsumerDocumentTermsPayload = {
+    /**
+     * Physical equipment linked to this order; identity is frozen in the document snapshot.
+     */
+    equipment_id?: (number | null);
     equipment_brand?: (string | null);
     equipment_model?: (string | null);
     equipment_serial?: (string | null);

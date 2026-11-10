@@ -203,6 +203,7 @@ export type { ConnectionUpdate } from './models/ConnectionUpdate';
 export type { ConnectorGrantListResponse } from './models/ConnectorGrantListResponse';
 export type { ConnectorGrantResponse } from './models/ConnectorGrantResponse';
 export type { ConnectorTokenResponse } from './models/ConnectorTokenResponse';
+export type { ConnectorWriteResult_OrderEquipmentSaveResult_ } from './models/ConnectorWriteResult_OrderEquipmentSaveResult_';
 export type { ConsumerDocumentTermsPayload } from './models/ConsumerDocumentTermsPayload';
 export type { ConsumerEquipmentDefaultsResponse } from './models/ConsumerEquipmentDefaultsResponse';
 export type { ContractReviewJobResponse } from './models/ContractReviewJobResponse';
@@ -762,6 +763,10 @@ export type { OrderEmailComposeResponse } from './models/OrderEmailComposeRespon
 export type { OrderEmailMissingRequisiteResponse } from './models/OrderEmailMissingRequisiteResponse';
 export type { OrderEmailSendPayload } from './models/OrderEmailSendPayload';
 export type { OrderEmailTemplateOptionResponse } from './models/OrderEmailTemplateOptionResponse';
+export type { OrderEquipmentIdentity } from './models/OrderEquipmentIdentity';
+export type { OrderEquipmentSavePayload } from './models/OrderEquipmentSavePayload';
+export type { OrderEquipmentSaveResult } from './models/OrderEquipmentSaveResult';
+export type { OrderEquipmentState } from './models/OrderEquipmentState';
 export type { OrderMultiSplitConfigurationResponse } from './models/OrderMultiSplitConfigurationResponse';
 export type { OrderPayload } from './models/OrderPayload';
 export type { OrderProductLineResponse } from './models/OrderProductLineResponse';
@@ -1108,6 +1113,7 @@ export { ManagerMaintenanceObservationsService } from './services/ManagerMainten
 export { ManagerMediaService } from './services/ManagerMediaService';
 export { ManagerMediaWorkerService } from './services/ManagerMediaWorkerService';
 export { ManagerMultiSplitService } from './services/ManagerMultiSplitService';
+export { ManagerOrderEquipmentService } from './services/ManagerOrderEquipmentService';
 export { ManagerOrdersService } from './services/ManagerOrdersService';
 export { ManagerOrderUsageService } from './services/ManagerOrderUsageService';
 export { ManagerPersonalTasksService } from './services/ManagerPersonalTasksService';

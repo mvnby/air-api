@@ -25,6 +25,7 @@ from routers import manager_call_recordings
 from routers import manager_equipment
 from routers import manager_maintenance_observations
 from routers import manager_equipment_links
+from routers import manager_order_equipment_identity
 from routers import manager_google_auth
 from routers import manager_features
 from routers import manager_product_collections
@@ -111,6 +112,7 @@ router.include_router(manager_catalog_usage.router)
 router.include_router(manager_equipment.router)
 router.include_router(manager_maintenance_observations.router)
 router.include_router(manager_equipment_links.router)
+router.include_router(manager_order_equipment_identity.router)
 router.include_router(manager_repair_complaints.router)
 router.include_router(manager_leads.router)
 router.include_router(manager_mail.router)

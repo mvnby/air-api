@@ -655,6 +655,8 @@ async def _document_item(
 
 
 def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
+    from modules.documents.application.draft_parameters import read_draft_parameters
+    from modules.documents.domain import B2C_NATIVE_DOCUMENT_TYPES
     official_full_number = None
     if document.official_number:
         official_full_number = str(
@@ -681,6 +683,9 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         if saved_ids or not any(row.get("line.kind") == "product" for row in rows):
             scoped_products = saved_ids
     return ManagedDocumentItem(
+        snapshot_total_amount=statement_values.get("totals.amount"),
+        consumer_terms=(read_draft_parameters(document)["consumer_terms"]
+            if document.doc_type in B2C_NATIVE_DOCUMENT_TYPES else None),
         scope_product_line_ids=scoped_products,
         waybill_composition=((document.render_snapshot or {}).get("meta") or {}).get("waybill_composition"),
         repair_defect=(

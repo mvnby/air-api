@@ -2,12 +2,15 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
 import type { DocumentCustomerReadiness } from './DocumentCustomerReadiness';
 import type { ManagedDocumentArtifactItem } from './ManagedDocumentArtifactItem';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { WaybillComposition_Output } from './WaybillComposition_Output';
 export type ManagedDocumentItem = {
+    consumer_terms?: (ConsumerDocumentTermsPayload | null);
+    snapshot_total_amount?: (string | null);
     scope_product_line_ids?: (Array<number> | null);
     waybill_composition?: (WaybillComposition_Output | null);
     repair_defect?: (RepairDefect | null);

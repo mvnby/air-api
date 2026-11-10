@@ -8,10 +8,36 @@ from typing import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Brand, OrderProductLink, Product
+from models import Brand, Order, OrderProductLink, Product
 from models.tenancy import TenantScope
 from modules.documents.domain import ConsumerDocumentTerms, DEFAULT_GOODS_WARRANTY_MONTHS
 from services.warranty_service import WarrantyService
+
+
+async def resolve_linked_equipment(
+    session: AsyncSession, *, tenant_scope: TenantScope, order: Order,
+    terms: ConsumerDocumentTerms,
+) -> ConsumerDocumentTerms:
+    """Only an explicitly selected physical unit can supply a document identity."""
+    from models import EquipmentOrderLink
+    from sqlmodel import select
+    from services.tenant_entity_access_service import TenantEntityAccessService
+    from .context_builder import DocumentContextError
+
+    equipment = await TenantEntityAccessService.get_equipment(
+        session, terms.equipment_id, tenant_scope=tenant_scope,
+    )
+    linked = await session.scalar(select(EquipmentOrderLink.id).where(
+        EquipmentOrderLink.order_id == order.id,
+        EquipmentOrderLink.equipment_id == terms.equipment_id,
+    ))
+    if (equipment is None or equipment.is_archived or equipment.customer_id != order.customer_id
+            or (equipment.source_order_id != order.id and linked is None)
+            or (order.customer_branch_id is not None and equipment.customer_branch_id is not None
+                and equipment.customer_branch_id != order.customer_branch_id)):
+        raise DocumentContextError("Выберите оборудование, привязанное к клиенту и объекту этого заказа")
+    return replace(terms, equipment_brand=equipment.brand, equipment_model=equipment.model,
+                   equipment_serial=equipment.serial)
 
 
 def _text(value: object | None) -> str:

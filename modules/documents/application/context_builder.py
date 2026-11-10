@@ -88,6 +88,8 @@ class DocumentContextSelection:
     business_role: str | None = None
     document_role_type: str | None = None
     consumer_terms: ConsumerDocumentTerms | None = None
+    # Transport records omitted fields so a replacement can merge a partial correction.
+    consumer_terms_fields: frozenset[str] | None = None
     business_terms: BusinessDocumentTerms | None = None
     act_terms: ActTerms | None = None
     transport_terms: TransportTerms | None = None
@@ -273,6 +275,11 @@ class DocumentContextBuilder:
             if str(key or "").strip()
         }
         consumer_terms = selection.consumer_terms
+        if consumer_terms is not None and consumer_terms.equipment_id is not None:
+            from .consumer_equipment import resolve_linked_equipment
+            consumer_terms = await resolve_linked_equipment(
+                session, tenant_scope=tenant_scope, order=order, terms=consumer_terms,
+            )
         if document_type == "b2c_supply_installation_act":
             consumer_terms = await resolve_consumer_equipment_defaults(
                 session, product_links=product_links, terms=consumer_terms,

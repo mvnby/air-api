@@ -3,6 +3,7 @@ export const isCustomerEquipmentWorkAct = (type: string) => (
 );
 
 export type ConsumerDocumentTerms = {
+  equipment_id: number | null;
   equipment_brand: string | null;
   equipment_model: string | null;
   equipment_serial: string | null;
@@ -56,6 +57,7 @@ export const createDefaultConsumerDocumentTerms = (
   goodsWarrantyMonths: number | null = 36,
   workWarrantyMonths: number | null = null,
 ): ConsumerDocumentTerms => ({
+  equipment_id: null,
   equipment_brand: null,
   equipment_model: null,
   equipment_serial: null,
