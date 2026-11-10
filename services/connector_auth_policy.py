@@ -17,6 +17,7 @@ SCOPES = frozenset({
     "kitlane:maintenance:write", "kitlane:catalog:write",
     "kitlane:orders:write", "kitlane:contracts:drafts:write",
     "kitlane:customers:write",
+    "kitlane:templates:read", "kitlane:templates:proposals:write",
     "kitlane:mail:read", "kitlane:mail:drafts:write", "kitlane:mail:send",
 })
 ROLE_RANK = {"manager": 1, "admin": 2, "owner": 3}

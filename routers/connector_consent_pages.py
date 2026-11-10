@@ -11,6 +11,8 @@ SCOPE_LABELS = {
     "kitlane:orders:write": ("Заказы и предложения", "Создавать заказы на работы и продажи, читать и изменять строки предложения и цены. Для оборудования также нужен доступ к подбору."),
     "kitlane:customers:write": ("Создание клиентов", "Создавать карточки клиентов для заказов по вашему указанию, с проверкой совпадений."),
     "kitlane:contracts:drafts:write": ("Договоры на работы", "Готовить и проверять нативные черновики договоров по предложению."),
+    "kitlane:templates:read": ("Чтение шаблонов", "Читать исходные шаблоны и отчёты вашей компании. Нужны права владельца или администратора."),
+    "kitlane:templates:proposals:write": ("Проверка и правки шаблонов", "Сохранять замечания и неактивные версии. Активация только отдельным действием в Manager."),
     "kitlane:mail:read": ("Чтение почты", "Просматривать письма, черновики и вложения вашей компании."),
     "kitlane:mail:drafts:write": ("Почтовые черновики", "Создавать, изменять и удалять черновики и их вложения. Это не разрешает отправку."),
     "kitlane:mail:send": ("Отправка писем", "Отправлять только сохранённую версию, отдельно подтверждённую вами в Manager."),
@@ -26,7 +28,7 @@ def consent_page(*, user_name, company_name, storefront_name, pending, nonce):
         if scope == "kitlane:read":
             control = '<input type="checkbox" checked disabled aria-label="Просмотр данных компании обязателен">'
         else:
-            checked = "" if scope == "kitlane:mail:send" else " checked"
+            checked = "" if scope in {"kitlane:mail:send", "kitlane:templates:read", "kitlane:templates:proposals:write"} else " checked"
             control = f'<input type="checkbox" name="scope:{esc(scope, quote=True)}" value="allow"{checked}>'
         permissions.append(f'<label class="permission">{control}<span><strong>{esc(label)}</strong><small>{esc(description)}</small></span></label>')
     return f'''<!doctype html>

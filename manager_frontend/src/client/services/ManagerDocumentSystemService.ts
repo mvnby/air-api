@@ -47,6 +47,11 @@ import type { OrderEmailComposeResponse } from '../models/OrderEmailComposeRespo
 import type { OrderEmailSendPayload } from '../models/OrderEmailSendPayload';
 import type { OutgoingEmailResponse } from '../models/OutgoingEmailResponse';
 import type { RegistrationCertificateItem } from '../models/RegistrationCertificateItem';
+import type { TemplateAuditDecisionInput } from '../models/TemplateAuditDecisionInput';
+import type { TemplateAuditPreviewContext } from '../models/TemplateAuditPreviewContext';
+import type { TemplateAuditPreviewInput } from '../models/TemplateAuditPreviewInput';
+import type { TemplateAuditReportList } from '../models/TemplateAuditReportList';
+import type { TemplateAuditReportResult } from '../models/TemplateAuditReportResult';
 import type { TemplateExternalEditSyncPayload } from '../models/TemplateExternalEditSyncPayload';
 import type { TemplateExternalEditSyncResponse } from '../models/TemplateExternalEditSyncResponse';
 import type { WaybillCompositionSource } from '../models/WaybillCompositionSource';
@@ -894,6 +899,148 @@ export class ManagerDocumentSystemService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/document-system/runtime/pdf',
+        });
+    }
+    /**
+     * List Template Audits
+     * Read bounded saved reports for the current company's issuer. Requires live owner/admin membership and customer applicability; inaccessible scope returns 404/403. Reports separate source coverage from legal evidence and recalculate staleness. Read-only; no generation or activation.
+     * @param legalEntityId
+     * @param templateId
+     * @param page
+     * @param limit
+     * @returns TemplateAuditReportList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerTemplateAudits(
+        legalEntityId: number,
+        templateId?: (number | null),
+        page: number = 1,
+        limit: number = 25,
+    ): CancelablePromise<TemplateAuditReportList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/template-audits',
+            query: {
+                'legal_entity_id': legalEntityId,
+                'template_id': templateId,
+                'page': page,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Template Audit
+     * Read an exact saved template/version report with findings, decisions and inactive proposals. Requires live company owner/admin and current issuer/customer applicability. Foreign IDs return 404. Optional current legal evidence hash marks changed sources stale; absent hash requires external recheck. No writes.
+     * @param reportId
+     * @param legalSourcesHash
+     * @param occurrencesFindingId
+     * @param occurrencesPage
+     * @returns TemplateAuditReportResult Successful Response
+     * @throws ApiError
+     */
+    public static getManagerTemplateAudit(
+        reportId: number,
+        legalSourcesHash?: (string | null),
+        occurrencesFindingId?: (string | null),
+        occurrencesPage: number = 1,
+    ): CancelablePromise<TemplateAuditReportResult> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/template-audits/{report_id}',
+            path: {
+                'report_id': reportId,
+            },
+            query: {
+                'legal_sources_hash': legalSourcesHash,
+                'occurrences_finding_id': occurrencesFindingId,
+                'occurrences_page': occurrencesPage,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Decide Template Audit Finding
+     * Record a user's explicit Manager finding decision and reason, retaining its history. Live company owner/admin, exact report revision and source/context/legal evidence hashes are required. Stale writes return 409; reread after timeout before retrying. Never edits or activates a template.
+     * @param reportId
+     * @param findingId
+     * @param requestBody
+     * @returns TemplateAuditReportResult Successful Response
+     * @throws ApiError
+     */
+    public static decideManagerTemplateAuditFinding(
+        reportId: number,
+        findingId: string,
+        requestBody: TemplateAuditDecisionInput,
+    ): CancelablePromise<TemplateAuditReportResult> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/document-system/template-audits/{report_id}/findings/{finding_id}',
+            path: {
+                'report_id': reportId,
+                'finding_id': findingId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Preview Context
+     * Read an explicitly fictional editable test context for one inactive revision. Company owner/admin and unchanged source/context/legal evidence are required; foreign IDs return 404 and stale proposals 409. No real customer document, numbering, activation or other write is performed.
+     * @param reportId
+     * @param proposalId
+     * @returns TemplateAuditPreviewContext Successful Response
+     * @throws ApiError
+     */
+    public static getManagerTemplateAuditPreviewContext(
+        reportId: number,
+        proposalId: number,
+    ): CancelablePromise<TemplateAuditPreviewContext> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview-context',
+            path: {
+                'report_id': reportId,
+                'proposal_id': proposalId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Template Audit Proposal
+     * Render one saved inactive proposal to private DOCX/PDF on an explicitly selected fictional field/condition/table context. Requires live company owner/admin and matching source/context/legal evidence hashes. Missing fields return 400, stale data 409 and unavailable converter 503. Read-only: no CRM draft, official number, issued file or activation is changed. Repeat is safe.
+     * @param reportId
+     * @param proposalId
+     * @param requestBody
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static previewManagerTemplateAuditProposal(
+        reportId: number,
+        proposalId: number,
+        requestBody: TemplateAuditPreviewInput,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview',
+            path: {
+                'report_id': reportId,
+                'proposal_id': proposalId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

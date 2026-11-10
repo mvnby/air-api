@@ -17,6 +17,8 @@ from models import (
     DocumentTemplateActLink,
     DocumentTemplateCustomerLink,
     DocumentTemplateVersion,
+    DocumentTemplateAudit,
+    DocumentTemplateAuditProposal,
     StaffUser,
     Tenant,
 )
@@ -117,6 +119,8 @@ async def _database(tmp_path: Path):
             DocumentTemplateCustomerLink,
             DocumentTemplateActLink,
             DocumentTemplateVersion,
+            DocumentTemplateAudit,
+            DocumentTemplateAuditProposal,
             StaffUser,
             DocumentExternalEditSession,
         ):

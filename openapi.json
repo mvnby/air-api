@@ -17899,6 +17899,372 @@
         ]
       }
     },
+    "/api/manager/document-system/template-audits": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "List Template Audits",
+        "description": "Read bounded saved reports for the current company's issuer. Requires live owner/admin membership and customer applicability; inaccessible scope returns 404/403. Reports separate source coverage from legal evidence and recalculate staleness. Read-only; no generation or activation.",
+        "operationId": "list_manager_template_audits",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "legal_entity_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Legal Entity Id"
+            }
+          },
+          {
+            "name": "template_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAuditReportList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/template-audits/{report_id}": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Template Audit",
+        "description": "Read an exact saved template/version report with findings, decisions and inactive proposals. Requires live company owner/admin and current issuer/customer applicability. Foreign IDs return 404. Optional current legal evidence hash marks changed sources stale; absent hash requires external recheck. No writes.",
+        "operationId": "get_manager_template_audit",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "legal_sources_hash",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Legal Sources Hash"
+            }
+          },
+          {
+            "name": "occurrences_finding_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Occurrences Finding Id"
+            }
+          },
+          {
+            "name": "occurrences_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Occurrences Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAuditReportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/template-audits/{report_id}/findings/{finding_id}": {
+      "patch": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Decide Template Audit Finding",
+        "description": "Record a user's explicit Manager finding decision and reason, retaining its history. Live company owner/admin, exact report revision and source/context/legal evidence hashes are required. Stale writes return 409; reread after timeout before retrying. Never edits or activates a template.",
+        "operationId": "decide_manager_template_audit_finding",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Finding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateAuditDecisionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAuditReportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview-context": {
+      "get": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Get Preview Context",
+        "description": "Read an explicitly fictional editable test context for one inactive revision. Company owner/admin and unchanged source/context/legal evidence are required; foreign IDs return 404 and stale proposals 409. No real customer document, numbering, activation or other write is performed.",
+        "operationId": "get_manager_template_audit_preview_context",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAuditPreviewContext"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview": {
+      "post": {
+        "tags": [
+          "manager-document-system"
+        ],
+        "summary": "Preview Template Audit Proposal",
+        "description": "Render one saved inactive proposal to private DOCX/PDF on an explicitly selected fictional field/condition/table context. Requires live company owner/admin and matching source/context/legal evidence hashes. Missing fields return 400, stale data 409 and unavailable converter 503. Read-only: no CRM draft, official number, issued file or activation is changed. Repeat is safe.",
+        "operationId": "preview_manager_template_audit_proposal",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateAuditPreviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/document-system/orders/{order_id}/email/draft": {
       "post": {
         "tags": [
@@ -104674,6 +105040,413 @@
           "display_name"
         ],
         "title": "TelegramProfile"
+      },
+      "TemplateAuditDecisionInput": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Hash"
+          },
+          "context_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Hash"
+          },
+          "legal_sources_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Legal Sources Hash"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposal",
+              "needs_legal_review",
+              "accepted",
+              "rejected",
+              "fixed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "source_hash",
+          "context_hash",
+          "legal_sources_hash",
+          "status",
+          "reason"
+        ],
+        "title": "TemplateAuditDecisionInput"
+      },
+      "TemplateAuditPreviewContext": {
+        "properties": {
+          "synthetic": {
+            "type": "boolean",
+            "const": true,
+            "title": "Synthetic"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "conditions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Conditions"
+          },
+          "table_rows": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Table Rows"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "docx",
+              "pdf"
+            ],
+            "title": "Format",
+            "default": "pdf"
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Hash"
+          },
+          "context_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Hash"
+          },
+          "legal_sources_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Legal Sources Hash"
+          },
+          "field_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Labels"
+          },
+          "condition_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Condition Labels"
+          },
+          "table_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Table Labels"
+          },
+          "row_field_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Row Field Labels"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "synthetic",
+          "label",
+          "values",
+          "conditions",
+          "source_hash",
+          "context_hash",
+          "legal_sources_hash",
+          "field_labels",
+          "condition_labels",
+          "table_labels",
+          "row_field_labels"
+        ],
+        "title": "TemplateAuditPreviewContext"
+      },
+      "TemplateAuditPreviewInput": {
+        "properties": {
+          "synthetic": {
+            "type": "boolean",
+            "const": true,
+            "title": "Synthetic"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "conditions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Conditions"
+          },
+          "table_rows": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Table Rows"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "docx",
+              "pdf"
+            ],
+            "title": "Format",
+            "default": "pdf"
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Hash"
+          },
+          "context_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Hash"
+          },
+          "legal_sources_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Legal Sources Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "synthetic",
+          "label",
+          "values",
+          "conditions",
+          "source_hash",
+          "context_hash",
+          "legal_sources_hash"
+        ],
+        "title": "TemplateAuditPreviewInput"
+      },
+      "TemplateAuditReportList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateAuditReportResult"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "TemplateAuditReportList"
+      },
+      "TemplateAuditReportResult": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "template_name": {
+            "type": "string",
+            "title": "Template Name",
+            "default": "\u0428\u0430\u0431\u043b\u043e\u043d"
+          },
+          "version_number": {
+            "type": "integer",
+            "title": "Version Number",
+            "default": 0
+          },
+          "version_id": {
+            "type": "integer",
+            "title": "Version Id"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "title": "Legal Entity Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "source_hash": {
+            "type": "string",
+            "title": "Source Hash"
+          },
+          "context_hash": {
+            "type": "string",
+            "title": "Context Hash"
+          },
+          "legal_sources_hash": {
+            "type": "string",
+            "title": "Legal Sources Hash"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          },
+          "coverage": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Coverage"
+          },
+          "checklist": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Checklist"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "proposals": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "stale_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stale Reasons"
+          },
+          "legal_currency": {
+            "type": "string",
+            "enum": [
+              "matches_supplied_hash",
+              "changed",
+              "requires_external_recheck"
+            ],
+            "title": "Legal Currency"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "template_id",
+          "version_id",
+          "legal_entity_id",
+          "customer_id",
+          "revision",
+          "source_hash",
+          "context_hash",
+          "legal_sources_hash",
+          "checked_at",
+          "coverage",
+          "checklist",
+          "findings",
+          "proposals",
+          "stale",
+          "stale_reasons",
+          "legal_currency",
+          "manager_url"
+        ],
+        "title": "TemplateAuditReportResult"
       },
       "TemplateExternalEditSyncPayload": {
         "properties": {

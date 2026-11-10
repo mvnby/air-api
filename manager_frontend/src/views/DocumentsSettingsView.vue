@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../utils/api-errors';
 import DocumentLegalEntitiesPanel from '../features/documents/settings/DocumentLegalEntitiesPanel.vue';
 import DocumentNumberPoliciesPanel from '../features/documents/settings/DocumentNumberPoliciesPanel.vue';
 import NativeTemplateLibrary from '../features/documents/settings/NativeTemplateLibrary.vue';
+import TemplateAuditPanel from '../features/documents/settings/TemplateAuditPanel.vue';
 import '../features/documents/settings/documents-settings.css';
 
 const legalEntities = ref<DocumentLegalEntityItem[]>([]);
@@ -23,6 +24,7 @@ const loadingPolicies = ref(false);
 const savingEntity = ref(false);
 const savingPolicyType = ref<string | null>(null);
 const activeSettingsTab = ref<'templates' | 'requisites' | 'numbering'>('templates');
+const templateLibraryRevision = ref(0);
 const toast = ref('');
 const toastType = ref<'success' | 'error'>('success');
 let toastTimer: ReturnType<typeof window.setTimeout> | null = null;
@@ -99,7 +101,8 @@ const loadRuntime = async () => {
   }
 };
 
-onMounted(() => void Promise.all([loadEntities(), loadRuntime()]));
+const requestedLegalEntityId = Number(new URLSearchParams(window.location.search).get('legalEntityId')) || undefined;
+onMounted(() => void Promise.all([loadEntities(requestedLegalEntityId), loadRuntime()]));
 watch(selectedLegalEntityId, () => void loadPolicies());
 
 const createEntity = async (displayName: string) => {
@@ -197,7 +200,8 @@ const savePolicy = async (documentType: string, payload: DocumentNumberPolicyPay
       </div>
 
       <section id="documents-settings-panel-templates" role="tabpanel" aria-labelledby="documents-settings-tab-templates" v-show="activeSettingsTab === 'templates'">
-        <NativeTemplateLibrary :legal-entity-id="selectedLegalEntityId" @toast="notify($event.message, $event.type)" />
+        <NativeTemplateLibrary :key="templateLibraryRevision" :legal-entity-id="selectedLegalEntityId" @toast="notify($event.message, $event.type)" />
+        <TemplateAuditPanel :legal-entity-id="selectedLegalEntityId" @toast="notify($event.message, $event.type)" @activated="templateLibraryRevision++" />
       </section>
       <section id="documents-settings-panel-requisites" role="tabpanel" aria-labelledby="documents-settings-tab-requisites" v-show="activeSettingsTab === 'requisites'">
         <DocumentLegalEntitiesPanel

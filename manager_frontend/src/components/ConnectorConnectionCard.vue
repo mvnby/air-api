@@ -11,6 +11,8 @@ const scopeLabels: Record<string, string> = {
   'kitlane:catalog:write': 'Подбор оборудования и черновики КП и счетов',
   'kitlane:orders:write': 'Заказы на работы, услуги и цены предложения',
   'kitlane:contracts:drafts:write': 'Подготовка и проверка черновиков договоров',
+  'kitlane:templates:read': 'Чтение исходных шаблонов и отчётов',
+  'kitlane:templates:proposals:write': 'Замечания и неактивные правки шаблонов',
   'kitlane:mail:read': 'Чтение почты и вложений',
   'kitlane:mail:drafts:write': 'Изменение почтовых черновиков и вложений',
   'kitlane:mail:send': 'Отправка писем после подтверждения в Manager',

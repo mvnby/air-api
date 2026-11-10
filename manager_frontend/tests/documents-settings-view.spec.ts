@@ -35,14 +35,38 @@ beforeEach(() => {
 afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
   vi.restoreAllMocks();
+  window.history.replaceState({}, '', '/');
 });
 
 describe('DocumentsSettingsView', () => {
+  it('selects the issuer from an audit deep link before opening its panel', async () => {
+    const entities = await ManagerDocumentSystemService.listManagerDocumentLegalEntities();
+    vi.mocked(ManagerDocumentSystemService.listManagerDocumentLegalEntities).mockResolvedValue({
+      items: [...entities.items, { ...entities.items[0]!, id: 6, display_name: 'ИП Тестовый' }],
+    });
+    window.history.replaceState({}, '', '/manager/settings/documents?legalEntityId=6&auditReportId=99');
+    const wrapper = mount(DocumentsSettingsView, {
+      global: {
+        stubs: {
+          NativeTemplateLibrary: true,
+          TemplateAuditPanel: { props: ['legalEntityId'], template: '<section data-testid="audit-panel-issuer">{{ legalEntityId }}</section>' },
+          DocumentNumberPoliciesPanel: true,
+          DocumentLegalEntitiesPanel: true,
+        },
+      },
+    });
+    wrappers.push(wrapper);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="audit-panel-issuer"]').text()).toBe('6');
+    expect(ManagerDocumentSystemService.listManagerDocumentNumberPolicies).toHaveBeenLastCalledWith(6);
+  });
+
   it('opens the compact template library first and keeps requisites draft while switching tabs', async () => {
     const wrapper = mount(DocumentsSettingsView, {
       global: {
         stubs: {
           NativeTemplateLibrary: { template: '<section data-testid="template-library">Библиотека шаблонов</section>' },
+          TemplateAuditPanel: { template: '<section>Проверка шаблонов</section>' },
           DocumentNumberPoliciesPanel: { template: '<section>Нумерация</section>' },
         },
       },
