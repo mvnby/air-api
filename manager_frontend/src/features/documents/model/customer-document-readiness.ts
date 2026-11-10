@@ -1,7 +1,7 @@
 import type { DocumentCustomerReadiness, OrderCustomerBrief } from '../../../client';
 
 export const checksCustomerTemplate = (type: string) =>
-  ['contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
+  ['contract_amendment', 'contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
 
 // Older readiness responses marked customer details intended for handwriting as blocking.
 export const customerFieldsAllowIssue = ({ can_issue, checked, missing_fields = [] }: DocumentCustomerReadiness) =>

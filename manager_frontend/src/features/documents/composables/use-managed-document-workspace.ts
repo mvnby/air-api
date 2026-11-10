@@ -1,3 +1,5 @@
+import { newAmendmentTerms, amendmentTermsError } from '../model/contract-amendment';
+import type { AmendmentBasisItem } from '../../../client';
 import { computed, onScopeDispose, ref, watch } from 'vue';
 import { commercialTermsApi, mergeCommercialDocumentDefaults } from '../../../services/commercial-terms-api';
 import type { DocumentRoleType } from '../model/document-types';
@@ -113,6 +115,29 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   watch([() => input.orderId(), () => input.proposalId(), documentType], () => {
     receiptNote.value = '';
     warrantyEquipmentId.value = null;
+  }, { flush: 'sync' });
+  const amendmentTerms = ref(newAmendmentTerms());
+  const amendmentBases = ref<AmendmentBasisItem[]>([]);
+  const amendmentBasisId = ref<number | null>(null);
+  const selectedAmendmentBasis = computed(() => amendmentBases.value.find(b => b.document_id === amendmentBasisId.value));
+  const amendmentBasisError = ref('');
+  const loadAmendmentBases = async () => {
+    const orderId = input.orderId();
+    amendmentBasisError.value = '';
+    try {
+      const response = await ManagerDocumentSystemService.listManagerContractAmendmentBases(orderId);
+      if (input.orderId() === orderId) amendmentBases.value = response.items;
+    } catch (error) {
+      if (input.orderId() === orderId) amendmentBasisError.value = getApiErrorMessage(error);
+    }
+  };
+  watch([documentType, () => input.orderId()], () => {
+    amendmentBasisId.value = null;
+    amendmentBases.value = [];
+    if (documentType.value === 'contract_amendment') void loadAmendmentBases();
+  }, { flush: 'sync' });
+  watch(selectedAmendmentBasis, basis => {
+    if (basis) selectedLegalEntityId.value = basis.legal_entity_id;
   }, { flush: 'sync' });
   const participantStatement = ref({ procedure_reference: '', lot: '', buyer_name: '', declaration_text: '' });
   const contractActPrompt = ref<{ documentId: number; previous: PreviousContractAct } | null>(null);
@@ -352,6 +377,13 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       return 'Подставляем данные оборудования…';
     }
     if (!selectedLegalEntityId.value) return 'Нет юридического лица';
+    if (documentType.value === 'contract_amendment') {
+      if (amendmentBasisError.value) return amendmentBasisError.value;
+      if (!replacesDocumentId.value && !selectedAmendmentBasis.value) return 'Выберите исходный договор';
+      if (!replacesDocumentId.value && selectedAmendmentBasis.value?.legal_entity_id !== selectedLegalEntityId.value) return 'Выберите юридическое лицо исходного договора';
+      const error = amendmentTermsError(amendmentTerms.value);
+      if (error) return error;
+    }
     const businessTermsError = isBusinessTermsDocumentType(documentType.value)
       ? businessTermsValidationError(documentType.value, businessTerms.value)
       : '';
@@ -618,7 +650,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       ? replacementProposalId.value : input.proposalId() || null,
     business_role: documentType.value === 'invoice' ? businessRole.value : null,
     document_role_type: ['contract', 'invoice', 'act', 'offer'].includes(documentType.value) ? documentRoleType.value : null,
-    base_document_id: baseDocumentId.value,
+    amendment_terms: documentType.value === 'contract_amendment' ? amendmentTerms.value : undefined,
+    amendment_basis_revision: documentType.value === 'contract_amendment' ? selectedAmendmentBasis.value?.revision : undefined,
+    base_document_id: documentType.value === 'contract_amendment' ? amendmentBasisId.value : baseDocumentId.value,
     base_customer_contract_id: baseCustomerContractId.value,
     replaces_document_id: replacesDocumentId.value,
     consumer_term_overrides: replacesDocumentId.value && replacementConsumerBaseline.value
@@ -674,7 +708,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
           return;
         }
         customerReadiness.value = readiness;
-        if (!customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
+        if (payload.document_type !== 'contract_amendment' && !customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
         allowIncompleteCustomer = !readiness.can_issue;
       }
       if (!isCurrent()) return;
@@ -704,6 +738,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       await loadDocuments(isCurrent);
       if (!isCurrent()) return;
       input.refresh();
+      if (documentType.value === 'contract_amendment') { amendmentTerms.value = newAmendmentTerms(); void loadAmendmentBases(); }
       input.notify('Черновик создан');
       return created;
     } catch (error) {
@@ -738,6 +773,12 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       input.notify('Подтвердите проверку текста и фактов заявления перед выпуском.', 'error');
       return;
     }
+    if (document.doc_type === 'contract_amendment' && !await confirmDialog({
+      title: 'Зарегистрировать согласованное изменение?',
+      description: `Дополнительные работы: ${document.amendment_change_amount} BYN. Расчётный итог: ${document.amendment_new_total} BYN. Выпуск включает изменение в согласованный объём; подпись, оплату и выполнение он не подтверждает.`,
+      confirmText: 'Выпустить соглашение',
+    })) return;
+    if (!action.canIssue()) return;
     busy.value = true;
     try {
       let request;
@@ -756,6 +797,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (!action.isCurrent()) return;
       input.refresh();
       if (contractActPrompt.value?.documentId === document.id) contractActPrompt.value = null;
+      if (document.doc_type === 'contract_amendment') void loadAmendmentBases();
       input.notify('Документ выпущен');
     } catch (error) {
       if (!action.isCurrent()) return;
@@ -861,6 +903,10 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       replacementConsumerBaseline.value = { ...consumerTerms.value };
       for (const field of consumerDefaultFields) manuallyEditedConsumerDefaultFields.add(field);
     }
+    if (document.doc_type === 'contract_amendment' && document.amendment_terms) {
+      amendmentTerms.value = JSON.parse(JSON.stringify(document.amendment_terms));
+      amendmentBasisId.value = document.base_document_id || null;
+    }
   };
 
   const downloadArtifact = async (artifactId: string, filename: string) => {
@@ -914,6 +960,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   };
 
   return {
+    amendmentTerms, amendmentBases, amendmentBasisId, selectedAmendmentBasis, loadAmendmentBases,
     actTerms,
     contractActPrompt,
     baseCustomerContractId,

@@ -5,11 +5,13 @@
 import type { ActTermsPayload } from './ActTermsPayload';
 import type { BusinessDocumentTermsPayload_Output } from './BusinessDocumentTermsPayload_Output';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
+import type { ContractAmendmentTerms_Output } from './ContractAmendmentTerms_Output';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
 import type { WaybillCargoLine } from './WaybillCargoLine';
 export type ManagedDocumentDraftParameters = {
+    amendment_terms?: (ContractAmendmentTerms_Output | null);
     issue_date: string;
     issue_city?: (string | null);
     business_terms?: (BusinessDocumentTermsPayload_Output | null);

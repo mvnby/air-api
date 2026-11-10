@@ -47,7 +47,7 @@ def line_row(
     *,
     title: str,
     kind: str,
-    quantity: int,
+    quantity: int | Decimal,
     unit_price: Decimal,
     unit: str = "шт.",
 ) -> dict[str, str]:

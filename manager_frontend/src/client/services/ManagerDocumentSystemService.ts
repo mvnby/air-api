@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AmendmentBasisList } from '../models/AmendmentBasisList';
 import type { Body_upload_manager_document_facsimile } from '../models/Body_upload_manager_document_facsimile';
 import type { Body_upload_manager_native_template_version } from '../models/Body_upload_manager_native_template_version';
 import type { Body_upload_manager_registration_certificate } from '../models/Body_upload_manager_registration_certificate';
@@ -53,6 +54,36 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerDocumentSystemService {
+    /**
+     * List Contract Amendment Bases
+     * List explicit native contract choices with frozen original amounts and current
+     * effective amendments for a tenant/storefront order. Requires Manager membership.
+     * Read-only; never chooses a basis automatically. Returns 404 for an inaccessible
+     * order. Legacy documents without a frozen BYN amount are excluded. Pass the
+     * returned revision on draft creation; changes to effective agreements return 409.
+     * @param orderId
+     * @param limit
+     * @returns AmendmentBasisList Successful Response
+     * @throws ApiError
+     */
+    public static listManagerContractAmendmentBases(
+        orderId: number,
+        limit: number = 100,
+    ): CancelablePromise<AmendmentBasisList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/document-system/orders/{order_id}/contract-amendments/bases',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Draft Parameters
      * Read saved parameters and revision of a tenant/storefront-scoped unnumbered draft.
@@ -1310,6 +1341,10 @@ export class ManagerDocumentSystemService {
      * immutable DOCX/PDF artifacts. Participant statements require explicit factual
      * confirmation of the current text using participant_statement_confirmed=true;
      * the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
+     * Contract amendments register the agreed additional scope only on successful issuance;
+     * this does not certify signature, payment or performed work. Their frozen contract and
+     * effective amendment revision are checked before reservation and after rendering;
+     * a stale total returns 409 without rewriting the saved text.
      * The first act continuing an unverified open-contract series returns 409
      * contract_act_number_confirmation_required with previous_act. Inspect that
      * original and repeat with confirmed_previous_act_number and expected_previous_act_id.

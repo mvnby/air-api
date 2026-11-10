@@ -1,4 +1,5 @@
 from datetime import date
+from modules.documents.domain.contract_amendment import ContractAmendmentTerms
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -10,6 +11,7 @@ from .participant_statement_schemas import ParticipantStatementPayload
 
 
 class ManagedDocumentDraftParameters(BaseModel):
+    amendment_terms: ContractAmendmentTerms | None = None
     issue_date: date
     issue_city: str | None = None
     business_terms: BusinessDocumentTermsPayload | None = None
@@ -32,6 +34,7 @@ class ManagedDocumentDraftParameterUpdate(BaseModel):
     expected_revision: str = Field(pattern="^[a-f0-9]{64}$")
     reset_editable_copy: bool = False
     template_version_id: int | None = Field(default=None, gt=0)
+    amendment_terms: ContractAmendmentTerms | None = None
     issue_date: date | None = None
     issue_city: str | None = Field(default=None, max_length=160)
     business_terms: BusinessDocumentTermsPayload | None = None

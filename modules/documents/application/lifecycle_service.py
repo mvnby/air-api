@@ -203,6 +203,10 @@ class ManagedDocumentService:
         )
         if order is None:
             raise ManagedDocumentNotFoundError("Заказ не найден")
+        if selection.document_type == "contract_amendment" and template_id is None:
+            from .contract_amendment_template import ensure_amendment_template
+            await ensure_amendment_template(session, scope=tenant_scope,
+                legal_entity_id=selection.legal_entity_id, storage=template_storage)
         if selection.document_type == "repair_defect_act":
             if order.workflow_type != "repair" or order.customer_id is None or selection.repair_defect is None:
                 raise ManagedDocumentConflictError("Для дефектного акта нужен заказ на ремонт с клиентом и заключением")
@@ -249,6 +253,9 @@ class ManagedDocumentService:
             from .consumer_replacement import consumer_replacement_snapshot
             snapshot = await consumer_replacement_snapshot(session, tenant_scope=tenant_scope,
                 source=replacement_source, selection=selection, version=version)
+        elif selection.document_type == "contract_amendment" and replaces_document_id is not None:
+            from .contract_amendments import build_snapshot
+            snapshot = await build_snapshot(session, scope=tenant_scope, selection=selection, replacing=replacement_source)
         else:
             snapshot = await DocumentContextBuilder.build(
                 session,
@@ -436,6 +443,8 @@ class ManagedDocumentService:
         await prepare_framework_registration(session, document, tenant_scope)
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
+        from .contract_amendments import validate_for_issue
+        await validate_for_issue(session, scope=tenant_scope, document=document)
         await validate_saved_basis_for_issue(session, document=document, scope=tenant_scope)
         readiness = await check_saved_document_readiness(
             session,
@@ -609,6 +618,7 @@ class ManagedDocumentService:
                 "Статус документа изменился во время генерации"
             )
 
+        await validate_for_issue(session, scope=tenant_scope, document=document)
         if document.doc_type == "participant_statement":
             from copy import deepcopy
             confirmed_snapshot = deepcopy(document.render_snapshot)
@@ -687,6 +697,10 @@ class ManagedDocumentService:
         )
         if document is None:
             raise ManagedDocumentNotFoundError("Документ не найден")
+        if document.doc_type == "contract_amendment":
+            from .contract_amendments import load_basis
+            await load_basis(session, scope=tenant_scope, order_id=document.order_id,
+                             basis_id=document.base_document_id, lock=True, require_active=False)
         state = transition_document(
             cls._lifecycle_state(document),
             DocumentStatus.VOID,
@@ -735,6 +749,13 @@ class ManagedDocumentService:
         document_id: int,
         for_update: bool,
     ) -> OrderDocument | None:
+        if for_update:
+            # Serialize effective changes and revisions in one order before locking
+            # document rows. Rendering releases this lock; finalization repeats it.
+            await session.execute(select(Order.id).join(OrderDocument, OrderDocument.order_id == Order.id).where(
+                OrderDocument.id == document_id, OrderDocument.doc_type == "contract_amendment",
+                Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id,
+            ).with_for_update(of=Order))
         statement = (
             select(OrderDocument)
             .join(Order, Order.id == OrderDocument.order_id)

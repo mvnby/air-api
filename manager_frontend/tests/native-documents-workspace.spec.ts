@@ -5,7 +5,6 @@ import {
   ManagerDocsService,
   ManagerEquipmentLinksService,
   ManagerContractsService,
-  ManagerEquipmentLinksService,
   ManagerService,
   CancelablePromise,
   OpenAPI,
@@ -1695,5 +1694,36 @@ describe('Standalone sale documents', () => {
     await flushPromises();
     expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
       expect.objectContaining({ document_type: 'warranty_certificate', warranty_equipment_id: 18 }));
+  });
+});
+
+
+describe('native additional-work amendments', () => {
+  it('requires an explicit contract and saves only additional work with its basis revision', async () => {
+    vi.spyOn(ManagerDocumentSystemService, 'listManagerContractAmendmentBases').mockResolvedValue({
+      order_id: 42, items: [81, 82].map(id => ({ document_id: id, legal_entity_id: 5, number: `Д-${id}`, date: '01.11.2026', status: 'issued', original_amount: '4160.00', effective_additions: '0.00', agreed_total: '4160.00', currency: 'BYN', revision: 'b'.repeat(64), seller_name: 'Тестовый продавец', customer_name: 'Тестовый клиент', lines: [] })),
+    });
+    Element.prototype.scrollIntoView = vi.fn();
+    const beforeGenerate = vi.fn();
+    const wrapper = await mountWorkspace(beforeGenerate);
+    await wrapper.get('[data-testid="create-contract-amendment"]').trigger('click'); await flushPromises();
+    const select = wrapper.get<HTMLSelectElement>('[data-testid="amendment-basis"]');
+    expect(select.element.selectedIndex).toBe(0);
+    expect(wrapper.get<HTMLButtonElement>('[data-testid="create-native-draft"]').element.disabled).toBe(true);
+    expect(select.text()).toContain('Д-81'); expect(select.text()).toContain('Д-82');
+    await select.setValue(82); await flushPromises();
+    await wrapper.get('[data-testid="amendment-work-title"]').setValue('Закладка межблочных коммуникаций для кондиционера');
+    await wrapper.get('[data-testid="amendment-work-quantity"]').setValue('0.5');
+    await wrapper.get('[data-testid="amendment-work-price"]').setValue('0.29');
+    expect(wrapper.get('[data-testid="amendment-change-total"]').text()).toContain('0.15 BYN');
+    await wrapper.get('[data-testid="amendment-work-quantity"]').setValue('1');
+    await wrapper.get('[data-testid="amendment-work-price"]').setValue('250');
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="amendment-payment-terms"]').element.value).toContain('на условиях исходного договора');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click'); await flushPromises();
+    expect(beforeGenerate).not.toHaveBeenCalled();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+      document_type: 'contract_amendment', base_document_id: 82, amendment_basis_revision: 'b'.repeat(64),
+      amendment_terms: expect.objectContaining({ works: [{ title: 'Закладка межблочных коммуникаций для кондиционера', quantity: 1, unit: 'компл.', unit_price: 250 }] }),
+    }));
   });
 });

@@ -19,7 +19,7 @@ from .template_selection import (
 )
 
 
-READINESS_DOCUMENT_TYPES = frozenset({"contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"})
+READINESS_DOCUMENT_TYPES = frozenset({"contract_amendment", "contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"})
 CHECKED_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",
@@ -104,10 +104,16 @@ def snapshot_customer_readiness(
         for field in sorted(effective & applicable)
         if not _present(values.get(field))
     ]
+    if document_type == "contract_amendment":
+        for field in ("basis.number", "basis.date", "seller.signer_name"):
+            if field == "seller.signer_name" and snapshot.get("conditions", {}).get("seller.signs_self"):
+                continue
+            if not _present(values.get(field)):
+                missing.append({"field": field, "label": LABELS[field], "critical": field.startswith("basis.")})
     return {
         "checked": True,
         "missing_fields": missing,
-        "can_issue": True,
+        "can_issue": not any(item["critical"] for item in missing),
     }
 
 
@@ -163,10 +169,12 @@ async def check_selection_readiness(
             business_role=role,
         )
     except ManagedDocumentNotFoundError:
-        if selection.document_type not in {"repair_defect_act", "retail_receipt", "warranty_certificate"} or template_id is not None:
+        if selection.document_type not in {"contract_amendment", "repair_defect_act", "retail_receipt", "warranty_certificate"} or template_id is not None:
             raise
         from .initial_templates import check_initial_template_available
-        if selection.document_type == "repair_defect_act":
+        if selection.document_type == "contract_amendment":
+            from modules.documents.infrastructure.renderers.contract_amendment_template import template_bytes
+        elif selection.document_type == "repair_defect_act":
             from modules.documents.infrastructure.renderers.repair_defect_template import template_bytes
         else:
             from functools import partial

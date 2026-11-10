@@ -5,6 +5,7 @@
 import type { ActTermsPayload } from './ActTermsPayload';
 import type { BusinessDocumentTermsPayload_Input } from './BusinessDocumentTermsPayload_Input';
 import type { ConsumerDocumentTermsPayload } from './ConsumerDocumentTermsPayload';
+import type { ContractAmendmentTerms_Input } from './ContractAmendmentTerms_Input';
 import type { ParticipantStatementPayload } from './ParticipantStatementPayload';
 import type { RepairDefect } from './RepairDefect';
 import type { TransportTermsPayload } from './TransportTermsPayload';
@@ -38,6 +39,8 @@ export type ManagedDocumentDraftPayload = {
      * For a consumer replacement, explicitly name corrected consumer_terms fields. All other facts come from the source snapshot; a default/empty form never replaces them.
      */
     consumer_term_overrides?: Array<string>;
+    amendment_terms?: (ContractAmendmentTerms_Input | null);
+    amendment_basis_revision?: (string | null);
     consumer_terms?: (ConsumerDocumentTermsPayload | null);
     business_terms?: (BusinessDocumentTermsPayload_Input | null);
     act_terms?: (ActTermsPayload | null);
