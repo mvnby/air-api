@@ -6,6 +6,7 @@ from core.database import get_session
 from core.security import AuthenticatedUser, require_manager_access
 from core.manager_api_errors import manager_http_error
 from routers.manager_permission_policy import ManagerPermissionRoute
+from routers.manager_operation_ids import LIST_MANAGER_CONTRACT_AMENDMENT_BASES
 from .amendment_schemas import AmendmentBasisList
 from modules.documents.application.contract_amendments import list_bases
 from modules.documents.application.errors import ManagedDocumentNotFoundError
@@ -22,7 +23,7 @@ router = APIRouter(
 @router.get(
     "/orders/{order_id}/contract-amendments/bases",
     response_model=AmendmentBasisList,
-    operation_id="list_manager_contract_amendment_bases",
+    operation_id=LIST_MANAGER_CONTRACT_AMENDMENT_BASES,
 )
 async def list_contract_amendment_bases(
     order_id: int,
@@ -46,7 +47,7 @@ async def list_contract_amendment_bases(
     except ManagedDocumentNotFoundError as exc:
         raise manager_http_error(
             status_code=404,
-            endpoint="list_manager_contract_amendment_bases",
+            endpoint=LIST_MANAGER_CONTRACT_AMENDMENT_BASES,
             error_code="managed_document_order_not_found",
             message=str(exc),
         )
