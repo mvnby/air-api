@@ -80,6 +80,109 @@ async def test_envelope_branding_persists_per_issuer_and_partial_updates_preserv
 
 
 @pytest.mark.asyncio
+async def test_tax_profile_survives_requisites_updates_and_can_be_cleared(tmp_path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'tax-profile.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Tenant.__table__.create)
+        await connection.run_sync(DocumentLegalEntity.__table__.create)
+    try:
+        async with sessions() as session:
+            tenant = Tenant(slug="tax-profile", display_name="Tax Profile")
+            session.add(tenant)
+            await session.commit()
+            await session.refresh(tenant)
+            scope = TenantScope(int(tenant.id), 1)
+            profile = {
+                "regime": "Основная система налогообложения",
+                "vat_basis": "Без НДС по п. 6 ст. 130 НК",
+                "effective_from": "2026-11-11",
+                "verified_at": "2026-11-11",
+                "official_source": "https://example.by/tax",
+                "confirmation_basis": "Подтверждено пользователем на текущую дату; дата начала режима неизвестна.",
+            }
+            issuer = await DocumentLegalEntityService.create(
+                session,
+                tenant_scope=scope,
+                display_name="Организация",
+                slug=None,
+                legal_name=None,
+                unp=None,
+                is_vat_payer=False,
+                is_default=True,
+                requisites={"tax_profile": profile, "city": "Минск"},
+            )
+            assert issuer.requisites["tax_profile"] == profile
+            issuer = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                changes={"requisites": {"phone": "+375291111111"}},
+            )
+            assert issuer.requisites["tax_profile"] == profile
+            assert issuer.requisites["phone"] == "+375291111111"
+            issuer = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                changes={"requisites": {"tax_profile": {"vat_basis": "Новое основание"}}},
+            )
+            assert issuer.requisites["tax_profile"] == {
+                **profile,
+                "vat_basis": "Новое основание",
+            }
+            issuer = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                changes={"requisites": {"tax_profile": {"vat_basis": None}}},
+            )
+            assert issuer.requisites["tax_profile"] == {
+                key: value for key, value in profile.items() if key != "vat_basis"
+            }
+            issuer = await DocumentLegalEntityService.update(
+                session,
+                tenant_scope=scope,
+                legal_entity_id=int(issuer.id),
+                changes={"requisites": {"tax_profile": {}}},
+            )
+            assert "tax_profile" not in issuer.requisites
+            assert issuer.requisites["phone"] == "+375291111111"
+            with pytest.raises(DocumentLegalEntityError, match="налогового профиля"):
+                await DocumentLegalEntityService.update(
+                    session,
+                    tenant_scope=scope,
+                    legal_entity_id=int(issuer.id),
+                    changes={
+                        "requisites": {
+                            "tax_profile": {"official_source": "http://example.by"}
+                        }
+                    },
+                )
+    finally:
+        await engine.dispose()
+
+
+def test_tax_profile_blank_text_is_normalized_to_missing():
+    requisites = DocumentLegalEntityService._requisites(
+        {
+            "tax_profile": {
+                "regime": "   ",
+                "vat_basis": "  ",
+                "confirmation_basis": "\t",
+            }
+        },
+        entity_type="organization",
+    )
+    assert "tax_profile" not in requisites
+    with pytest.raises(DocumentLegalEntityError, match="налогового профиля"):
+        DocumentLegalEntityService._requisites(
+            {"tax_profile": {"regime": 123}},
+            entity_type="organization",
+        )
+
+
+@pytest.mark.asyncio
 async def test_legal_entities_are_tenant_scoped_and_first_one_becomes_default(
     tmp_path: Path,
 ) -> None:

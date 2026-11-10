@@ -45,6 +45,12 @@ const actingBasis = ref('');
 const offerUrl = ref('');
 const offerVersion = ref('');
 const offerPublishedOn = ref('');
+const taxRegime = ref('');
+const taxVatBasis = ref('');
+const taxEffectiveFrom = ref('');
+const taxVerifiedAt = ref('');
+const taxOfficialSource = ref('');
+const taxConfirmationBasis = ref('');
 const defaultGoodsWarrantyMonths = ref<number | null>(36);
 const defaultWorkWarrantyMonths = ref<number | null>(null);
 const egrLookupSucceeded = ref(false);
@@ -106,6 +112,13 @@ const syncForm = () => {
   offerUrl.value = entity?.requisites.offer_url || '';
   offerVersion.value = entity?.requisites.offer_version || '';
   offerPublishedOn.value = entity?.requisites.offer_published_on || '';
+  const taxProfile = entity?.requisites.tax_profile;
+  taxRegime.value = taxProfile?.regime || '';
+  taxVatBasis.value = taxProfile?.vat_basis || '';
+  taxEffectiveFrom.value = taxProfile?.effective_from || '';
+  taxVerifiedAt.value = taxProfile?.verified_at || '';
+  taxOfficialSource.value = taxProfile?.official_source || '';
+  taxConfirmationBasis.value = taxProfile?.confirmation_basis || '';
   const rawGoodsMonths = entity?.requisites.default_goods_warranty_months;
   const goodsMonths = rawGoodsMonths == null || rawGoodsMonths === '' ? Number.NaN : Number(rawGoodsMonths);
   defaultGoodsWarrantyMonths.value = Number.isFinite(goodsMonths) ? goodsMonths : 36;
@@ -188,6 +201,14 @@ const save = () => {
     signer_position: signerPosition.value.trim() || null,
     signer_name: signerName.value.trim() || null,
     acting_basis: actingBasis.value.trim() || null,
+    tax_profile: {
+      regime: taxRegime.value.trim() || null,
+      vat_basis: taxVatBasis.value.trim() || null,
+      effective_from: taxEffectiveFrom.value || null,
+      verified_at: taxVerifiedAt.value || null,
+      official_source: taxOfficialSource.value.trim() || null,
+      confirmation_basis: taxConfirmationBasis.value.trim() || null,
+    },
   };
   emit('update', props.selectedId, {
     legal_name: legalName.value.trim() || null,
@@ -320,6 +341,18 @@ const uploadFacsimile = async (kind: 'signature' | 'seal', event: Event) => {
             <label class="settings-field"><span>Опубликована</span><input v-model="offerPublishedOn" data-testid="consumer-offer-published-on" class="settings-input" placeholder="04.06.2026" inputmode="numeric" /></label>
             <label class="settings-field"><span>Гарантия на оборудование по умолчанию, мес.</span><input :value="defaultGoodsWarrantyMonths ?? 36" data-testid="default-goods-warranty-months" class="settings-input" type="number" min="0" max="240" title="0 — не указывать договорную гарантию" @input="updateWarrantyMonths('goods', $event)" /></label>
             <label class="settings-field"><span>Гарантия на работы по умолчанию, мес.</span><input :value="defaultWorkWarrantyMonths ?? ''" data-testid="default-work-warranty-months" class="settings-input" type="number" min="0" max="240" placeholder="Не задана" title="0 — не указывать договорную гарантию" @input="updateWarrantyMonths('work', $event)" /></label>
+          </div>
+        </div>
+        <div class="settings-field rounded-xl border border-slate-200 p-4 sm:col-span-2 dark:border-slate-700">
+          <span class="text-sm font-bold">Налоговый профиль для проверки документов</span>
+          <span class="font-normal text-slate-500">Сведения заполняются по подтверждённым данным и не являются автоматическим юридическим заключением. Дата действия означает, с какого дня профиль используется для документов; она не подтверждает дату начала налогового режима.</span>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <label class="settings-field"><span>Налоговый режим</span><input v-model="taxRegime" data-testid="issuer-tax-regime" class="settings-input" maxlength="200" /></label>
+            <label class="settings-field"><span>Основание режима НДС</span><input v-model="taxVatBasis" data-testid="issuer-tax-vat-basis" class="settings-input" maxlength="1000" /></label>
+            <label class="settings-field"><span>Действует для документов с</span><input v-model="taxEffectiveFrom" data-testid="issuer-tax-effective-from" class="settings-input" type="date" /></label>
+            <label class="settings-field"><span>Проверено на дату</span><input v-model="taxVerifiedAt" data-testid="issuer-tax-verified-at" class="settings-input" type="date" /></label>
+            <label class="settings-field sm:col-span-2"><span>Официальный источник (HTTPS)</span><input v-model="taxOfficialSource" data-testid="issuer-tax-official-source" class="settings-input" type="url" placeholder="https://..." maxlength="1000" /></label>
+            <label class="settings-field sm:col-span-2"><span>Основание подтверждения</span><textarea v-model="taxConfirmationBasis" data-testid="issuer-tax-confirmation-basis" class="settings-input min-h-20" maxlength="1000" /></label>
           </div>
         </div>
         <label class="settings-field"><span>Город</span><input v-model="city" data-testid="seller-city" class="settings-input" placeholder="Например, Витебск" /></label>

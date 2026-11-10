@@ -257,6 +257,7 @@ export type { DocumentLegalEntityCreatePayload } from './models/DocumentLegalEnt
 export type { DocumentLegalEntityItem } from './models/DocumentLegalEntityItem';
 export type { DocumentLegalEntityListResponse } from './models/DocumentLegalEntityListResponse';
 export type { DocumentLegalEntityRequisites } from './models/DocumentLegalEntityRequisites';
+export type { DocumentLegalEntityRequisitesItem } from './models/DocumentLegalEntityRequisitesItem';
 export type { DocumentLegalEntityUpdatePayload } from './models/DocumentLegalEntityUpdatePayload';
 export type { DocumentNumberPolicyItem } from './models/DocumentNumberPolicyItem';
 export type { DocumentNumberPolicyListResponse } from './models/DocumentNumberPolicyListResponse';
@@ -347,6 +348,7 @@ export type { InstallerTechnicalSpec } from './models/InstallerTechnicalSpec';
 export type { InstallerWorkDetail } from './models/InstallerWorkDetail';
 export type { InstallerWorksResponse } from './models/InstallerWorksResponse';
 export type { InstallerWorkSummary } from './models/InstallerWorkSummary';
+export type { IssuerTaxProfile } from './models/IssuerTaxProfile';
 export type { JevShadowItem } from './models/JevShadowItem';
 export type { JevShadowReport } from './models/JevShadowReport';
 export type { JevStatus } from './models/JevStatus';

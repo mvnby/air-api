@@ -19,6 +19,7 @@ from modules.documents.domain.repair_defect import RepairDefect
 from .participant_statement_schemas import ParticipantStatementPayload
 from services.envelope_branding_service import EnvelopeBranding
 from modules.documents.domain.contract_amendment import ContractAmendmentTerms
+from modules.documents.domain.tax_profile import IssuerTaxProfile
 
 
 DocumentPartyRoleType = Literal[
@@ -66,6 +67,7 @@ class DocumentLegalEntityRequisites(BaseModel):
     )
     default_goods_warranty_months: int = Field(default=36, ge=0, le=240)
     default_work_warranty_months: int | None = Field(default=None, ge=0, le=240)
+    tax_profile: IssuerTaxProfile | None = None
 
 
 class DocumentLegalEntityCreatePayload(BaseModel):
@@ -105,6 +107,14 @@ class DocumentLegalEntityUpdatePayload(BaseModel):
     status: str | None = Field(default=None, pattern="^(active|disabled)$")
 
 
+class DocumentLegalEntityRequisitesItem(BaseModel):
+    """Response shape keeps legacy free-form requisites while typing tax_profile."""
+
+    model_config = ConfigDict(extra="allow")
+
+    tax_profile: IssuerTaxProfile | None = None
+
+
 class DocumentLegalEntityItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -117,7 +127,7 @@ class DocumentLegalEntityItem(BaseModel):
     entity_type: str
     is_vat_payer: bool
     is_default: bool
-    requisites: dict[str, str]
+    requisites: DocumentLegalEntityRequisitesItem
     envelope_branding: EnvelopeBranding = Field(default_factory=EnvelopeBranding)
     status: str
     created_at: datetime

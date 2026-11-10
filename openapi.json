@@ -53947,11 +53947,7 @@
             "title": "Is Default"
           },
           "requisites": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Requisites"
+            "$ref": "#/components/schemas/DocumentLegalEntityRequisitesItem"
           },
           "envelope_branding": {
             "$ref": "#/components/schemas/EnvelopeBranding"
@@ -54241,11 +54237,39 @@
               }
             ],
             "title": "Default Work Warranty Months"
+          },
+          "tax_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssuerTaxProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "DocumentLegalEntityRequisites"
+      },
+      "DocumentLegalEntityRequisitesItem": {
+        "properties": {
+          "tax_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssuerTaxProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "DocumentLegalEntityRequisitesItem",
+        "description": "Response shape keeps legacy free-form requisites while typing tax_profile."
       },
       "DocumentLegalEntityUpdatePayload": {
         "properties": {
@@ -60146,6 +60170,87 @@
           "limit"
         ],
         "title": "InstallerWorksResponse"
+      },
+      "IssuerTaxProfile": {
+        "properties": {
+          "regime": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regime"
+          },
+          "vat_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Basis"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From",
+            "description": "Date from which this profile is used for documents; not necessarily the regime start date."
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "official_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Source"
+          },
+          "confirmation_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "IssuerTaxProfile",
+        "description": "User-maintained facts for document review, not legal certification."
       },
       "JevShadowItem": {
         "properties": {

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { IssuerTaxProfile } from './IssuerTaxProfile';
 export type DocumentLegalEntityRequisites = {
     legal_address?: (string | null);
     postal_address?: (string | null);
@@ -23,5 +24,6 @@ export type DocumentLegalEntityRequisites = {
     offer_published_on?: (string | null);
     default_goods_warranty_months?: number;
     default_work_warranty_months?: (number | null);
+    tax_profile?: (IssuerTaxProfile | null);
 };
 
