@@ -49,6 +49,7 @@ router = APIRouter(
 @router.get(
     "/legal-entities",
     response_model=DocumentLegalEntityListResponse,
+    response_model_exclude_unset=True,
     operation_id=LIST_MANAGER_DOCUMENT_LEGAL_ENTITIES,
 )
 async def list_document_legal_entities(
@@ -75,6 +76,7 @@ async def list_document_legal_entities(
 @router.post(
     "/legal-entities",
     response_model=DocumentLegalEntityItem,
+    response_model_exclude_unset=True,
     operation_id=CREATE_MANAGER_DOCUMENT_LEGAL_ENTITY,
 )
 async def create_document_legal_entity(
@@ -103,7 +105,7 @@ async def create_document_legal_entity(
             entity_type=payload.entity_type,
             is_vat_payer=payload.is_vat_payer,
             is_default=payload.is_default,
-            requisites=payload.requisites.model_dump(exclude_none=True),
+            requisites=payload.requisites.model_dump(mode="json", exclude_none=True),
             envelope_branding=payload.envelope_branding.model_dump(),
         )
     except DocumentLegalEntityConflictError as exc:
@@ -126,6 +128,7 @@ async def create_document_legal_entity(
 @router.patch(
     "/legal-entities/{legal_entity_id}",
     response_model=DocumentLegalEntityItem,
+    response_model_exclude_unset=True,
     operation_id=PATCH_MANAGER_DOCUMENT_LEGAL_ENTITY,
 )
 async def patch_document_legal_entity(
@@ -146,7 +149,9 @@ async def patch_document_legal_entity(
     """
     changes = payload.model_dump(exclude_unset=True)
     if payload.requisites is not None:
-        changes["requisites"] = payload.requisites.model_dump(exclude_unset=True)
+        changes["requisites"] = payload.requisites.model_dump(
+            mode="json", exclude_unset=True
+        )
     try:
         row = await DocumentLegalEntityService.update(
             session,

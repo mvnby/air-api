@@ -213,6 +213,40 @@ describe('DocumentLegalEntitiesPanel', () => {
     }));
     expect(wrapper.emitted('update')?.[0]?.[1].requisites.phone).toBe('+375291234567');
   });
+
+  it('loads and saves the structured issuer tax profile with profile dates and confirmation basis', async () => {
+    const profile = {
+      regime: 'Основная система налогообложения',
+      vat_basis: 'Без НДС по п. 6 ст. 130 НК',
+      effective_from: '2026-11-11',
+      verified_at: '2026-11-11',
+      official_source: 'https://example.by/tax',
+      confirmation_basis: 'Подтверждено пользователем на текущую дату; дата начала режима неизвестна.',
+    };
+    const wrapper = mountPanel(entity({ requisites: {
+      tax_profile: profile,
+      offer_url: 'https://mvn.by/offer/',
+      offer_version: '1.0',
+      offer_published_on: '04.06.2026',
+      default_goods_warranty_months: 48,
+      default_work_warranty_months: 12,
+    } }));
+
+    expect(wrapper.get('[data-testid="issuer-tax-effective-from"]').element.value).toBe('2026-11-11');
+    expect(wrapper.get('[data-testid="issuer-tax-verified-at"]').element.value).toBe('2026-11-11');
+    expect(wrapper.text()).toContain('не подтверждает дату начала налогового режима');
+    await wrapper.get('[data-testid="issuer-tax-vat-basis"]').setValue('Обновлённое основание');
+    await wrapper.get('form.grid').trigger('submit');
+
+    expect(wrapper.emitted('update')?.[0]?.[1].requisites).toMatchObject({
+      tax_profile: { ...profile, vat_basis: 'Обновлённое основание' },
+      offer_url: 'https://mvn.by/offer/',
+      offer_version: '1.0',
+      offer_published_on: '04.06.2026',
+      default_goods_warranty_months: 48,
+      default_work_warranty_months: 12,
+    });
+  });
 });
 
 describe('NativeTemplateLibrary', () => {

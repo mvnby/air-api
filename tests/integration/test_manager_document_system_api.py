@@ -569,6 +569,63 @@ async def test_issuer_envelope_branding_roundtrip_and_tenant_isolation(async_cli
 
 
 @pytest.mark.asyncio
+async def test_issuer_tax_profile_roundtrips_through_requisites_updates(async_client: AsyncClient):
+    headers = await _legacy_owner_headers(async_client)
+    profile = {
+        "regime": "Основная система налогообложения",
+        "vat_basis": "Без НДС: пункт 6 статьи 130 НК",
+        "effective_from": "2026-11-11",
+        "verified_at": "2026-11-11",
+        "official_source": "https://example.by/tax",
+        "confirmation_basis": "Подтверждено пользователем на текущую дату; дата начала режима неизвестна.",
+    }
+    created = await async_client.post(
+        f"{BASE}/legal-entities",
+        headers=headers,
+        json={"display_name": "Профиль налогов", "requisites": {"city": "Минск", "tax_profile": profile}},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["requisites"]["tax_profile"] == profile
+
+    entity_id = created.json()["id"]
+    updated = await async_client.patch(
+        f"{BASE}/legal-entities/{entity_id}",
+        headers=headers,
+        json={"requisites": {"phone": "+375291111111"}},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["requisites"]["tax_profile"] == profile
+    assert updated.json()["requisites"]["phone"] == "+375291111111"
+
+    partial = await async_client.patch(
+        f"{BASE}/legal-entities/{entity_id}",
+        headers=headers,
+        json={"requisites": {"tax_profile": {"vat_basis": "Другое основание"}}},
+    )
+    assert partial.status_code == 200, partial.text
+    assert partial.json()["requisites"]["tax_profile"] == {
+        **profile,
+        "vat_basis": "Другое основание",
+    }
+
+    cleared = await async_client.patch(
+        f"{BASE}/legal-entities/{entity_id}",
+        headers=headers,
+        json={"requisites": {"tax_profile": {}}},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert "tax_profile" not in cleared.json()["requisites"]
+    assert cleared.json()["requisites"]["phone"] == "+375291111111"
+
+    invalid = await async_client.patch(
+        f"{BASE}/legal-entities/{entity_id}",
+        headers=headers,
+        json={"requisites": {"tax_profile": {"official_source": "http://example.by"}}},
+    )
+    assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_document_system_settings_mutations_require_owner(
     async_client: AsyncClient,
     db,

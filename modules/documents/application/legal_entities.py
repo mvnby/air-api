@@ -21,6 +21,7 @@ from modules.documents.domain.party import (
     STATUTORY_BODY,
     default_signing_mode,
 )
+from modules.documents.domain.tax_profile import IssuerTaxProfile
 
 
 class DocumentLegalEntityError(ValueError):
@@ -305,13 +306,26 @@ class DocumentLegalEntityService:
         value: Mapping[str, Any],
         *,
         entity_type: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         if not isinstance(value, Mapping):
             raise DocumentLegalEntityError("Реквизиты должны быть объектом")
-        result: dict[str, str] = {}
+        result: dict[str, Any] = {}
         for key, raw in value.items():
             normalized_key = str(key or "").strip()
             if not normalized_key:
+                continue
+            if normalized_key == "tax_profile":
+                if raw is None:
+                    continue
+                if not isinstance(raw, Mapping):
+                    raise DocumentLegalEntityError("Налоговый профиль должен быть объектом")
+                try:
+                    profile = IssuerTaxProfile.model_validate(raw)
+                except ValidationError as exc:
+                    raise DocumentLegalEntityError("Проверьте поля налогового профиля") from exc
+                normalized_profile = profile.model_dump(mode="json", exclude_none=True)
+                if normalized_profile:
+                    result[normalized_key] = normalized_profile
                 continue
             normalized_value = str(raw or "").strip()
             if normalized_value:
@@ -359,6 +373,27 @@ class DocumentLegalEntityService:
         for raw_key, raw_value in changes.items():
             key = str(raw_key or "").strip()
             if not key:
+                continue
+            if key == "tax_profile":
+                if raw_value is None:
+                    current.pop(key, None)
+                    continue
+                if not isinstance(raw_value, Mapping):
+                    current[key] = raw_value
+                    continue
+                if not raw_value:
+                    current.pop(key, None)
+                    continue
+                profile = dict(current.get(key) or {}) if isinstance(current.get(key), Mapping) else {}
+                for profile_key, profile_value in raw_value.items():
+                    normalized_profile_key = str(profile_key or "").strip()
+                    if not normalized_profile_key:
+                        continue
+                    if profile_value is None or not str(profile_value).strip():
+                        profile.pop(normalized_profile_key, None)
+                    else:
+                        profile[normalized_profile_key] = profile_value
+                current[key] = profile
                 continue
             if raw_value is None or not str(raw_value).strip():
                 for removable in alias_groups.get(key, {key}):
