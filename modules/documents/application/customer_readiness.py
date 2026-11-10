@@ -145,7 +145,7 @@ async def source_customer_readiness(
 
 
 async def check_selection_readiness(
-    session, *, tenant_scope, selection, template_id, template_storage
+    session, *, tenant_scope, selection, template_id, template_storage, replaces_document_id=None
 ):
     from .lifecycle_service import ManagedDocumentService
 
@@ -157,6 +157,17 @@ async def check_selection_readiness(
     )
     if order is None:
         raise ManagedDocumentNotFoundError("Заказ не найден")
+    replacement_snapshot = None
+    if selection.document_type == "contract_amendment" and replaces_document_id is not None:
+        from .contract_amendments import build_snapshot
+        target = await ManagedDocumentService.get_document(
+            session, tenant_scope=tenant_scope, document_id=replaces_document_id
+        )
+        if target.order_id != selection.order_id or target.doc_type != "contract_amendment":
+            raise ManagedDocumentNotFoundError("Заменяемое допсоглашение не найдено в заказе")
+        if target.status not in {"issued", "sent", "signed"}:
+            raise ManagedDocumentConflictError("Заменить можно только действующее выпущенное соглашение")
+        replacement_snapshot = await build_snapshot(session, scope=tenant_scope, selection=selection, replacing=target)
     scenario, role = resolve_template_use_case(selection)
     try:
         template, version = await select_active_native_template(
@@ -185,13 +196,13 @@ async def check_selection_readiness(
             session, scope=tenant_scope, legal_entity_id=selection.legal_entity_id,
             document_type=selection.document_type,
         )
-        snapshot = await DocumentContextBuilder.build(session, tenant_scope=tenant_scope, selection=selection)
+        snapshot = replacement_snapshot or await DocumentContextBuilder.build(session, tenant_scope=tenant_scope, selection=selection)
         # First-use preflight reads the built-in form without installing or persisting a version.
         readiness = await asyncio.to_thread(
             lambda: snapshot_customer_readiness(snapshot, source=template_bytes(), document_type=selection.document_type)
         )
         return {**readiness, "template_id": None, "template_version_id": None}
-    snapshot = await DocumentContextBuilder.build(
+    snapshot = replacement_snapshot or await DocumentContextBuilder.build(
         session,
         tenant_scope=tenant_scope,
         selection=selection,

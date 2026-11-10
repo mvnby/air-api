@@ -67,6 +67,7 @@ async def check_managed_document_readiness(
             tenant_scope=auth.tenant_scope(),
             selection=selection_from_payload(order_id, payload),
             template_id=payload.template_id,
+            replaces_document_id=payload.replaces_document_id,
             template_storage=PrivateTemplateSourceStorage(
                 get_private_attachment_storage()
             ),

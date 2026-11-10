@@ -509,3 +509,56 @@ async def test_missing_basis_date_is_visible_and_not_guessed(amendment_db, tmp_p
     with pytest.raises(ManagedDocumentConflictError, match="реквизиты"):
         await issue(db, facts, doc)
     assert doc.official_number is None
+
+
+@pytest.mark.asyncio
+async def test_manager_replacement_readiness_inherits_saved_amendment(
+    amendment_db, tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from modules.documents.api.managed_document_readiness import (
+        check_managed_document_readiness,
+    )
+    from modules.documents.api.schemas import ManagedDocumentDraftPayload
+    import modules.documents.api.managed_document_readiness as api
+    import importlib
+    composition = importlib.import_module("modules.documents.api.router")
+
+    db = amendment_db
+    facts = await setup(db, tmp_path)
+    scope, order, issuer, storage, _, basis, _ = facts
+    original = await draft(db, facts)
+    await issue(db, facts, original)
+    monkeypatch.setattr(api, "PrivateTemplateSourceStorage", lambda _: storage)
+    monkeypatch.setattr(composition, "get_private_attachment_storage", lambda: object())
+    # A replacement is based on saved facts, even when the caller supplies no
+    # current proposal, basis revision or repeated work/conditions.
+    payload = ManagedDocumentDraftPayload(
+        document_type="contract_amendment",
+        legal_entity_id=issuer.id,
+        issue_date=date(2026, 11, 12),
+        replaces_document_id=original.id,
+    )
+    readiness = await check_managed_document_readiness(
+        order.id, payload, session=db, auth=SimpleNamespace(tenant_scope=lambda: scope)
+    )
+    assert readiness["checked"] and readiness["can_issue"]
+    replacement = await ManagedDocumentService.create_draft(
+        db,
+        tenant_scope=scope,
+        template_storage=storage,
+        replaces_document_id=original.id,
+        selection=DocumentContextSelection(
+            order_id=order.id,
+            document_type="contract_amendment",
+            legal_entity_id=issuer.id,
+            issue_date=payload.issue_date,
+        ),
+    )
+    assert replacement.base_document_id == basis.id
+    assert replacement.render_snapshot["values"]["amendment.new_total"] == "4410.00"
+    assert (
+        replacement.render_snapshot["meta"]["draft_parameters"]["amendment_terms"]
+        == original.render_snapshot["meta"]["draft_parameters"]["amendment_terms"]
+    )
+    assert original.status == "issued"
