@@ -163,6 +163,20 @@ async def test_tax_profile_survives_requisites_updates_and_can_be_cleared(tmp_pa
         await engine.dispose()
 
 
+def test_tax_profile_blank_text_is_normalized_to_missing():
+    requisites = DocumentLegalEntityService._requisites(
+        {
+            "tax_profile": {
+                "regime": "   ",
+                "vat_basis": "  ",
+                "confirmation_basis": "\t",
+            }
+        },
+        entity_type="organization",
+    )
+    assert "tax_profile" not in requisites
+
+
 @pytest.mark.asyncio
 async def test_legal_entities_are_tenant_scoped_and_first_one_becomes_default(
     tmp_path: Path,

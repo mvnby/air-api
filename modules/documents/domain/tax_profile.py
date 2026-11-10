@@ -23,6 +23,14 @@ class IssuerTaxProfile(BaseModel):
     official_source: str | None = Field(default=None, max_length=1000)
     confirmation_basis: str | None = Field(default=None, max_length=1000)
 
+    @field_validator("regime", "vat_basis", "confirmation_basis", mode="before")
+    @classmethod
+    def trim_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     @field_validator("official_source")
     @classmethod
     def validate_official_source(cls, value: str | None) -> str | None:
