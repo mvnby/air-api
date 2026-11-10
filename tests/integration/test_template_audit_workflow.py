@@ -75,7 +75,7 @@ class AuditEnvironment:
     source: bytes
 
 
-async def _seed(db, tmp_path, *, incomplete=False):
+async def _seed(db, tmp_path, *, incomplete=False, activate=True):
     user = StaffUser(username="template-auditor", display_name="Template owner",
                      primary_role="admin", roles=["admin"])
     db.add(user)
@@ -98,9 +98,10 @@ async def _seed(db, tmp_path, *, incomplete=False):
         placeholder_contract=NativeTemplatePlaceholderContract.create(
             field_catalog={"document.official_number"},
             condition_catalog={"seller.is_not_vat_payer"}, table_blocks=()), storage=storage)
-    await NativeTemplateVersionService.activate_version(
-        db, tenant_scope=actor.tenant_scope, legal_entity_id=issuer.id,
-        template_id=template.id, version_id=version.id)
+    if activate:
+        await NativeTemplateVersionService.activate_version(
+            db, tenant_scope=actor.tenant_scope, legal_entity_id=issuer.id,
+            template_id=template.id, version_id=version.id)
     return AuditEnvironment(db, actor, membership, issuer, template, version, customer, storage, source)
 
 
@@ -116,8 +117,11 @@ async def _read(env, **updates):
     return await TemplateAuditService.read(env.db, env.actor, inputs, storage=env.storage)
 
 
-async def _save_input(env, *, key="template-audit-save-0001", customer=False, category="editorial"):
-    read = await _read(env, **({"customer_id": env.customer.id} if customer else {}))
+async def _save_input(env, *, key="template-audit-save-0001", customer=False, category="editorial", version_id=None):
+    options = {"customer_id": env.customer.id} if customer else {}
+    if version_id is not None:
+        options["version_id"] = version_id
+    read = await _read(env, **options)
     block = next(block for block in read.blocks if block["text"] == CLAUSE)
     checked_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     return TemplateAuditSaveInput(
@@ -751,3 +755,51 @@ def test_actual_b2c_template_catalog_projects_consumer_audience(document_type):
                                 name="Synthetic B2C template", doc_type=document_type)
     context, _ = TemplateAuditService.context(issuer, template, None, [], [])
     assert context["applicability"]["audience"] == "B2C"
+
+
+@pytest.mark.asyncio
+async def test_acceptance_identity_without_active_version_stays_out_of_generation(db_engine, tmp_path):
+    from modules.documents.application.errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
+    from modules.documents.application.initial_templates import check_initial_template_available
+    from modules.documents.application.template_selection import select_active_native_template
+
+    async with AsyncSession(db_engine, expire_on_commit=False) as db:
+        env = await _seed(db, tmp_path, activate=False)
+        assert env.template.is_active and not env.template.is_default
+        assert env.version.status == "draft"
+        default_read = await _read(env)
+        assert default_read.version is None
+        assert default_read.coverage["complete"] is False
+
+        async def assert_excluded():
+            versions = await NativeTemplateVersionService.list_versions(
+                db, tenant_scope=env.actor.tenant_scope, legal_entity_id=env.issuer.id,
+                template_id=env.template.id)
+            assert versions and all(version.status == "draft" for version in versions)
+            # Neither automatic selection nor an explicit template ID can use
+            # the enabled identity without an active immutable DOCX version.
+            for selected_id in (None, env.template.id):
+                with pytest.raises(ManagedDocumentNotFoundError):
+                    await select_active_native_template(
+                        db, tenant_scope=env.actor.tenant_scope, legal_entity_id=env.issuer.id,
+                        document_type="contract", template_id=selected_id,
+                        contract_scenario=env.template.contract_scenario, business_role=None)
+            # The existing contract bootstrap refuses an already configured
+            # identity without an active version; it does not activate it.
+            with pytest.raises(ManagedDocumentConflictError):
+                await check_initial_template_available(
+                    db, scope=env.actor.tenant_scope, legal_entity_id=env.issuer.id,
+                    document_type="contract")
+
+        await assert_excluded()
+        inputs = await _save_input(env, version_id=env.version.id)
+        saved = await TemplateAuditCommands.save(db, env.actor, inputs, storage=env.storage)
+        prepared = await TemplateAuditCommands.propose(
+            db, env.actor, _proposal(saved["result"]), storage=env.storage)
+        assert prepared["result"].proposals[0]["status"] == "draft"
+        assert prepared["result"].proposals[0]["base_version_id"] == env.version.id
+        assert not prepared["result"].stale
+        await assert_excluded()
+        assert await _count(db, DocumentTemplateVersion) == 2
+        assert await _count(db, OrderDocument) == 0
+        assert await _count(db, DocumentArtifact) == 0
