@@ -2,13 +2,13 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kitlane",
   "version": "1.6.0",
-  "description": "Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare native additional-work amendment drafts to saved contracts. Manage service orders, mail, requests, tasks and maintenance in Kitlane.",
+  "description": "Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare native additional-work amendment drafts to saved contracts. Save physical equipment and preserve consumer document revisions. Manage service orders, mail, requests, tasks and maintenance in Kitlane.",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Kitlane",
         "shortDescription": "Почта, подбор, документы и ТО",
-        "longDescription": "Подбирайте оборудование с монтажом в общий бюджет, сравнивайте варианты в чате и сохраняйте выбранную продажу с нативным КП. Продолжайте сохранённую сделку в новом разговоре. Оформляйте заказы на ремонт и услуги с согласованной ценой. Готовьте договор по выбранному предложению для проверки в Manager. Сохраняйте отдельные допсоглашения на дополнительные работы к зафиксированному договору, с проверкой основания и нового итога. Готовьте самостоятельные почтовые черновики с вложениями и отправляйте только версии, явно подтверждённые в Manager. Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками. Готовьте черновики КП и счетов, сохраняйте обращения, поручения и замечания ТО.",
+        "longDescription": "Подбирайте оборудование с монтажом в общий бюджет, сравнивайте варианты в чате и сохраняйте выбранную продажу с нативным КП. Продолжайте сохранённую сделку в новом разговоре. Оформляйте заказы на ремонт и услуги с согласованной ценой. Готовьте договор по выбранному предложению для проверки в Manager. Сохраняйте отдельные допсоглашения на дополнительные работы к зафиксированному договору, с проверкой основания и нового итога. Ведите физические экземпляры оборудования и сохраняйте реквизиты оборудования и суммы при исправлении заказ-актов. Готовьте самостоятельные почтовые черновики с вложениями и отправляйте только версии, явно подтверждённые в Manager. Подбирайте кондиционеры по характеристикам и бюджету, получайте варианты с ценами и ссылками. Готовьте черновики КП и счетов, сохраняйте обращения, поручения и замечания ТО.",
         "developerName": "Kitlane",
         "category": "Productivity",
         "capabilities": [

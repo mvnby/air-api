@@ -1,6 +1,6 @@
 ---
 name: kitlane-work
-description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare separate additional-work amendment drafts to saved contracts. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
+description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare separate additional-work amendment drafts to saved contracts. Save physical equipment and preserve consumer document revisions. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend

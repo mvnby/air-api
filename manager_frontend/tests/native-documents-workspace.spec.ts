@@ -1727,3 +1727,50 @@ describe('native additional-work amendments', () => {
     }));
   });
 });
+
+it('keeps consumer corrections scoped when switching between consumer and amendment revisions', async () => {
+  Element.prototype.scrollIntoView = vi.fn();
+  const consumer = { ...revision(81, 'issued', null, 'b2c_supply_installation_act'), snapshot_total_amount: '4160.00',
+    consumer_terms: { equipment_brand: 'Сохранённый бренд', equipment_model: 'Сохранённая модель', equipment_serial: 'SN-BASE' } };
+  const otherConsumer = { ...revision(83, 'issued', null, 'b2c_supply_installation_act'), proposal_id: 9, snapshot_total_amount: '5200.00',
+    consumer_terms: { equipment_brand: 'Другой бренд', equipment_model: 'Другая модель', equipment_serial: 'SN-OTHER' } };
+  const amendment = { ...revision(82, 'issued', null, 'contract_amendment'), base_document_id: 81,
+    amendment_terms: { works: [{ title: 'Дополнительная работа', quantity: '1', unit: 'компл.', unit_price: '250.00' }],
+      equipment: 'SN-BASE', acceptance_terms: 'Приёмка по договору', payment_terms: 'Оплата по договору', effective_terms: 'После подписания' } };
+  vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [consumer, amendment, otherConsumer] });
+  vi.spyOn(ManagerDocumentSystemService, 'listManagerContractAmendmentBases').mockResolvedValue({ order_id: 42, items: [{
+    document_id: 81, legal_entity_id: 5, number: 'ЗА-81', date: '01.11.2026', status: 'issued', original_amount: '4160.00',
+    effective_additions: '250.00', agreed_total: '4410.00', currency: 'BYN', revision: 'b'.repeat(64),
+    seller_name: 'Тестовый продавец', customer_name: 'Тестовый клиент', lines: [],
+  }] });
+  const wrapper = await mountWorkspace();
+  const replace = async (id: number) => {
+    await wrapper.get(`[data-testid="current-document-${id}"]`).findAll('button').find(b => b.text() === 'Создать исправленную редакцию')!.trigger('click');
+    await flushPromises();
+  };
+  await replace(81);
+  expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-brand"]').element.value).toBe('Сохранённый бренд');
+  expect(wrapper.get('[data-testid="replacement-frozen-composition"]').text()).toContain('4160');
+  await wrapper.get('[data-testid="consumer-equipment-model"]').setValue('Явная правка модели');
+  await replace(82);
+  expect(wrapper.find('[data-testid="replacement-frozen-composition"]').exists()).toBe(false);
+  expect(wrapper.get<HTMLInputElement>('[data-testid="amendment-work-title"]').element.value).toBe('Дополнительная работа');
+  await wrapper.get('[data-testid="create-native-draft"]').trigger('click'); await flushPromises();
+  expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42, expect.objectContaining({
+    document_type: 'contract_amendment', replaces_document_id: 82, base_document_id: 81, consumer_term_overrides: [],
+  }));
+  const payload = vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mock.calls[0]![1];
+  expect(payload.consumer_terms).toBeUndefined();
+
+  await replace(83);
+  expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-model"]').element.value).toBe('Другая модель');
+  expect(wrapper.get<HTMLInputElement>('[data-testid="consumer-equipment-serial"]').element.value).toBe('SN-OTHER');
+  expect(wrapper.get('[data-testid="replacement-frozen-composition"]').text()).toContain('5200');
+  await wrapper.get('[data-testid="create-native-draft"]').trigger('click'); await flushPromises();
+  expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenLastCalledWith(42, expect.objectContaining({
+    document_type: 'b2c_supply_installation_act', replaces_document_id: 83, proposal_id: 9, consumer_term_overrides: [],
+    consumer_terms: expect.objectContaining({ equipment_brand: 'Другой бренд', equipment_model: 'Другая модель', equipment_serial: 'SN-OTHER' }),
+  }));
+  const otherPayload = vi.mocked(ManagerDocumentSystemService.createManagerManagedDocumentDraft).mock.calls[1]![1];
+  expect(otherPayload.amendment_terms).toBeUndefined();
+});

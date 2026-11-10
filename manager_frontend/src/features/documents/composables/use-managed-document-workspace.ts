@@ -655,7 +655,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     base_document_id: documentType.value === 'contract_amendment' ? amendmentBasisId.value : baseDocumentId.value,
     base_customer_contract_id: baseCustomerContractId.value,
     replaces_document_id: replacesDocumentId.value,
-    consumer_term_overrides: replacesDocumentId.value && replacementConsumerBaseline.value
+    consumer_term_overrides: isConsumerDocumentType(documentType.value) && replacesDocumentId.value && replacementConsumerBaseline.value
       ? [...new Set([
         ...(Object.keys(consumerTerms.value) as (keyof ConsumerDocumentTerms)[])
           .filter(key => consumerTerms.value[key] !== replacementConsumerBaseline.value?.[key]),
