@@ -33,8 +33,8 @@ tenant/storefront, явный выбор, неизменяемая исходн�
 [подпись/повторы витрины](../storefront-context-contract.md),
 [бот](../bot-service-boundary.md), [OAuth/MCP](../chatgpt-connector.md).
 
-[Точная инвентаризация](operation-inventory.json) содержит **708 операций**:
-705 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
+[Точная инвентаризация](operation-inventory.json) содержит **713 операций**:
+710 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
 полный путь, operation ID, наличие description в исходном baseline и номер
 этапа проверки; записи сгруппированы по фактическому исходному файлу endpoint.
 В формате `schema=2` поле `description_before` сохраняет исторический факт,
@@ -47,6 +47,12 @@ MCP ASGI `/api/connector/mcp` и `tools/list` не входят в HTTP OpenAPI 
 [границы интеграции](supplier-integration-boundary.md).
 
 ## Выполненные этапы
+
+Этап 34 добавляет пять Manager-операций сохранённых проверок шаблонов: список,
+чтение, адресное решение и вымышленный DOCX/PDF предпросмотр. Проверены live
+owner/admin, tenant/issuer/customer scope, source/context/legal evidence hashes,
+неактивные версии и отдельная активация. MCP исходник выдаётся приватным
+EmbeddedResource; контракты и план runtime-приёмки — [проверка шаблонов](../template-audits.md).
 
 Этап 32 добавляет GET/POST оборудования конкретного заказа
 `/api/manager/orders/{order_id}/equipment-identities`. Проверены текущие права

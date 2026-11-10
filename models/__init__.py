@@ -77,6 +77,7 @@ from .document import (
     DocumentTemplateFacsimilePlacement,
 )
 from .document_external_edit import DocumentExternalEditSession
+from .document_template_audit import DocumentTemplateAudit, DocumentTemplateAuditProposal
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
 from .communication_runtime import (
     CommunicationRuntimeState,
@@ -229,6 +230,8 @@ __all__ = [
     "DocumentNumberSequence",
     "DocumentTemplate",
     "DocumentTemplateVersion",
+    "DocumentTemplateAudit",
+    "DocumentTemplateAuditProposal",
     "DocumentTemplateFacsimilePlacement",
     "DocumentExternalEditSession",
     "DocumentTemplateActLink",

@@ -18,7 +18,8 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 61
+    assert len(TOOLS) == 66
+    assert {"list_document_templates", "read_document_template", "save_template_audit_report", "get_template_audit_report", "prepare_template_revision"} <= TOOLS.keys()
     assert {"create_service_order", "get_service_order_intake", "get_service_order_proposal", "edit_service_order_proposal",
             "prepare_service_order_contract", "get_service_order_contract",
             "get_order_equipment", "save_order_equipment", "list_order_consumer_documents"} <= TOOLS.keys()

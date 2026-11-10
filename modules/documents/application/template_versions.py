@@ -398,6 +398,9 @@ class NativeTemplateVersionService:
             template_id=template_id,
         )
         await cls._lock_template(session, tenant_scope.tenant_id, int(template.id))
+        await session.refresh(template, with_for_update=True)
+        if template.tenant_id != tenant_scope.tenant_id or template.legal_entity_id != legal_entity_id:
+            raise TemplateVersionNotFoundError("Шаблон не найден")
         target = await cls._get_version(
             session,
             template_id=int(template.id),
@@ -407,6 +410,11 @@ class NativeTemplateVersionService:
             raise TemplateVersionNotFoundError("Версия шаблона не найдена")
 
         if target.status != "active":
+            from .template_audit_preview import assert_audit_proposal_activation
+
+            await assert_audit_proposal_activation(
+                session, tenant_scope=tenant_scope, template=template, target=target
+            )
             active_rows = (
                 (
                     await session.execute(
@@ -509,6 +517,7 @@ class NativeTemplateVersionService:
                     DocumentTemplateVersion.id == version_id,
                     DocumentTemplateVersion.template_id == template_id,
                 )
+                .execution_options(populate_existing=True)
                 .with_for_update()
             )
         ).scalar_one_or_none()

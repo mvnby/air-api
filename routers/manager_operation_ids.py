@@ -655,6 +655,11 @@ LIST_MANAGER_ORDER_RESPONSIBLES = "list_manager_order_responsibles"
 PATCH_MANAGER_ORDER_RESPONSIBLE = "patch_manager_order_responsible"
 
 ALL_MANAGER_OPERATION_IDS = (
+    "list_manager_template_audits",
+    "get_manager_template_audit",
+    "decide_manager_template_audit_finding",
+    "get_manager_template_audit_preview_context",
+    "preview_manager_template_audit_proposal",
     GET_MANAGER_SERIES_ACCESSORIES,
     SET_MANAGER_SERIES_ACCESSORIES,
     GET_MANAGER_PRODUCT_ACCESSORIES,

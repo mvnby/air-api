@@ -29,6 +29,7 @@ from . import (
     registration_certificates,
     template_external_edits,
     templates_runtime,
+    template_audits,
     waybill_composition,
 )
 
@@ -54,6 +55,7 @@ router.include_router(waybill_composition.router)
 router.include_router(facsimiles.router)
 router.include_router(legal_entities_number_policies.router)
 router.include_router(templates_runtime.router)
+router.include_router(template_audits.router)
 router.include_router(managed_document_emails.router)
 router.include_router(template_external_edits.router)
 router.include_router(managed_document_external_edits.router)

@@ -71,8 +71,31 @@ async def test_connector_release_migration_preserves_leads_and_scope_constraints
             ).scalar_one()
             == "Existing request"
         )
-        # Restore metadata-compatible schema for subsequent fixtures.
+        # Finish the historical round-trip. It cannot restore columns added by
+        # later migrations; the enclosing rollback restores the current schema.
         migration.upgrade()
 
-    async with db_engine.begin() as connection:
-        await connection.run_sync(check)
+    async with db_engine.connect() as connection:
+        transaction = await connection.begin()
+        before = await connection.run_sync(
+            lambda sync: {
+                column["name"]
+                for column in inspect(sync).get_columns("connector_grant")
+            }
+        )
+        assert "last_used_at" in before
+        try:
+            await connection.run_sync(check)
+        finally:
+            # PostgreSQL DDL is transactional. Restore all current columns,
+            # constraints and rows even if a historical assertion fails.
+            await transaction.rollback()
+
+    async with db_engine.connect() as connection:
+        after = await connection.run_sync(
+            lambda sync: {
+                column["name"]
+                for column in inspect(sync).get_columns("connector_grant")
+            }
+        )
+        assert after == before

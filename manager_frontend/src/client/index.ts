@@ -993,6 +993,11 @@ export type { TelegramLinkConfirmPayload } from './models/TelegramLinkConfirmPay
 export type { TelegramLinkedResponse } from './models/TelegramLinkedResponse';
 export type { TelegramLoginPayload } from './models/TelegramLoginPayload';
 export type { TelegramProfile } from './models/TelegramProfile';
+export type { TemplateAuditDecisionInput } from './models/TemplateAuditDecisionInput';
+export type { TemplateAuditPreviewContext } from './models/TemplateAuditPreviewContext';
+export type { TemplateAuditPreviewInput } from './models/TemplateAuditPreviewInput';
+export type { TemplateAuditReportList } from './models/TemplateAuditReportList';
+export type { TemplateAuditReportResult } from './models/TemplateAuditReportResult';
 export type { TemplateExternalEditSyncPayload } from './models/TemplateExternalEditSyncPayload';
 export type { TemplateExternalEditSyncResponse } from './models/TemplateExternalEditSyncResponse';
 export type { TenderLeadPushResult } from './models/TenderLeadPushResult';

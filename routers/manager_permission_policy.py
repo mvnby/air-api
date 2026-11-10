@@ -373,6 +373,11 @@ SYSTEM_ANALYTICS_OPERATION_IDS = frozenset(
 
 STOREFRONT_OWNER_OPERATION_IDS = frozenset(
     {
+        "list_manager_template_audits",
+        "get_manager_template_audit",
+        "decide_manager_template_audit_finding",
+        "get_manager_template_audit_preview_context",
+        "preview_manager_template_audit_proposal",
         operation_ids.GET_MANAGER_ORDER_USAGE,
         operation_ids.CREATE_MANAGER_DOCUMENT_LEGAL_ENTITY,
         operation_ids.PATCH_MANAGER_DOCUMENT_LEGAL_ENTITY,

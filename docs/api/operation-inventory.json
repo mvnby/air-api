@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "34": "Addressed template audits: live company owner/admin, issuer/customer scope, exact immutable source/context/legal evidence hashes, retained decisions, guarded fictional DOCX/PDF previews and separate Manager activation; reviewed 2026-11-10",
     "32": "Versioned physical order equipment: scoped bounded reads, customer/object selection, partial identity saves, durable retries, legacy snapshot adoption through audit provenance and unchanged issued files; reviewed 2026-11-10 for issue 1249",
     "33": "Native additional-work amendments: explicit frozen contract basis, current effective totals, tenant/storefront and revision fence; reviewed 2026-11-10",
     "31": "Manager paper waybill composition: read-only tenant and storefront selection, proposal-scoped source lines and revision validation; reviewed 2026-11-06",
@@ -43,6 +44,13 @@
     "11": "Native tender direct push; dedicated key, fixed active system scope, writable-primary gates, bounded payload, shared pull/push deduplication, staff preservation, stale guards and unchanged pull checkpoint reviewed 2026-10-09 for issue 849"
   },
   "operations": {
+    "modules/documents/api/template_audits.py": [
+      ["GET /api/manager/document-system/template-audits", "list_manager_template_audits", false, 34],
+      ["GET /api/manager/document-system/template-audits/{report_id}", "get_manager_template_audit", false, 34],
+      ["PATCH /api/manager/document-system/template-audits/{report_id}/findings/{finding_id}", "decide_manager_template_audit_finding", false, 34],
+      ["GET /api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview-context", "get_manager_template_audit_preview_context", false, 34],
+      ["POST /api/manager/document-system/template-audits/{report_id}/proposals/{proposal_id}/preview", "preview_manager_template_audit_proposal", false, 34]
+    ],
     "routers/manager_order_equipment_identity.py": [
       ["GET /api/manager/orders/{order_id}/equipment-identities", "get_manager_order_equipment_identities", false, 32],
       ["POST /api/manager/orders/{order_id}/equipment-identities", "save_manager_order_equipment_identity", false, 32]

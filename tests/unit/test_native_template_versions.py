@@ -13,6 +13,8 @@ from models import (
     DocumentTemplateActLink,
     DocumentTemplateCustomerLink,
     DocumentTemplateVersion,
+    DocumentTemplateAudit,
+    DocumentTemplateAuditProposal,
     Tenant,
 )
 from models.tenancy import TenantScope
@@ -59,6 +61,8 @@ async def _database(tmp_path: Path):
             DocumentTemplateCustomerLink,
             DocumentTemplateActLink,
             DocumentTemplateVersion,
+            DocumentTemplateAudit,
+            DocumentTemplateAuditProposal,
         ):
             await connection.run_sync(model.__table__.create)
     return engine, sessions
