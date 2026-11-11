@@ -554,7 +554,7 @@ defineExpose({
               <p class="mt-1 text-xs text-slate-500">от {{ formatDate(document.official_date || document.date) }} · CRM: <span class="font-mono">{{ document.internal_reference || `#${document.id}` }}</span></p>
               <div v-if="['draft', 'issued', 'sent'].includes(document.status) && document.customer_readiness?.missing_fields?.length"
                 class="mt-2 min-w-0 break-words text-xs leading-5 text-slate-600 dark:text-slate-300" data-testid="native-manual-fields">
-                <p class="font-semibold">{{ document.doc_type === 'contract_amendment' ? 'Проверьте заполненность' : 'Можно вписать от руки' }}</p>
+                <p class="font-semibold">{{ document.doc_type === 'contract_amendment' ? 'Проверьте заполненность' : isConsumerDocumentType(document.doc_type) && document.customer_readiness?.can_issue === false ? 'Заполните до выпуска' : 'Можно вписать от руки' }}</p>
                 <p>{{ manualFieldLabels(document.customer_readiness).join(', ') }}</p>
                 <button v-if="document.status === 'draft' && order.customer?.id" type="button" class="mt-1 text-brand-700 underline underline-offset-2 dark:text-brand-300" @click="openCustomerProfile">Открыть карточку клиента</button>
               </div>
@@ -716,7 +716,7 @@ defineExpose({
             :class="audienceMismatchWarning ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300'" data-testid="native-customer-readiness-warning">
             <p v-if="audienceMismatchWarning">{{ audienceMismatchWarning }}</p>
             <template v-if="customerWarnings.length">
-              <p class="font-semibold">{{ checksCustomerTemplate(workspace.documentType.value) ? 'Можно вписать от руки' : 'В карточке клиента не указаны' }}</p>
+              <p class="font-semibold">{{ isConsumerDocumentType(workspace.documentType.value) && workspace.customerReadiness.value?.can_issue === false ? 'Заполните до выпуска' : checksCustomerTemplate(workspace.documentType.value) ? 'Можно вписать от руки' : 'В карточке клиента не указаны' }}</p>
               <p class="break-words">{{ customerWarnings.join(', ') }}</p>
             </template>
             <button v-if="order.customer?.id" class="mt-1 text-xs text-brand-700 underline underline-offset-2 dark:text-brand-300" type="button" @click="openCustomerProfile">Открыть карточку клиента</button>

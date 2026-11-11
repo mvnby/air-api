@@ -1485,7 +1485,11 @@ export class ManagerDocumentSystemService {
     /**
      * Issue Managed Document
      * Issue a current-tenant managed draft by reserving its official number and rendering
-     * immutable DOCX/PDF artifacts. Participant statements require explicit factual
+     * immutable DOCX/PDF artifacts. Consumer acts require the customer identity and worksite
+     * address used by the selected source. Missing critical frozen facts return 409 before
+     * external editing, official numbering or artifact writes; incomplete drafts remain
+     * available for preview. Optional customer contacts remain advisory.
+     * Participant statements require explicit factual
      * confirmation of the current text using participant_statement_confirmed=true;
      * the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
      * Contract amendments register the agreed additional scope only on successful issuance;
@@ -1653,9 +1657,12 @@ export class ManagerDocumentSystemService {
      * check their initial form in memory and return null template/version IDs until
      * the first draft installs that form.
      * Reports only applicable placeholders surviving the frozen
-     * party conditions. Missing customer fields are handwriting suggestions,
-     * and do not prevent draft creation or issue. Both still check source integrity;
-     * this response is advisory and does not authorize issuance. Returns 404 for
+     * party conditions. For ordinary business documents missing customer fields are
+     * handwriting suggestions. Consumer acts require the printed customer identity
+     * and worksite address: missing critical fields set can_issue=false and block
+     * issuance before numbering or artifact writes. Optional contacts remain advisory.
+     * Incomplete drafts can still be saved and previewed with handwriting hints.
+     * This response does not authorize issuance; source integrity is checked again. Returns 404 for
      * scoped dependencies, 409 for incompatible context, 400 for invalid facts and
      * 503 for unavailable private template bytes. Manager membership is required.
      * @param orderId

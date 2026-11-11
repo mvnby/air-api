@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Mapping
 import re
 
+from modules.documents.domain.consumer_terms import B2C_NATIVE_DOCUMENT_TYPES
 from modules.documents.domain.party import INDIVIDUAL, INDIVIDUAL_ENTREPRENEUR, SELF
 from modules.documents.domain.placeholder_catalog import SCALAR_PLACEHOLDERS
 from modules.documents.infrastructure.renderers import NativeDocxRenderer
@@ -19,7 +20,7 @@ from .template_selection import (
 )
 
 
-READINESS_DOCUMENT_TYPES = frozenset({"contract_amendment", "contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"})
+READINESS_DOCUMENT_TYPES = frozenset({"contract_amendment", "contract", "invoice", "act", "repair_defect_act", "retail_receipt", "warranty_certificate"}) | B2C_NATIVE_DOCUMENT_TYPES
 CHECKED_CUSTOMER_FIELDS = frozenset(
     {
         "customer.display_name",
@@ -37,12 +38,21 @@ CHECKED_CUSTOMER_FIELDS = frozenset(
         "customer.city",
     }
 )
+# Consumer acts identify both the customer and the site of accepted work.
+# Contacts stay advisory; only fields printed by the active source are checked.
+B2C_IDENTITY_FIELDS = frozenset({
+    "customer.full_name", "customer.display_name",
+    "customer.legal_address", "order.object_address",
+})
 LABELS = {item.name: item.label for item in SCALAR_PLACEHOLDERS}
 
 
 def _present(value) -> bool:
     text = str(value or "").strip()
-    return bool(text) and not re.fullmatch(r"[\s_.‐‑‒–—―−-]+(?:\s*\([^()]*\))?", text)
+    return bool(text) and not (
+        re.fullmatch(r"[\s_.‐‑‒–—―−-]+(?:\s*\([^()]*\))?", text)
+        or re.fullmatch(r"\{\{[^{}]*\}\}", text)
+    )
 
 
 def snapshot_customer_readiness(
@@ -57,10 +67,13 @@ def snapshot_customer_readiness(
             "Сохранённый снимок документа повреждён: отсутствует каталог фактических значений"
         )
     values = snapshot["values"]
-    for field in CHECKED_CUSTOMER_FIELDS:
+    checked_fields = CHECKED_CUSTOMER_FIELDS
+    if document_type in B2C_NATIVE_DOCUMENT_TYPES:
+        checked_fields |= B2C_IDENTITY_FIELDS
+    for field in checked_fields:
         if values.get(field) is not None and not isinstance(values[field], str):
             raise ValueError(
-                "Сохранённый снимок документа повреждён: поле клиента должно быть строкой: "
+                "Сохранённый снимок документа повреждён: поле должно быть строкой: "
                 + LABELS[field]
             )
     if not isinstance(snapshot.get("conditions", {}), Mapping):
@@ -72,7 +85,7 @@ def snapshot_customer_readiness(
     effective = NativeDocxRenderer().discover_active_placeholders(
         source, snapshot.get("conditions") or {}
     )
-    applicable = set(CHECKED_CUSTOMER_FIELDS)
+    applicable = set(checked_fields)
     if entity == INDIVIDUAL:
         applicable -= {
             "customer.unp",
@@ -99,7 +112,7 @@ def snapshot_customer_readiness(
                 and field in {"customer.full_name", "customer.display_name"}
                 else LABELS[field]
             ),
-            "critical": False,
+            "critical": document_type in B2C_NATIVE_DOCUMENT_TYPES and field in B2C_IDENTITY_FIELDS,
         }
         for field in sorted(effective & applicable)
         if not _present(values.get(field))
@@ -115,6 +128,18 @@ def snapshot_customer_readiness(
         "missing_fields": missing,
         "can_issue": not any(item["critical"] for item in missing),
     }
+
+
+def require_issue_readiness(readiness: dict) -> dict:
+    """Enforce critical frozen facts before issuance can mutate identity or files."""
+    if not readiness["can_issue"]:
+        labels = list(dict.fromkeys(
+            item["label"] for item in readiness["missing_fields"] if item["critical"]
+        ))
+        raise ManagedDocumentConflictError(
+            "Перед выпуском заполните данные и обновите черновик: " + ", ".join(labels)
+        )
+    return readiness
 
 
 async def source_customer_readiness(

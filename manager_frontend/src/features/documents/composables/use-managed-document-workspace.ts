@@ -708,7 +708,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
           return;
         }
         customerReadiness.value = readiness;
-        if (payload.document_type !== 'contract_amendment' && !customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
+        if (payload.document_type !== 'contract_amendment' && !isConsumerDocumentType(payload.document_type) && !customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
         allowIncompleteCustomer = !readiness.can_issue;
       }
       if (!isCurrent()) return;
@@ -757,7 +757,9 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
       if (!action.canIssue()) return false;
       documents.value = documents.value.map((item) => item.id === document.id
         ? { ...item, customer_readiness: readiness } : item);
-      if (!customerFieldsAllowIssue(readiness)) throw new Error('Не удалось подтвердить готовность документа');
+      if (!customerFieldsAllowIssue(readiness, document.doc_type)) throw new Error(
+        `Перед выпуском заполните данные и обновите черновик: ${readiness.missing_fields?.filter(field => field.critical).map(field => field.label).join(', ')}`,
+      );
       return true;
     } catch (error) {
       if (action.canIssue()) input.notify(`Не удалось проверить реквизиты: ${getApiErrorMessage(error)}`, 'error');

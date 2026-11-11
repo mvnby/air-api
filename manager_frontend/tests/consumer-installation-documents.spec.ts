@@ -54,6 +54,7 @@ beforeEach(() => {
   vi.spyOn(ManagerDocumentSystemService, 'listManagerNativeTemplateVersions').mockResolvedValue({ items: [{ id: 101, template_id: 100, version: 1, status: 'active', renderer: 'docx', checksum_sha256: 'a'.repeat(64), placeholder_schema: {}, created_at: NOW }] });
   vi.spyOn(ManagerDocumentSystemService, 'getManagerConsumerEquipmentDefaults').mockResolvedValue(defaults);
   vi.spyOn(ManagerOrderEquipmentService, 'getManagerOrderEquipmentIdentities').mockResolvedValue({ order_id: 42, version: 'a'.repeat(64), items: [], total: 0, manager_url: '/orders/42' });
+  vi.spyOn(ManagerDocumentSystemService, 'checkManagerManagedDocumentReadiness').mockResolvedValue({ checked: true, can_issue: true, missing_fields: [] });
   vi.spyOn(ManagerDocumentSystemService, 'createManagerManagedDocumentDraft').mockResolvedValue({} as never);
 });
 afterEach(() => {

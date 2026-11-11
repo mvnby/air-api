@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from modules.documents.domain.consumer_terms import CUSTOMER_EQUIPMENT_WORK_ACTS
+from modules.documents.domain.consumer_terms import B2C_NATIVE_DOCUMENT_TYPES, CUSTOMER_EQUIPMENT_WORK_ACTS
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -328,7 +328,11 @@ async def issue_managed_document(
 ) -> ManagedDocumentItem:
     """
     Issue a current-tenant managed draft by reserving its official number and rendering
-    immutable DOCX/PDF artifacts. Participant statements require explicit factual
+    immutable DOCX/PDF artifacts. Consumer acts require the customer identity and worksite
+    address used by the selected source. Missing critical frozen facts return 409 before
+    external editing, official numbering or artifact writes; incomplete drafts remain
+    available for preview. Optional customer contacts remain advisory.
+    Participant statements require explicit factual
     confirmation of the current text using participant_statement_confirmed=true;
     the issuing actor, timestamp and exact artifact checksums are frozen in the snapshot.
     Contract amendments register the agreed additional scope only on successful issuance;
@@ -777,7 +781,8 @@ def _cached_customer_readiness(document):
         readiness = DocumentCustomerReadiness.model_validate(meta.get("customer_readiness"))
         # A historical snapshot may cache the retired issue veto. Return today's
         # advisory policy without modifying frozen facts or stored artifacts.
-        if (readiness.checked and readiness.missing_fields
+        if (getattr(document, "doc_type", None) not in B2C_NATIVE_DOCUMENT_TYPES
+                and readiness.checked and readiness.missing_fields
                 and all(item.field in CHECKED_CUSTOMER_FIELDS for item in readiness.missing_fields)):
             readiness.can_issue = True
             for field in readiness.missing_fields:

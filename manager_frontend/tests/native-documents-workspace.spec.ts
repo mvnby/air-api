@@ -1333,6 +1333,43 @@ describe('Selected native customer requirements', () => {
       expect(hint().text()).toContain('Можно вписать от руки');
     });
 
+  it.each([
+    'b2c_route_laying_act', 'b2c_customer_equipment_installation_act',
+    'b2c_supply_installation_act', 'b2c_maintenance_repair_act',
+  ])('blocks issuing %s when the saved consumer identity is missing', async (documentType) => {
+    const incomplete = { checked: true, can_issue: false, missing_fields: [
+      { field: 'customer.full_name', label: 'ФИО клиента', critical: true },
+    ] };
+    const original = { ...revision(77, 'draft', null, documentType), customer_readiness: incomplete };
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [original] });
+    vi.mocked(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).mockResolvedValue(incomplete);
+    const wrapper = await mountWorkspace();
+    const card = wrapper.get('[data-testid="current-document-77"]');
+    expect(card.get('[data-testid="native-manual-fields"]').text()).toContain('Заполните до выпуска');
+    await card.findAll('button').find(button => button.text() === 'Выпустить')!.trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.getManagerManagedDocumentReadiness).toHaveBeenCalledWith(77);
+    expect(ManagerDocumentSystemService.issueManagerManagedDocument).not.toHaveBeenCalled();
+    expect(wrapper.emitted('toast')?.flat()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining('ФИО клиента'), type: 'error' }),
+    ]));
+  });
+
+  it('allows saving an incomplete consumer draft for preview', async () => {
+    const incomplete = { ...missing, missing_fields: [
+      { field: 'customer.full_name', label: 'ФИО клиента', critical: true },
+    ] };
+    vi.mocked(ManagerDocumentSystemService.checkManagerManagedDocumentReadiness).mockResolvedValue(incomplete);
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-audience-consumer"]').trigger('click');
+    await flushPromises();
+    await chooseDocument(wrapper, 'b2c_route_laying_act');
+    await wrapper.get('[data-testid="create-native-draft"]').trigger('click');
+    await flushPromises();
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).toHaveBeenCalledWith(42,
+      expect.objectContaining({ document_type: 'b2c_route_laying_act', allow_incomplete_customer: true }));
+  });
+
   it('reads a draft without cached readiness and retains the authoritative fields returned after issue', async () => {
     const original = revision(77, 'draft', null, 'act');
     const advisory = { ...missing, can_issue: true, missing_fields: [
