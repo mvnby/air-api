@@ -53,9 +53,12 @@ async def check_managed_document_readiness(
     check their initial form in memory and return null template/version IDs until
     the first draft installs that form.
     Reports only applicable placeholders surviving the frozen
-    party conditions. Missing customer fields are handwriting suggestions,
-    and do not prevent draft creation or issue. Both still check source integrity;
-    this response is advisory and does not authorize issuance. Returns 404 for
+    party conditions. For ordinary business documents missing customer fields are
+    handwriting suggestions. Consumer acts require the printed customer identity
+    and worksite address: missing critical fields set can_issue=false and block
+    issuance before numbering or artifact writes. Optional contacts remain advisory.
+    Incomplete drafts can still be saved and previewed with handwriting hints.
+    This response does not authorize issuance; source integrity is checked again. Returns 404 for
     scoped dependencies, 409 for incompatible context, 400 for invalid facts and
     503 for unavailable private template bytes. Manager membership is required.
     """

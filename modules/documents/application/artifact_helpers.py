@@ -76,12 +76,12 @@ def build_render_inputs(
             key = f"customer.{field}"
             if key in field_catalog:
                 snapshot_values[key] = value
-    # Additional missing customer facts get handwriting space in the output copy.
+    # Missing customer facts and the consumer worksite get handwriting space in the output copy.
     for item in readiness["missing_fields"]:
         field = item.get("field")
         if (
             field in field_catalog
-            and field.startswith("customer.")
+            and (field.startswith("customer.") or field == "order.object_address")
             and not str(snapshot_values.get(field) or "").strip()
         ):
             snapshot_values[field] = (

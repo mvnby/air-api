@@ -1,11 +1,13 @@
+import { isConsumerDocumentType } from './consumer-document-terms';
 import type { DocumentCustomerReadiness, OrderCustomerBrief } from '../../../client';
 
 export const checksCustomerTemplate = (type: string) =>
-  ['contract_amendment', 'contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
+  isConsumerDocumentType(type) || ['contract_amendment', 'contract', 'invoice', 'act', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
 
-// Older readiness responses marked customer details intended for handwriting as blocking.
-export const customerFieldsAllowIssue = ({ can_issue, checked, missing_fields = [] }: DocumentCustomerReadiness) =>
-  can_issue || (checked && missing_fields.length > 0 && missing_fields.every(({ field }) => field.startsWith('customer.')));
+// Preserve legacy business handwriting advice; consumer identity remains mandatory.
+export const customerFieldsAllowIssue = ({ can_issue, checked, missing_fields = [] }: DocumentCustomerReadiness, documentType = '') =>
+  can_issue || (!isConsumerDocumentType(documentType) && checked && missing_fields.length > 0
+    && missing_fields.every(({ field }) => field.startsWith('customer.')));
 
 export const manualFieldLabels = (readiness?: DocumentCustomerReadiness | null) =>
   [...new Set((readiness?.missing_fields || []).map(({ label }) => label))];

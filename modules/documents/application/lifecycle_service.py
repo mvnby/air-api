@@ -43,6 +43,7 @@ from .contract_act_numbers import allocate_contract_act_number
 from .artifact_helpers import artifact_row, list_artifacts, stored_artifact
 from .customer_readiness import (
     source_customer_readiness,
+    require_issue_readiness,
     check_saved_document_readiness,
 )
 from .editable_draft import EditableDraftError
@@ -345,12 +346,12 @@ class ManagedDocumentService:
         if (document.doc_type == "participant_statement" and document.status == "draft"
                 and not participant_statement_confirmed):
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
-        return await check_saved_document_readiness(
+        return require_issue_readiness(await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
             document=document,
             template_storage=template_storage,
-        )
+        ))
 
     @classmethod
     async def issue(
@@ -439,19 +440,20 @@ class ManagedDocumentService:
                 raise ManagedDocumentConflictError(
                     "Контекст заказа изменился после подготовки предложения. Создайте новый черновик по актуальным условиям."
                 )
-        # Validate the frozen customer and term before reserving an official number.
-        await prepare_framework_registration(session, document, tenant_scope)
-        if document.doc_type == "participant_statement" and not participant_statement_confirmed:
-            raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
+        # Keep specific amendment basis conflicts ahead of the generic readiness gate.
         from .contract_amendments import validate_for_issue
         await validate_for_issue(session, scope=tenant_scope, document=document)
-        await validate_saved_basis_for_issue(session, document=document, scope=tenant_scope)
-        readiness = await check_saved_document_readiness(
+        readiness = require_issue_readiness(await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
             document=document,
             template_storage=template_storage,
-        )
+        ))
+        # Validate the frozen customer and term before reserving an official number.
+        await prepare_framework_registration(session, document, tenant_scope)
+        if document.doc_type == "participant_statement" and not participant_statement_confirmed:
+            raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
+        await validate_saved_basis_for_issue(session, document=document, scope=tenant_scope)
         if document.replaces_document_id:
             await lock_replacement_target(
                 session,
