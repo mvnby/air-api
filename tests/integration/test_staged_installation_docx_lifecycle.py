@@ -123,6 +123,7 @@ async def test_staged_installation_issue_keeps_first_stage_acceptance_and_unit_a
         db,
         tenant_scope=scope,
         template_id=template.id,
+        template_storage=template_storage,
         selection=DocumentContextSelection(
             order_id=order.id,
             legal_entity_id=issuer.id,
@@ -193,7 +194,7 @@ async def test_customer_equipment_stages_freeze_custom_terms_without_registering
     order_id = order.id
     finances = (order.status, order.total_payments, order.balance_due, order.is_paid)
     draft = await ManagedDocumentService.create_draft(
-        db, tenant_scope=scope, template_id=template.id,
+        db, tenant_scope=scope, template_id=template.id, template_storage=template_storage,
         selection=DocumentContextSelection(
             order_id=order_id, legal_entity_id=issuer.id,
             document_type="b2c_customer_equipment_installation_act", issue_date=date(2026, 10, 28),

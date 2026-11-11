@@ -440,6 +440,9 @@ class ManagedDocumentService:
                 raise ManagedDocumentConflictError(
                     "Контекст заказа изменился после подготовки предложения. Создайте новый черновик по актуальным условиям."
                 )
+        # Keep specific amendment basis conflicts ahead of the generic readiness gate.
+        from .contract_amendments import validate_for_issue
+        await validate_for_issue(session, scope=tenant_scope, document=document)
         readiness = require_issue_readiness(await check_saved_document_readiness(
             session,
             tenant_scope=tenant_scope,
@@ -450,8 +453,6 @@ class ManagedDocumentService:
         await prepare_framework_registration(session, document, tenant_scope)
         if document.doc_type == "participant_statement" and not participant_statement_confirmed:
             raise ManagedDocumentConflictError("Перед выпуском подтвердите текст заявления, факты и требования конкретной закупки")
-        from .contract_amendments import validate_for_issue
-        await validate_for_issue(session, scope=tenant_scope, document=document)
         await validate_saved_basis_for_issue(session, document=document, scope=tenant_scope)
         if document.replaces_document_id:
             await lock_replacement_target(

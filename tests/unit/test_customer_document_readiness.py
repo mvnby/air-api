@@ -577,3 +577,26 @@ async def test_guarded_download_http_endpoint_handles_unavailable_corrupt_or_mal
             "artifact", session=None, auth=SimpleNamespace(tenant_scope=lambda: None)
         )
     assert caught.value.status_code == status and caught.value.detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_issue_preserves_specific_amendment_basis_conflict_before_readiness(monkeypatch):
+    from unittest.mock import AsyncMock
+    from modules.documents.application import contract_amendments
+    from modules.documents.application.errors import ManagedDocumentConflictError
+    from modules.documents.application.lifecycle_service import ManagedDocumentService
+
+    document = SimpleNamespace(
+        id=7, status="draft", doc_type="contract_amendment", internal_reference="draft-7",
+        legal_entity_id=1, template_version_id=4, render_snapshot=snapshot(),
+        replaces_document_id=None,
+    )
+    monkeypatch.setattr(ManagedDocumentService, "_get_scoped_document", AsyncMock(return_value=document))
+    monkeypatch.setattr(contract_amendments, "validate_for_issue", AsyncMock(
+        side_effect=ManagedDocumentConflictError("Заполните реквизиты исходного договора: basis.date"),
+    ))
+    with pytest.raises(ManagedDocumentConflictError, match="реквизиты исходного договора"):
+        await ManagedDocumentService.issue(
+            None, tenant_scope=None, document_id=7,
+            template_storage=None, artifact_storage=None, pdf_converter=None,
+        )
