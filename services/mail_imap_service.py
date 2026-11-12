@@ -1,6 +1,7 @@
 import asyncio
 import email
 import imaplib
+import logging
 import re
 import shutil
 import subprocess
@@ -28,6 +29,8 @@ from services.email_lead_intake_service import (
     EmailLeadIntakeService,
 )
 from services.tenant_scope_service import TenantScope
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -464,14 +467,16 @@ class MailImapService:
                 client.search,
                 None,
                 "SINCE",
-                MailImapService._imap_since_date(scan_since),
+                # IMAP calendar dates use the server's timezone. Overlap a day,
+                # then compare the precise delivery timestamp below.
+                MailImapService._imap_since_date(scan_since - timedelta(days=1)),
             )
             if status != "OK":
                 raise RuntimeError("IMAP search failed")
 
             message_ids = list(reversed((payload[0] or b"").split()))
             for imap_id in reversed(message_ids):
-                status, message_data = await MailImapService._imap_call(client.fetch, imap_id, "(RFC822)")
+                status, message_data = await MailImapService._imap_call(client.fetch, imap_id, "(RFC822 INTERNALDATE)")
                 if status != "OK" or not message_data:
                     result.failed += 1
                     continue
@@ -482,8 +487,25 @@ class MailImapService:
                     continue
 
                 msg = email.message_from_bytes(raw_email)
-                email_date = MailImapService._parse_email_date(msg.get("Date"))
-                if email_date and email_date <= scan_since:
+                # imaplib separates literals from response metadata. Depending on
+                # server attribute order, INTERNALDATE can follow the RFC822
+                # literal in a standalone bytes fragment. Never inspect tuple[1]
+                # here: email content may itself contain INTERNALDATE-like text.
+                metadata = b" ".join(
+                    item if isinstance(item, bytes) else item[0]
+                    for item in message_data
+                    if isinstance(item, bytes)
+                    or (isinstance(item, tuple) and item and isinstance(item[0], bytes))
+                )
+                delivered_match = re.search(rb'INTERNALDATE "([^"]+)"', metadata, flags=re.IGNORECASE)
+                delivered_at = MailImapService._parse_email_date(
+                    delivered_match.group(1).decode("ascii", errors="replace") if delivered_match else None,
+                )
+                # Sender Date can predate actual delivery by days. Missing server
+                # metadata is replayed safely through message-id deduplication.
+                # INTERNALDATE has second precision; replay equality so delivery
+                # in the scan-start second remains reachable on the next run.
+                if delivered_at and delivered_at < scan_since:
                     continue
                 incoming = None
                 if not dry_run:
@@ -513,6 +535,7 @@ class MailImapService:
                         message_id=msg.get("Message-ID"),
                         email_date_raw=msg.get("Date"),
                         attachments=original_attachments,
+                        attachment_texts=tuple(attachment_texts),
                         dry_run=dry_run,
                         tenant_scope=tenant_scope,
                     )
@@ -526,7 +549,12 @@ class MailImapService:
                             incoming.order_id = linked_order.id
                             incoming.customer_id = linked_order.customer_id
                             session.add(incoming)
-                except Exception:
+                except Exception as exc:
+                    # Do not log message content or exception strings: DB/API
+                    # errors can contain the original email or credentials.
+                    logger.warning("Email lead processing failed error_type=%s", type(exc).__name__)
+                    if not session.is_active:
+                        await session.rollback()
                     result.failed += 1
                     result.decisions.append(
                         EmailLeadDecision(
@@ -581,7 +609,7 @@ class MailImapService:
 
             if processed_folder:
                 await MailImapService._imap_call(client.expunge)
-            if not dry_run:
+            if not dry_run and not result.failed:
                 last_import_at = scan_started_at.isoformat(timespec="seconds")
                 await MailImapService._set_global_config_value(
                     session,
@@ -590,6 +618,10 @@ class MailImapService:
                     "Дата и время последней успешной проверки входящей почты на email-лиды.",
                 )
                 result.last_import_at = last_import_at
+            elif not dry_run:
+                # Keep captured mail visible, but retry every failed delivery
+                # from the previous checkpoint on the next scan.
+                await session.commit()
             return result
         finally:
             await MailImapService._close_async(client)

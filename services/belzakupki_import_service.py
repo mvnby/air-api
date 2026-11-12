@@ -93,6 +93,10 @@ class BelzakupkiImportService:
         tender = item.get("tender")
         if not isinstance(tender, dict):
             return False
+        # Only a submission deadline establishes that a tender is no longer
+        # actionable. Delivery/contract dates and unknown kinds do not.
+        if (tender.get("deadline_kind") or "submission") != "submission":
+            return True
         deadline = cls._parse_datetime(tender.get("deadline_at"))
         return deadline is None or deadline >= now
 

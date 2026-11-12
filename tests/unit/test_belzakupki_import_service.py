@@ -26,13 +26,15 @@ NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
-async def test_import_preserves_factual_context_and_excludes_delivery_deadline_from_expiry(db):
+@pytest.mark.parametrize("deadline_kind", ["delivery", "contract", "unknown"])
+async def test_import_preserves_factual_context_and_excludes_non_submission_deadline_from_expiry(db, deadline_kind):
     from services.leads_inbox_expiry_service import LeadsInboxExpiryService
     from services.leads_inbox_service import LeadsInboxService
 
     source = _item()
     source["tender"].update(currency="BYN", location="Витебск", quantity=12,
-        summary="Поставка и монтаж", deadline_kind="delivery")
+        summary="Поставка и монтаж", deadline_kind=deadline_kind,
+        deadline_at="2026-09-01T10:00:00+00:00")
     await BelzakupkiImportService.import_page(db, tenant_scope=TENANT_SCOPE,
         page={"items": [source], "next_cursor": None, "has_more": False}, cursor_before=None, now=NOW)
     page = await LeadsInboxService.get_leads_inbox(db, tenant_scope=TENANT_SCOPE, username="alice")
@@ -43,6 +45,26 @@ async def test_import_preserves_factual_context_and_excludes_delivery_deadline_f
     result = await LeadsInboxExpiryService.run(db, tenant_scope=TENANT_SCOPE, execute=True,
         now=datetime(2026, 11, 1, tzinfo=timezone.utc))
     assert result["archived"] == 0
+
+
+@pytest.mark.parametrize("deadline_kind", [None, "submission"])
+@pytest.mark.parametrize("deadline_at, accepted", [
+    ("2026-09-18T10:00:00+00:00", False),
+    ("2026-10-01T10:00:00+00:00", True),
+    (None, True),
+])
+def test_submission_deadline_acceptance_preserves_legacy_default(deadline_kind, deadline_at, accepted):
+    source = _item(deadline_at=deadline_at)
+    if deadline_kind is not None:
+        source["tender"]["deadline_kind"] = deadline_kind
+    assert BelzakupkiImportService._is_accepted(source, now=NOW) is accepted
+
+
+@pytest.mark.parametrize("deadline_kind", ["delivery", "contract", "unknown"])
+def test_past_non_submission_date_does_not_reject_opportunity(deadline_kind):
+    source = _item(deadline_at="2026-09-01T10:00:00+00:00")
+    source["tender"]["deadline_kind"] = deadline_kind
+    assert BelzakupkiImportService._is_accepted(source, now=NOW) is True
 
 
 def _item(

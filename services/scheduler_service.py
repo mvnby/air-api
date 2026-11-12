@@ -636,15 +636,15 @@ class SchedulerService:
 
     async def _email_lead_import_loop(self):
         while True:
-            interval_value = await self._get_global_config_value(
-                "mail_lead_import_interval_minutes",
-                str(settings.MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES or 20),
-            )
+            interval_minutes = max(1, int(settings.MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES or 20))
             try:
-                interval_minutes = max(1, int(interval_value or 20))
-            except (TypeError, ValueError):
-                interval_minutes = max(1, int(settings.MAIL_IMAP_LEAD_IMPORT_INTERVAL_MINUTES or 20))
-            try:
+                interval_value = await self._get_global_config_value(
+                    "mail_lead_import_interval_minutes", str(interval_minutes),
+                )
+                try:
+                    interval_minutes = max(1, int(interval_value or 20))
+                except (TypeError, ValueError):
+                    pass
                 enabled_value = await self._get_global_config_value(
                     "mail_lead_auto_import_enabled",
                     "true" if settings.MAIL_IMAP_LEAD_AUTO_IMPORT_ENABLED else "false",
