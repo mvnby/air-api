@@ -73,9 +73,7 @@ class BelzakupkiLeadPushService:
             await importer._upsert_opportunity(session, tenant_scope=scope, item=item, result=result,
                                                allow_create=importer._is_accepted(item, now=current_time))
             source, external_id = importer._external_identity(item)
-            order = await importer._find_order(session, tenant_scope=scope,
-                fingerprint=importer._order_fingerprint(source=source, external_id=external_id))
-            response = TenderLeadPushResult(order_id=order.id if order else None,
+            response = TenderLeadPushResult(order_id=result.order_id,
                 outcome=next(name for name in ("created", "updated", "unchanged", "skipped")
                              if getattr(result, name)), source=source, external_id=external_id)
         from services.jev_shadow_service import JevShadowService

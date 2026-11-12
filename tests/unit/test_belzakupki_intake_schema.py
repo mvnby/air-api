@@ -71,3 +71,20 @@ def test_pull_push_equivalent_timestamp_has_same_snapshot():
     original = native_item()
     pushed = NativeOpportunity.model_validate(original).model_dump(mode="json")
     assert BelzakupkiImportService._match_snapshot(original) == BelzakupkiImportService._match_snapshot(pushed)
+
+
+@pytest.mark.parametrize("canonical", ["https://goszakupki.by/", "https://goszakupki.by/files/view/42", "https://evil.test/single-source/view/42"])
+def test_canonical_requires_supported_procurement_reference(canonical):
+    item = native_item()
+    item["tender"]["canonical_url"] = canonical
+    with pytest.raises(ValidationError, match="supported procurement"):
+        NativeOpportunity.model_validate(item)
+
+
+def test_optional_canonical_normalizes_without_replacing_native_source():
+    item = native_item()
+    item["tender"]["canonical_url"] = "http://www.goszakupki.by/single-source/view/42/?tracking=x"
+    tender = NativeOpportunity.model_validate(item).tender
+    assert tender.canonical_url == "https://goszakupki.by/single-source/view/42"
+    assert tender.source == "native-source" and tender.external_id == "tender-42"
+    assert tender.url == "https://example.test/tender/42"
