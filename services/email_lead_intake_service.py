@@ -167,7 +167,9 @@ class EmailLeadIntakeService:
         return any(stem in haystack for stem in stems)
 
     @staticmethod
-    def looks_like_lead_candidate(*, sender_email: str, subject: str, raw_body: str) -> bool:
+    def looks_like_lead_candidate(
+        *, sender_email: str, subject: str, raw_body: str, attachment_texts: tuple[str, ...] = (),
+    ) -> bool:
         sender = str(sender_email or "").strip().lower()
         clean_subject = EmailLeadIntakeService.normalize_text(subject, max_length=500).casefold()
         clean_body = EmailLeadIntakeService.normalize_text(raw_body, max_length=2000).casefold()
@@ -177,19 +179,23 @@ class EmailLeadIntakeService:
         if sender == BankEmailParserService.BANK_SENDER:
             return False
 
-        haystack = f"{clean_subject} {clean_body}"
-        if any(keyword in haystack for keyword in EmailLeadIntakeService._configured_keywords()):
-            return True
-
-        has_hvac_context = EmailLeadIntakeService._has_any_stem(
-            haystack,
-            EmailLeadIntakeService.HVAC_CONTEXT_STEMS,
-        )
-        has_lead_intent = EmailLeadIntakeService._has_any_stem(
-            haystack,
-            EmailLeadIntakeService.LEAD_INTENT_STEMS,
-        )
-        return has_hvac_context and has_lead_intent
+        # Each extracted attachment has its own bounded prefilter window, so a
+        # long email disclaimer cannot hide the request sent as a document.
+        sections = [clean_body, *(
+            EmailLeadIntakeService.normalize_text(text, max_length=4000).casefold()
+            for text in attachment_texts
+        )]
+        keywords = EmailLeadIntakeService._configured_keywords()
+        for section in sections:
+            haystack = f"{clean_subject} {section}"
+            if any(keyword in haystack for keyword in keywords):
+                return True
+            if (
+                EmailLeadIntakeService._has_any_stem(haystack, EmailLeadIntakeService.HVAC_CONTEXT_STEMS)
+                and EmailLeadIntakeService._has_any_stem(haystack, EmailLeadIntakeService.LEAD_INTENT_STEMS)
+            ):
+                return True
+        return False
 
     @staticmethod
     def build_fingerprint(
@@ -409,6 +415,7 @@ class EmailLeadIntakeService:
         message_id: Optional[str] = None,
         email_date_raw: Optional[str] = None,
         attachments: tuple[EmailLeadAttachment, ...] = (),
+        attachment_texts: tuple[str, ...] = (),
         dry_run: bool = False,
     ) -> EmailLeadProcessResult:
         clean_message_id = (message_id or "").strip() or None
@@ -438,16 +445,38 @@ class EmailLeadIntakeService:
             sender_email=sender_email,
             subject=subject,
             raw_body=raw_body,
+            attachment_texts=attachment_texts,
         )
         if not is_candidate:
             return EmailLeadProcessResult(status="filtered", is_candidate=False, reason="keyword_filter")
+
+        classification_body = raw_body
+        if attachment_texts:
+            # Reserve space inside the existing 5000-character AI input budget.
+            # Keep the full source/fingerprint above and in order metadata below.
+            relevant_attachments = [
+                text for text in attachment_texts
+                if EmailLeadIntakeService.looks_like_lead_candidate(
+                    sender_email=sender_email, subject="", raw_body="", attachment_texts=(text,),
+                )
+            ] or list(attachment_texts)
+            per_attachment = max(1, 2900 // len(relevant_attachments))
+            attachment_context = "\n".join(
+                EmailLeadIntakeService.normalize_text(text, max_length=per_attachment)
+                for text in relevant_attachments
+            )
+            classification_body = (
+                EmailLeadIntakeService.normalize_text(raw_body, max_length=2000)
+                + "\n\nТекст вложений:\n"
+                + EmailLeadIntakeService.normalize_text(attachment_context, max_length=2900)
+            )
 
         classification_started = time.monotonic()
         classification = await EmailLeadIntakeService.classify_email(
             sender_email=sender_email,
             sender_name=sender_name,
             subject=subject,
-            raw_body=raw_body,
+            raw_body=classification_body,
             email_date_raw=email_date_raw,
         )
         if not dry_run:
