@@ -37,7 +37,7 @@ def mailbox(monkeypatch):
     message.set_content("Просим цену кондиционера.")
     state = SimpleNamespace(
         checkpoint=datetime(2026, 11, 12, 10), message=message,
-        delivered_at=datetime(2026, 11, 12, 11), fetch_failed=False,
+        delivered_at=datetime(2026, 11, 12, 11), fetch_failed=False, metadata_location="tuple",
     )
 
     class Imap:
@@ -52,10 +52,15 @@ def mailbox(monkeypatch):
             if state.fetch_failed:
                 return "NO", []
             metadata = b"1 RFC822"
+            trailing = b")"
             if state.delivered_at is not None:
                 stamp = state.delivered_at.astimezone().strftime("%d-%b-%Y %H:%M:%S %z")
-                metadata += f' INTERNALDATE "{stamp}"'.encode()
-            return "OK", [(metadata, state.message.as_bytes())]
+                delivery_metadata = f' INTERNALDATE "{stamp}"'.encode()
+                if state.metadata_location == "trailing":
+                    trailing = delivery_metadata + b" )"
+                else:
+                    metadata += delivery_metadata
+            return "OK", [(metadata, state.message.as_bytes()), trailing]
 
         def close(self):
             pass
@@ -122,19 +127,34 @@ async def test_failed_delivery_retries_without_advancing_checkpoint(mailbox, mon
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("metadata_location", ["tuple", "trailing"])
 @pytest.mark.parametrize("delivered_at,expected", [
     (datetime(2026, 11, 12, 11), 1),
     (datetime(2026, 11, 12, 10), 1),
     (datetime(2026, 11, 12, 9), 0),
     (None, 1),
 ])
-async def test_delivery_timestamp_controls_scan_not_sender_date(mailbox, monkeypatch, delivered_at, expected):
+async def test_delivery_timestamp_controls_scan_not_sender_date(
+    mailbox, monkeypatch, delivered_at, expected, metadata_location,
+):
     mailbox.delivered_at = delivered_at
+    mailbox.metadata_location = metadata_location
     process = AsyncMock(return_value=EmailLeadProcessResult(status="filtered", is_candidate=False))
     monkeypatch.setattr(EmailLeadIntakeService, "process_email", process)
     result = await MailImapService.import_email_leads(mailbox.session, tenant_scope=SCOPE)
     assert result.processed == expected
     assert process.await_count == expected
+
+
+@pytest.mark.asyncio
+async def test_delivery_timestamp_is_never_read_from_message_content(mailbox, monkeypatch):
+    mailbox.delivered_at = None
+    mailbox.message.set_content('INTERNALDATE "01-Jan-2000 00:00:00 +0000"')
+    process = AsyncMock(return_value=EmailLeadProcessResult(status="filtered", is_candidate=False))
+    monkeypatch.setattr(EmailLeadIntakeService, "process_email", process)
+    result = await MailImapService.import_email_leads(mailbox.session, tenant_scope=SCOPE)
+    assert result.processed == 1
+    process.assert_awaited_once()
 
 
 @pytest.mark.asyncio

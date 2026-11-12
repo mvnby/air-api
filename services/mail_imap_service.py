@@ -487,8 +487,17 @@ class MailImapService:
                     continue
 
                 msg = email.message_from_bytes(raw_email)
-                metadata = next((item[0] for item in message_data if isinstance(item, tuple)), b"")
-                delivered_match = re.search(rb'INTERNALDATE "([^"]+)"', metadata or b"")
+                # imaplib separates literals from response metadata. Depending on
+                # server attribute order, INTERNALDATE can follow the RFC822
+                # literal in a standalone bytes fragment. Never inspect tuple[1]
+                # here: email content may itself contain INTERNALDATE-like text.
+                metadata = b" ".join(
+                    item if isinstance(item, bytes) else item[0]
+                    for item in message_data
+                    if isinstance(item, bytes)
+                    or (isinstance(item, tuple) and item and isinstance(item[0], bytes))
+                )
+                delivered_match = re.search(rb'INTERNALDATE "([^"]+)"', metadata, flags=re.IGNORECASE)
                 delivered_at = MailImapService._parse_email_date(
                     delivered_match.group(1).decode("ascii", errors="replace") if delivered_match else None,
                 )
