@@ -124,24 +124,35 @@ async def test_nonactionable_cannot_create(db, enabled, state):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_push_pull_profiles_share_one_order(db_engine, enabled):
+@pytest.mark.parametrize("cross_source", [False, True])
+async def test_concurrent_push_pull_profiles_share_one_order(db_engine, enabled, cross_source):
     sessions = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async def push(match_id):
         payload = item()
         payload["id"] = match_id
+        if cross_source:
+            payload["tender"].update(source="gias_by", external_id="mirror-42",
+                canonical_url="https://goszakupki.by/single-source/view/3837629")
         async with sessions() as session:
             return await BelzakupkiLeadPushService.push(session, NativeOpportunity.model_validate(payload))
     async def pull():
         payload = item()
         payload["id"] = 13
+        if cross_source:
+            payload["tender"].update(source="goszakupki_by", external_id="3837629",
+                url="https://goszakupki.by/single-source/view/3837629")
         async with sessions() as session:
             return await BelzakupkiImportService.import_page(session, tenant_scope=SCOPE,
                 page={"items": [payload], "next_cursor": None, "has_more": False}, cursor_before=None)
-    await asyncio.gather(push(11), push(12), pull())
+    pushed_first, pushed_second, _ = await asyncio.gather(push(11), push(12), pull())
+    assert pushed_first.order_id == pushed_second.order_id
     async with sessions() as session:
         orders = list((await session.execute(select(Order))).scalars())
         assert len(orders) == 1
+        assert orders[0].id == pushed_first.order_id
         assert set(orders[0].technical_meta["belzakupki"]["matches"]) == {"11", "12", "13"}
+        if cross_source:
+            assert len(orders[0].technical_meta["belzakupki"]["source_references"]) == 2
 
 
 @pytest.mark.asyncio

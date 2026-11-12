@@ -25,6 +25,7 @@ class NativeTender(IntakeModel):
     title: str = Field(min_length=1, max_length=1000)
     customer_name: str | None = Field(default=None, max_length=1000)
     url: str | None = Field(default=None, max_length=2048)
+    canonical_url: str | None = Field(default=None, max_length=2048)
     deadline_at: AwareDatetime | None = None
     deadline_kind: str = Field(default="submission", max_length=40)
     published_at: AwareDatetime | None = None
@@ -42,6 +43,17 @@ class NativeTender(IntakeModel):
         if not value.strip():
             raise ValueError("must not be blank")
         return value
+
+    @field_validator("canonical_url")
+    @classmethod
+    def valid_canonical_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from services.belzakupki_canonical_identity import canonical_procurement_url
+        canonical = canonical_procurement_url(value)
+        if canonical is None:
+            raise ValueError("canonical URL must identify a supported procurement")
+        return canonical
 
     @field_validator("url")
     @classmethod

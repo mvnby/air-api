@@ -57,8 +57,10 @@ A successful `200` returns `order_id` (nullable), `outcome` (`created`, `updated
 `unchanged` or `skipped`), `source` and `external_id`. Creation follows the same
 eligibility, deadline and `rules_only` rules as pull. Nonactionable new records
 are skipped; existing records receive source updates without reopening workflow.
-Source/external ID under the configured tenant/storefront identifies one order,
-including concurrent pull/push and multiple profile matches. Manager fields and
+The canonical procurement URL, when explicitly supplied and validated, identifies
+one order across mirrors within the configured tenant/storefront. Otherwise the
+native source/external ID identifies it, including concurrent pull/push and
+multiple profile matches. Manager fields and
 reviewed enrichment remain authoritative. Older match updates are ignored;
 an older different profile can be recorded without replacing newer tender data.
 
@@ -107,9 +109,11 @@ change destination slugs to implicitly merge their data.
 - New eligible, AI-confirmed tenders create `Order(status=new_lead)` and therefore
   appear in the existing Manager inbox. No Customer is invented. The customer
   name can be shown directly from the source metadata until staff qualifies it.
-- The existing unique order fingerprint includes a provider namespace, source
-  and tender external ID, under destination tenant/storefront scope. Multiple
-  matching profiles create one order; their metadata is stored by match ID.
+- The unique order fingerprint includes a provider namespace and either a
+  validated canonical procurement URL or native source/external ID, under
+  destination tenant/storefront scope. Multiple matching profiles and explicitly
+  linked mirrors create one order; metadata retains every native source reference
+  and match ID for scoped document access.
 - Full scans deliberately replay rows. Unchanged fingerprints are skipped;
   changes, including rejected/expired states, update only provider-owned metadata.
   Staff comments, titles and workflow status are never overwritten or reopened.
@@ -122,6 +126,34 @@ change destination slugs to implicitly merge their data.
 - Failed requests/pages leave the cursor unchanged and retry at the next interval.
   Logs use `BELZAKUPKI_IMPORT` / `BELZAKUPKI_IMPORT_FAILED` without the API key.
   These are current-state reconciliations, not a deletion/event archive.
+
+## Cross-source procurement identity
+
+Optional `tender.canonical_url` is validated independently of the producer.
+Supported exact routes are Goszakupki
+`/{marketing,etrade,request,single-source,single-source-reference,limited}/view/<positive-id>`,
+IceTrade `/tenders/all/view/<positive-id>`, and BUTB
+`/auctions/viewinvitation.html?auction=<identifier>` on `zakupki.butb.by`.
+Goszakupki's procedure kind and BUTB's auction parameter remain part of identity.
+Homepages, documents, lookalike hosts and URL credentials are rejected. Titles,
+buyer names and amounts never establish equality.
+
+For example, IceTrade `1407896` explicitly links to
+`https://goszakupki.by/limited/view/3836760` in its platform-access row. Both
+arrivals should use one incoming order. Native source fields remain available;
+the canonical link does not authorize access to another source's documents.
+
+Previously imported orders are adopted lazily on replay, preserving manager
+fields, reviewed enrichment and status. Existing historical duplicates are not
+deleted or merged: intake reuses an existing candidate and records the other
+order IDs as identity conflicts, preventing another incoming order. Conflicting
+original references require review rather than silently changing identity.
+
+Release this API consumer before enabling canonical export in the collector:
+the previous strict push schema rejects unknown fields. No database migration or
+backfill is required. Rollback the collector first if the consumer must return
+to a version without `canonical_url` support. A normal full feed scan then
+reconciles available source evidence through the existing checkpoint lock.
 
 ## Manager review and source documents
 

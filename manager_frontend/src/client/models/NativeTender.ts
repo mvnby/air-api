@@ -10,6 +10,7 @@ export type NativeTender = {
     title: string;
     customer_name?: (string | null);
     url?: (string | null);
+    canonical_url?: (string | null);
     deadline_at?: (string | null);
     deadline_kind?: string;
     published_at?: (string | null);

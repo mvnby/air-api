@@ -8,10 +8,13 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
+from sqlalchemy import String, cast, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import lazyload
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
@@ -20,6 +23,10 @@ from core.database import async_session_maker
 from models import BelzakupkiImportCheckpoint, LeadSource, Order, OrderStatus
 from models.tenancy import TenantScope
 from services.tenant_scope_service import SystemTenantScopeResolver
+
+from services.belzakupki_canonical_identity import (
+    canonical_procurement_url, canonical_tender_url, original_native_identities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +42,7 @@ class BelzakupkiImportResult:
     unchanged: int = 0
     skipped: int = 0
     stale: bool = False
+    order_id: int | None = None
 
 
 class BelzakupkiImportService:
@@ -147,6 +155,7 @@ class BelzakupkiImportService:
                 "title": cls._clean_text(tender.get("title"), maximum=1000),
                 "customer_name": cls._clean_text(tender.get("customer_name"), maximum=1000),
                 "url": cls._clean_text(tender.get("url"), maximum=2048),
+                "canonical_url": canonical_tender_url(tender),
                 "deadline_at": cls._snapshot_datetime(tender.get("deadline_at")),
                 "deadline_kind": cls._clean_text(tender.get("deadline_kind"), maximum=40) or "submission",
                 "published_at": cls._snapshot_datetime(tender.get("published_at")),
@@ -210,6 +219,7 @@ class BelzakupkiImportService:
             "eligible": snapshot.get("eligible"),
             "reason": snapshot.get("reason"),
             "ai_analysis": snapshot.get("ai_analysis"),
+            "tender": snapshot["tender"],
         }
         incoming_time = cls._parse_datetime(snapshot.get("updated_at"))
         tender_time = cls._parse_datetime(existing.get("tender_updated_at"))
@@ -218,10 +228,11 @@ class BelzakupkiImportService:
                            for match in existing_matches.values() if isinstance(match, dict)]
             tender_time = max((time for time in prior_times if time is not None), default=None)
         replace_tender = tender_time is None or (incoming_time is not None and incoming_time >= tender_time)
+        selected_tender = snapshot["tender"] if replace_tender else existing.get("tender", snapshot["tender"])
         next_metadata = {
-            "source": snapshot["tender"]["source"],
-            "external_tender_id": snapshot["tender"]["external_id"],
-            "tender": snapshot["tender"] if replace_tender else existing.get("tender", snapshot["tender"]),
+            "source": selected_tender["source"],
+            "external_tender_id": selected_tender["external_id"],
+            "tender": selected_tender,
             "tender_updated_at": snapshot.get("updated_at") if replace_tender else tender_time.isoformat(),
             "matches": matches,
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
@@ -232,7 +243,111 @@ class BelzakupkiImportService:
             next_metadata["equipment_prefill_history"] = existing["equipment_prefill_history"]
         if isinstance(existing.get("equipment_prefill_commands"), dict):
             next_metadata["equipment_prefill_commands"] = existing["equipment_prefill_commands"]
+        references = dict(existing.get("source_references") or {})
+        native = snapshot["tender"]
+        native_key = cls._order_fingerprint(source=native["source"], external_id=native["external_id"])
+        references[native_key] = {key: native.get(key) for key in ("source", "external_id", "url", "canonical_url", "claimed_canonical_url")}
+        prior_native = existing.get("tender")
+        if isinstance(prior_native, dict) and prior_native.get("source") and prior_native.get("external_id"):
+            prior_key = cls._order_fingerprint(source=prior_native["source"], external_id=prior_native["external_id"])
+            references.setdefault(prior_key, {key: prior_native.get(key) for key in ("source", "external_id", "url", "canonical_url", "claimed_canonical_url")})
+        next_metadata["source_references"] = references
+        canonical = canonical_tender_url(native) or existing.get("canonical_url")
+        if canonical:
+            next_metadata["canonical_url"] = canonical
+        for conflict_key in ("identity_conflicts", "canonical_conflicts"):
+            if existing.get(conflict_key):
+                next_metadata[conflict_key] = existing[conflict_key]
         return next_metadata
+
+    @classmethod
+    def _canonical_fingerprint(cls, url: str) -> str:
+        return hashlib.sha256(f"{cls.SOURCE_NAMESPACE}|canonical-url|{url}".encode()).hexdigest()
+
+    @classmethod
+    async def _identity_order(cls, session: AsyncSession, *, tenant_scope: TenantScope,
+                              tender: dict[str, Any]) -> tuple[Order | None, str, list[int]]:
+        tender = {**tender, "source": cls._clean_text(tender["source"], maximum=100),
+                  "external_id": cls._clean_text(tender["external_id"], maximum=300)}
+        native = cls._order_fingerprint(source=tender["source"], external_id=tender["external_id"])
+        canonical = canonical_tender_url(tender)
+        native_url = canonical_tender_url({**tender, "canonical_url": None})
+        is_mirror = canonical is not None and native_url != canonical
+        fingerprint = cls._canonical_fingerprint(canonical) if canonical else native
+        original_keys = {cls._order_fingerprint(source=source, external_id=identity)
+                         for source, identity in original_native_identities(canonical)} if canonical else set()
+        metadata_text = cast(Order.technical_meta, String)
+        predicates = [Order.source_fingerprint.in_({native, fingerprint} | original_keys),
+                      metadata_text.contains(native)]
+        if canonical:
+            predicates.append(metadata_text.contains(canonical))
+        scope = (Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id,
+                 Order.lead_source == LeadSource.BELZAKUPKI)
+        async def query(condition):
+            return (await session.execute(select(Order).options(lazyload("*")).where(*scope, condition)
+                    .order_by(Order.id).with_for_update())).scalars().all()
+
+        def matching(rows):
+            candidates = []
+            for order in rows:
+                meta = (order.technical_meta or {}).get(cls.META_KEY) or {}
+                refs = meta.get("source_references") or {}
+                stored = meta.get("tender") or {}
+                reference = refs.get(native)
+                native_alias = (isinstance(reference, dict) and reference.get("source")
+                                and reference.get("external_id")
+                                and cls._order_fingerprint(source=reference["source"],
+                                    external_id=reference["external_id"]) == native)
+                same_canonical = canonical and (canonical_procurement_url(meta.get("canonical_url")) == canonical
+                                               or canonical_tender_url(stored) == canonical)
+                native_match = order.source_fingerprint == native
+                # A legacy original's numeric ID may collide across procedure
+                # routes. Its actual URL must agree before canonical adoption.
+                stored_canonical = canonical_tender_url(stored)
+                if canonical and stored_canonical and stored_canonical != canonical and not is_mirror:
+                    native_match = False
+                    # Same native numeric ID does not collapse separate routes
+                    # on the original platform. Cross-platform aliases still
+                    # allow replays omitting their previously verified original.
+                    if urlsplit(stored_canonical).hostname == urlsplit(canonical).hostname:
+                        native_alias = False
+                if order.source_fingerprint == fingerprint or native_match or native_alias or same_canonical:
+                    candidates.append(order)
+            return candidates
+
+        def owns_native(order):
+            meta = (order.technical_meta or {}).get(cls.META_KEY) or {}
+            reference = (meta.get("source_references") or {}).get(native)
+            return order.source_fingerprint == native or (
+                isinstance(reference, dict) and reference.get("source") and reference.get("external_id")
+                and cls._order_fingerprint(source=reference["source"], external_id=reference["external_id"]) == native)
+
+        candidates = matching(await query(predicates[0]))
+        if not candidates:
+            candidates = matching(await query(or_(*predicates[1:])))
+        elif is_mirror and not any(owns_native(row) for row in candidates):
+            # A new claimed original must not steal an already linked mirror
+            # simply because that other original already has its own order.
+            alias_candidates = matching(await query(metadata_text.contains(native)))
+            candidates = sorted({row.id: row for row in candidates + alias_candidates}.values(), key=lambda row: row.id)
+        if not candidates:
+            return None, fingerprint, []
+        linked_mirror = None
+        if is_mirror:
+            for row in candidates:
+                metadata = (row.technical_meta or {}).get(cls.META_KEY) or {}
+                established = canonical_procurement_url(metadata.get("canonical_url"))
+                if established and established != canonical and owns_native(row):
+                    linked_mirror = row
+                    break
+        chosen = linked_mirror or next((row for row in candidates if row.source_fingerprint == fingerprint), candidates[0])
+        # An older producer/replay may omit a previously verified original. Keep
+        # its adopted key when the native identity has already been linked.
+        existing_meta = (chosen.technical_meta or {}).get(cls.META_KEY) or {}
+        previous_canonical = canonical_procurement_url(existing_meta.get("canonical_url"))
+        if previous_canonical and (not tender.get("canonical_url") or linked_mirror is not None):
+            fingerprint = cls._canonical_fingerprint(previous_canonical)
+        return chosen, fingerprint, [row.id for row in candidates if row.id != chosen.id]
 
     @classmethod
     async def _find_order(
@@ -266,12 +381,8 @@ class BelzakupkiImportService:
         source, external_id = cls._external_identity(item)
         snapshot = cls._match_snapshot(item)
         snapshot_fingerprint = cls._snapshot_fingerprint(snapshot)
-        fingerprint = cls._order_fingerprint(source=source, external_id=external_id)
-        order = await cls._find_order(
-            session,
-            tenant_scope=tenant_scope,
-            fingerprint=fingerprint,
-            for_update=True,
+        order, fingerprint, conflicts = await cls._identity_order(
+            session, tenant_scope=tenant_scope, tender=item["tender"],
         )
 
         if order is None:
@@ -312,21 +423,50 @@ class BelzakupkiImportService:
                 from services.communications.incoming_events import IncomingEventService
                 await IncomingEventService.enqueue_order(session, order)
                 result.created += 1
+                result.order_id = order.id
                 return
 
+        result.order_id = order.id
+        prior_meta = (order.technical_meta or {}).get(cls.META_KEY) or {}
+        claimed_canonical = canonical_tender_url(snapshot["tender"])
+        canonical_conflict = bool(item["tender"].get("canonical_url") and claimed_canonical and prior_meta.get("canonical_url")
+                                  and fingerprint != cls._canonical_fingerprint(claimed_canonical))
+        if prior_meta.get("canonical_url") and (not item["tender"].get("canonical_url") or canonical_conflict):
+            snapshot["tender"]["canonical_url"] = prior_meta["canonical_url"]
+            if canonical_conflict:
+                snapshot["tender"]["claimed_canonical_url"] = claimed_canonical
+            snapshot_fingerprint = cls._snapshot_fingerprint(snapshot)
+        if not item["tender"].get("canonical_url"):
+            previous_match = (prior_meta.get("matches") or {}).get(str(snapshot["match_id"])) or {}
+            previous_claim = (previous_match.get("tender") or {}).get("claimed_canonical_url")
+            if previous_claim:
+                snapshot["tender"]["claimed_canonical_url"] = previous_claim
+                snapshot_fingerprint = cls._snapshot_fingerprint(snapshot)
         technical_meta = dict(order.technical_meta or {})
         provider_meta = technical_meta.get(cls.META_KEY)
         provider_meta = dict(provider_meta) if isinstance(provider_meta, dict) else {}
+        new_canonical_conflict = canonical_conflict and claimed_canonical not in provider_meta.get("canonical_conflicts", [])
+        if canonical_conflict:
+            provider_meta["canonical_conflicts"] = sorted(set(provider_meta.get("canonical_conflicts", []))
+                | {prior_meta["canonical_url"], claimed_canonical})
+        identity_changed = bool(canonical_tender_url(snapshot["tender"])) and order.source_fingerprint != fingerprint
+        # Without current canonical evidence, retain a previously adopted key.
+        if canonical_tender_url(snapshot["tender"]):
+            order.source_fingerprint = fingerprint
+        if conflicts:
+            provider_meta["identity_conflicts"] = sorted(set(provider_meta.get("identity_conflicts", [])) | set(conflicts))
         existing_matches = provider_meta.get("matches") if isinstance(provider_meta.get("matches"), dict) else {}
         current_match = existing_matches.get(str(snapshot["match_id"]))
-        if isinstance(current_match, dict) and current_match.get("fingerprint") == snapshot_fingerprint:
+        if not conflicts and not new_canonical_conflict and not identity_changed and isinstance(current_match, dict) and current_match.get("fingerprint") == snapshot_fingerprint:
             result.unchanged += 1
             return
 
+        stale_match = False
         if isinstance(current_match, dict):
             incoming_time = cls._parse_datetime(snapshot.get("updated_at"))
             current_time = cls._parse_datetime(current_match.get("updated_at"))
-            if current_time is not None and (incoming_time is None or incoming_time < current_time):
+            stale_match = current_time is not None and (incoming_time is None or incoming_time < current_time)
+            if stale_match and not identity_changed and not conflicts and not new_canonical_conflict:
                 result.unchanged += 1
                 return
 
@@ -337,6 +477,8 @@ class BelzakupkiImportService:
             snapshot=snapshot,
             snapshot_fingerprint=snapshot_fingerprint,
         )
+        if stale_match:
+            technical_meta[cls.META_KEY]["matches"] = existing_matches
         order.technical_meta = technical_meta
         flag_modified(order, "technical_meta")
         session.add(order)

@@ -90596,6 +90596,18 @@
             ],
             "title": "Url"
           },
+          "canonical_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Url"
+          },
           "deadline_at": {
             "anyOf": [
               {
