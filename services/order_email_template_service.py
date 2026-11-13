@@ -109,8 +109,11 @@ class OrderEmailTemplateService:
         product_titles = [str(row.get("line.title", "")).split("\n", 1)[0].lower() for row in rows
                           if row.get("line.kind") == "product"]
         if product_titles:
-            labels.append("поставку кондиционеров" if all(cls._mentions_conditioners(title) for title in product_titles)
-                          else "поставку товаров")
+            conditioner_products = all(
+                re.match(r"^кондиционер(?:ы)?\b", title) and cls._mentions_conditioners(title)
+                for title in product_titles
+            )
+            labels.append("поставку кондиционеров" if conditioner_products else "поставку товаров")
         service_titles = [str(row.get("line.title", "")).split("\n", 1)[0].lower() for row in rows
                           if row.get("line.kind") == "service"]
         rules = [(r"\bдиагност", "диагностику оборудования"),
