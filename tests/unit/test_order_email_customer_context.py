@@ -50,9 +50,9 @@ async def test_tender_uses_selected_external_number_and_frozen_service_topic(com
     result = await compose(rows=[{"line.kind": "service", "line.title": "Техническое обслуживание кондиционеров"}])
 
     assert result["subject"] == (
-        "Коммерческое предложение на техническое обслуживание кондиционеров — по тендеру № 3837629")
+        "Коммерческое предложение на техническое обслуживание кондиционеров — по закупке № auc0003837629")
     assert ("Направляем коммерческое предложение на техническое обслуживание кондиционеров "
-            "по тендеру № 3837629.") in result["body_text"]
+            "по закупке № auc0003837629.") in result["body_text"]
     assert "742" not in result["subject"] + result["body_text"]
     assert "old-mirror" not in result["subject"] + result["body_text"]
 
@@ -118,3 +118,38 @@ def test_missing_or_invalid_tender_number_never_falls_back_to_internal_identity(
     order = Order(id=742, tenant_id=1, storefront_id=1)
     order.technical_meta = metadata
     assert Templates._request_reference(order) == "по вашей заявке"
+
+
+@pytest.mark.asyncio
+async def test_real_price_request_uses_full_public_code_and_request_kind(compose_email):
+    order, compose = compose_email
+    order.technical_meta = {"belzakupki": {"tender": {
+        "source": "goszakupki_by", "external_id": "3692407",
+        "title": "Просмотр заявки о ценах (тарифах) на ТРУ auc0003692407",
+        "url": "https://goszakupki.by/marketing/view/3692407",
+    }}}
+    result = await compose()
+    assert result["subject"] == "Коммерческое предложение по заявке о ценах (тарифах) № auc0003692407"
+    assert ("Направляем коммерческое предложение по заявке о ценах (тарифах) № auc0003692407."
+            in result["body_text"])
+    assert "тендеру" not in result["subject"] + result["body_text"]
+
+
+@pytest.mark.parametrize(("tender", "expected"), [
+    ({"source": "goszakupki_by", "external_id": "auc0003692407"}, "по закупке № auc0003692407"),
+    ({"source": "icetrade_by", "external_id": "1407896", "url": "https://icetrade.by/tenders/all/view/1407896",
+      "canonical_url": "https://goszakupki.by/marketing/view/3692407"},
+     "по заявке о ценах (тарифах) № auc0003692407"),
+    ({"source": "gias_by", "external_id": "gias-123",
+      "canonical_url": "https://goszakupki.by/request/view/3692407"}, "по закупке № auc0003692407"),
+    ({"source": "icetrade_by", "external_id": "1407896", "url": "https://icetrade.by/tenders/all/view/1407896"},
+     "по тендеру № 1407896"),
+    ({"source": "other", "external_id": "123", "url": "https://example.test/marketing/view/3692407"},
+     "по тендеру № 123"),
+    ({"source": "goszakupki_by", "external_id": "3692407", "title": "Заявка auc00000003692407",
+      "url": "https://goszakupki.by/marketing/view/3692407"},
+     "по заявке о ценах (тарифах) № auc00000003692407"),
+])
+def test_platform_designation_prefers_original_and_preserves_explicit_code(tender, expected):
+    order = Order(technical_meta={"belzakupki": {"tender": tender}})
+    assert Templates._request_reference(order) == expected

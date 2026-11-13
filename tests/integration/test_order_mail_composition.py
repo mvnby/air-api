@@ -33,7 +33,9 @@ async def test_order_draft_keeps_document_scope_signature_and_original_bytes(db,
     payload = MailOrderDraftPayload(template_key="auto", to_email="customer@example.test", document_ids=[document.id])
     created = await OrderMailDeliveryService.create_draft(db, actor=actor, order_id=order.id, payload=payload, idempotency_key="proposal-mail-590-create")
     draft = created.value
-    assert draft.subject == "Коммерческое предложение на монтаж оборудования"
+    assert draft.subject == "Коммерческое предложение на монтаж кондиционеров"
+    assert "по вашей заявке" in draft.body_text
+    assert f"#{order.id}" not in draft.subject + draft.body_text
     assert "ремонт" not in draft.body_text.lower() and "обслуживание" not in draft.body_text.lower()
     assert "С уважением,\nВадим\nМастер Воздуха" in draft.body_text
     assert draft.attachments[0].filename == "KP-2026-024.pdf"
@@ -47,5 +49,5 @@ async def test_order_draft_keeps_document_scope_signature_and_original_bytes(db,
     assert reopened.body_text == draft.body_text
     stored = await MailWorkspaceService.get_attachment(db, actor=actor, draft_id=draft.id, attachment_id=draft.attachments[0].id)
     assert stored.content == b"%PDF original approved installation"
-    assert stored.source_metadata["mail_scenario"] == "монтаж оборудования"
+    assert stored.source_metadata["mail_scenario"] == "монтаж кондиционеров"
     assert stored.source_metadata["snapshot_version"] == 1

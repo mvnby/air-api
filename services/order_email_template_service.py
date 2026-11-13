@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from models import DocumentLegalEntity, Order, OrderDocument, Tenant
 from models.tenancy import TenantScope
+from services.belzakupki_canonical_identity import canonical_tender_url
 from services.customer_party import is_business_customer_type
 from services.tenant_entity_access_service import TenantEntityAccessService
 
@@ -138,17 +140,35 @@ class OrderEmailTemplateService:
 
     @classmethod
     def _request_reference(cls, order: Order) -> str:
-        # Only the selected native reference is customer-facing. Provider record
-        # IDs, CRM IDs and historical mirror aliases are not tender numbers.
+        # Display the original platform's public designation. Provider, mirror
+        # and CRM identities remain unchanged and are never substituted for it.
         meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
         provider = meta.get("belzakupki")
         tender = provider.get("tender") if isinstance(provider, dict) else None
         number = tender.get("external_id") if isinstance(tender, dict) else None
-        if isinstance(number, (str, int)) and not isinstance(number, bool):
-            number = cls._clean(number)
-            if number:
-                return f"по тендеру № {number}"
-        return "по вашей заявке"
+        if not isinstance(number, (str, int)) or isinstance(number, bool):
+            return "по вашей заявке"
+        number = cls._clean(number)
+        if not number:
+            return "по вашей заявке"
+
+        canonical_url = canonical_tender_url(tender)
+        parsed = urlsplit(canonical_url) if canonical_url else None
+        source = cls._clean(tender.get("source")).casefold()
+        if parsed and parsed.hostname == "goszakupki.by":
+            native_id = parsed.path.rsplit("/", 1)[-1]
+            # A mirror can have another numeric ID. Preserve an explicit public
+            # code from the source header only when it matches the original URL.
+            codes = re.findall(r"\bauc[0-9]+\b", number + " " + cls._clean(tender.get("title")), re.I)
+            number = next((code for code in codes if int(code[3:]) == int(native_id)),
+                          f"auc{int(native_id):010d}")
+            label = "заявке о ценах (тарифах)" if parsed.path.startswith("/marketing/") else "закупке"
+            return f"по {label} № {number}"
+        if source in {"goszakupki", "goszakupki_by"}:
+            if re.fullmatch(r"[0-9]+", number):
+                number = f"auc{int(number):010d}"
+            return f"по закупке № {number}"
+        return f"по тендеру № {number}"
 
     @classmethod
     async def _signature(cls, session, *, tenant_scope, order, staff_user_id, company_name):
