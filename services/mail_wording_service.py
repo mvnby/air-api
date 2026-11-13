@@ -35,6 +35,10 @@ class MailWordingService:
         intro = next((line for line in body.splitlines() if line.startswith("Направляем ")), None)
         if not intro:
             return result
+        # Numeric references (for example an external tender number) are fixed
+        # facts. The optional editor cannot emit numbers, so keep this paragraph.
+        if re.search(r"\d|по тендеру №", intro):
+            return result
         files = await MailWorkspaceDAO.attachments(session, draft_id, actor.tenant_scope.tenant_id)
         sources = [{"type": (file.source_metadata or {}).get("document_type"),
                     "scope": (file.source_metadata or {}).get("mail_scenario", ""),

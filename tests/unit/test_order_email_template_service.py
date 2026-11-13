@@ -73,7 +73,7 @@ async def test_invoice_template_uses_order_scenario_and_reports_missing_requisit
 
     assert result["template_key"] == "invoice"
     assert result["subject"] == "Счёт на техническое обслуживание оборудования"
-    assert "Направляем счёт на техническое обслуживание оборудования." in result["body_text"]
+    assert "Направляем счёт на техническое обслуживание оборудования по вашей заявке." in result["body_text"]
     missing_keys = {item["key"] for item in result["missing_requisites"]}
     assert {"legal_address", "bank_name", "bic", "iban", "signer_name"} <= missing_keys
     assert "email" not in missing_keys
@@ -235,7 +235,7 @@ async def test_signer_template_and_diagnostic_scenario_are_adaptive(db, tenant_s
 
 
 @pytest.mark.parametrize(("rows", "expected"), [
-    ([("service", "Стандартный монтаж настенного кондиционера свыше 4,2 и менее 8 кВт")], "монтаж оборудования"),
+    ([("service", "Стандартный монтаж настенного кондиционера свыше 4,2 и менее 8 кВт")], "монтаж кондиционеров"),
     ([("product", "Вентилятор\nМонтаж не включён")], "поставку товаров"),
     ([("product", "Котёл"), ("service", "Доставка\nМонтаж не входит; обслуживание оплачивается отдельно")], "поставку товаров и доставку"),
     ([("service", "Демонтаж без монтажа")], "демонтаж оборудования"),
