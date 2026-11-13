@@ -100,3 +100,19 @@ async def test_sheet_read_failure_remains_a_failed_sync_without_deactivating_off
     assert source_runtime.source.last_sync_status == "error"
     source_runtime.upsert.assert_not_awaited()
     source_runtime.deactivate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sync_preserves_availability_text_without_importing_dates_as_stock(monkeypatch, source_runtime):
+    availability = ["под заказ 3 дня", "ожидается 10.11.2026", "нет в наличии 3", "в наличии 4 шт"]
+    rows = [["MDV MDSAG-09HRFN8", raw, "100", "350", f"offer-{idx}", ""]
+            for idx, raw in enumerate(availability)]
+    monkeypatch.setattr(sync, "_read_source_values", lambda *_args: rows)
+
+    result = await sync.SupplierSyncService.sync_source(source_runtime.session, source_runtime.source)
+
+    assert result["status"] == "success"
+    assert result["rows_upserted"] == len(rows)
+    payloads = [call.args[1] for call in source_runtime.upsert.await_args_list]
+    assert [payload["qty"] for payload in payloads] == [0, 0, 0, 4]
+    assert [payload["qty_raw"] for payload in payloads] == availability

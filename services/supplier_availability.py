@@ -52,6 +52,10 @@ def parse_qty_with_text_fallback(raw: str | None) -> int:
     if not text:
         return 0
 
+    status = classify_availability(text)
+    if status in {"incoming", "out_of_stock"}:
+        return 0
+
     # Prefer explicit numeric quantity from free text, e.g. "в наличии 12 шт".
     match = re.search(r"(-?\d+([.,]\d+)?)", text)
     if match:
@@ -61,7 +65,6 @@ def parse_qty_with_text_fallback(raw: str | None) -> int:
         except Exception:
             pass
 
-    status = classify_availability(text)
     if status == "in_stock":
         # If supplier says "в наличии/есть" with no number, assume practical stock.
         return 10

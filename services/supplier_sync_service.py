@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.supplier import SupplierDAO, SupplierOfferDAO, SupplierSourceDAO, SupplierSyncRunDAO
 from models.supplier import SupplierOffer, SupplierPriceSource
-from services.supplier_availability import parse_qty_with_text_fallback
+from services.supplier_availability import classify_availability, parse_qty_with_text_fallback
 from services.google_service import get_google_service
 from services.hisense_price_service import HISENSE_PRICE_SOURCE_TYPE, sync_hisense_price_source
 from services.supplier_match_service import supplier_offer_match_payload
@@ -59,6 +59,9 @@ def _parse_decimal(raw: str) -> Optional[Decimal]:
 
 
 def _parse_qty(raw: str) -> int:
+    # Dates and lead times in unavailable offers are not physical stock.
+    if classify_availability(raw) in {"incoming", "out_of_stock"}:
+        return 0
     number = _parse_decimal(raw)
     if number is not None:
         try:
