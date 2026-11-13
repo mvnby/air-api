@@ -62,11 +62,16 @@ const facsimileError = ref('');
 const {
   lookupCompany,
   lookupBank,
+  invalidateLookups,
   isEgrLoading,
   isBankLoading,
   egrError,
   bankError,
-} = useB2BLookup();
+} = useB2BLookup({
+  companyInput: () => unp.value,
+  bankInput: () => iban.value,
+  context: [() => props.selectedId, () => entityType.value],
+});
 
 const isIndividualEntrepreneur = computed(() => entityType.value === 'individual_entrepreneur');
 const isPowerOfAttorney = computed(() => signingMode.value === 'power_of_attorney');
@@ -84,6 +89,7 @@ const selectSigningMode = (value: SigningMode) => {
 };
 
 const syncForm = () => {
+  invalidateLookups();
   const entity = props.items.find((item) => item.id === props.selectedId);
   legalName.value = entity?.legal_name || '';
   unp.value = entity?.unp || '';
@@ -150,11 +156,11 @@ const onUnpBlur = async () => {
   const requestedUnp = normalizeUnp(unp.value);
   unp.value = requestedUnp;
   if (requestedUnp.length !== 9) return;
-  const company = await lookupCompany(requestedUnp);
-  if (!company || normalizeUnp(unp.value) !== requestedUnp) return;
-  if (!legalName.value.trim()) legalName.value = company.fullLegalName || '';
-  if (!legalAddress.value.trim()) legalAddress.value = company.legalAddress || '';
-  egrLookupSucceeded.value = true;
+  await lookupCompany(requestedUnp, company => {
+    if (!legalName.value.trim()) legalName.value = company.fullLegalName || '';
+    if (!legalAddress.value.trim()) legalAddress.value = company.legalAddress || '';
+    egrLookupSucceeded.value = true;
+  });
 };
 
 const onIbanInput = () => {
@@ -167,11 +173,11 @@ const onIbanBlur = async () => {
   const requestedIban = normalizeIban(iban.value);
   iban.value = requestedIban;
   if (requestedIban.length < 15) return;
-  const bank = await lookupBank(requestedIban);
-  if (!bank || normalizeIban(iban.value) !== requestedIban) return;
-  if (!bankName.value.trim()) bankName.value = bank.bankName || '';
-  if (!bic.value.trim()) bic.value = bank.bic || '';
-  bankLookupSucceeded.value = true;
+  await lookupBank(requestedIban, bank => {
+    if (!bankName.value.trim()) bankName.value = bank.bankName || '';
+    if (!bic.value.trim()) bic.value = bank.bic || '';
+    bankLookupSucceeded.value = true;
+  });
 };
 
 const updateWarrantyMonths = (kind: 'goods' | 'work', event: Event) => {
