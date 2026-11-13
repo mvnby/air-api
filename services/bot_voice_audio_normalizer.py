@@ -49,9 +49,16 @@ class BotVoiceAudioNormalizer:
                 process.communicate(content),
                 timeout=cls.TOOL_TIMEOUT_SECONDS,
             )
-        except TimeoutError as exc:
-            process.kill()
+        except (TimeoutError, asyncio.CancelledError) as exc:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    # The child may exit between checking its status and kill().
+                    pass
             await process.communicate()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             raise BotVoiceAudioValidationError("Voice audio processing timed out") from exc
         if process.returncode != 0:
             raise BotVoiceAudioValidationError("Voice audio file is invalid")

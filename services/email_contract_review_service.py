@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import shutil
@@ -156,7 +157,7 @@ class EmailContractReviewService:
 
     @staticmethod
     async def review_content(*, attachment_id: int, filename: str, content: bytes) -> ContractReviewResponse:
-        extracted = extract_contract(filename, content)
+        extracted = await asyncio.to_thread(extract_contract, filename, content)
         model = settings.CONTRACT_REVIEW_MODEL.strip()
         if model not in {"deepseek-v4-pro", "deepseek-flash", "deepseek-v4-flash"}:
             raise ContractReviewInputError("Модель проверки договора настроена неверно")
