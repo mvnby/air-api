@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -41,6 +42,25 @@ def test_rollback_routes_ready_buffer_before_stopping_candidate():
     assert old_ready < old_route < buffer_stop
 
 
+def test_fake_docker_login_consumes_stdin_before_exiting(tmp_path):
+    env, _, _, _ = _environment(tmp_path)
+    # More than a pipe buffer makes an unread producer fail regardless of scheduling.
+    result = subprocess.run(
+        [
+            "bash", "-o", "pipefail", "-c",
+            "python3 -c 'import sys; sys.stdout.write(\"test-token\" * 131072)' "
+            "| docker login ghcr.io -u test-user --password-stdin",
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize("proxy_mode", ["host_nginx", "container_nginx"])
 @pytest.mark.parametrize(
     ("active_slot", "candidate_slot", "buffer_slot"),
@@ -66,6 +86,8 @@ def test_zero_gap_buffer_covers_every_slot_and_proxy_combination(
 
     assert result.returncode != 0
     lines = command_log.read_text(encoding="utf-8").splitlines()
+    diagnostics = f"{result.stdout}\n{result.stderr}\n" + "\n".join(lines)
+    assert "candidate_scheduler did not remain running" in result.stdout, diagnostics
     services = {"legacy": "app", "blue": "app-blue", "green": "app-green"}
     ports = {"legacy": 8000, "blue": 18001, "green": 18002}
     target = (
@@ -78,6 +100,7 @@ def test_zero_gap_buffer_covers_every_slot_and_proxy_combination(
         if proxy_mode == "host_nginx"
         else f"{services[active_slot]}:8000"
     )
+    assert f"upstream proxy_pass http://{target};" in lines, diagnostics
     buffer_route = next(
         index
         for index, line in enumerate(lines)
