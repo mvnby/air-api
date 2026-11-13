@@ -61,6 +61,8 @@ async def test_tender_uses_selected_external_number_and_frozen_service_topic(com
     ([{"line.kind": "service", "line.title": "Ремонт кондиционера"}], "ремонт кондиционеров"),
     ([{"line.kind": "service", "line.title": "Установка кондиционера"}], "монтаж кондиционеров"),
     ([{"line.kind": "product", "line.title": "Кондиционер TCL"}], "поставку кондиционеров"),
+    ([{"line.kind": "product", "line.title": "Кронштейн для кондиционера"}], "поставку товаров"),
+    ([{"line.kind": "product", "line.title": "Средство для очистки кондиционера"}], "поставку товаров"),
     ([{"line.kind": "product", "line.title": "Кондиционер TCL"},
       {"line.kind": "product", "line.title": "Вентилятор"}], "поставку товаров"),
     ([{"line.kind": "service", "line.title": "Ремонт оборудования\nКондиционер заказчика"}], "ремонт оборудования"),
