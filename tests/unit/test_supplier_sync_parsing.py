@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from services.supplier_sync_service import (
     _extract_range_start_col_idx,
     _extract_range_start_row,
@@ -8,7 +10,7 @@ from services.supplier_sync_service import (
     _parse_decimal,
     _parse_qty,
 )
-from services.supplier_availability import classify_availability
+from services.supplier_availability import classify_availability, parse_qty_with_text_fallback
 
 
 def test_parse_decimal_with_spaces_and_comma():
@@ -45,6 +47,34 @@ def test_availability_classification():
     assert classify_availability("приход июнь-июль") == "incoming"
     assert classify_availability("нет в наличии") == "out_of_stock"
     assert classify_availability("нет на складе") == "out_of_stock"
+
+
+@pytest.mark.parametrize("parser", [_parse_qty, parse_qty_with_text_fallback])
+@pytest.mark.parametrize(
+    ("raw", "expected_qty", "expected_status"),
+    [
+        ("под заказ 3 дня", 0, "incoming"),
+        ("ожидается 10.11.2026", 0, "incoming"),
+        ("приход 25 шт", 0, "incoming"),
+        ("incoming 12", 0, "incoming"),
+        ("нет в наличии 3", 0, "out_of_stock"),
+        ("нет на складе 7 шт", 0, "out_of_stock"),
+        ("out of stock 4", 0, "out_of_stock"),
+        ("в наличии 4 шт", 4, "in_stock"),
+        ("в наличии", 10, "in_stock"),
+        ("10,0", 10, "unknown"),
+    ],
+)
+def test_quantity_respects_unavailable_status_before_numbers(parser, raw, expected_qty, expected_status):
+    assert parser(raw) == expected_qty
+    assert classify_availability(raw) == expected_status
+
+
+def test_numeric_supplier_quantities_keep_their_existing_format_support():
+    assert _parse_qty("1 200") == 1200
+    assert _parse_qty("1\u00a0200,0") == 1200
+    assert _parse_qty("4 шт") == 4
+    assert _parse_qty("2.9") == 2
 
 
 def test_extract_range_start_row():
