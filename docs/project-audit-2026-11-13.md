@@ -8,9 +8,16 @@
 
 Код слит в main через [#1262](https://github.com/mvnby/air-api/pull/1262) и [#1269](https://github.com/mvnby/air-api/pull/1269). Итоговый код: [a18ebde](https://github.com/mvnby/air-api/commit/a18ebdeaf84f97809ef2eb3415175c5f41e703f8); Git tree f80fbccc7cdfb28b33ae5346d82d00ed426695da точно совпадает с проверенной общей сборкой. Остальные исходные PR закрыты как включённые в #1269 и сохранены для истории ревью.
 
-Первый выпуск [ea9bb41](https://github.com/mvnby/air-api/commit/ea9bb41c71e8f0c6daa2c8d0ad35933cdb1fe01b) прошёл [main CI](https://github.com/mvnby/air-api/actions/runs/43500837826) и [развёртывание 43504824140](https://github.com/mvnby/air-api/actions/runs/43504824140). Подтверждены проверки health, products и filters на локальном новом экземпляре API, публичная readiness-проверка и согласованность API/worker после переключения.
+Оба выпуска успешно прошли main CI и развёртывание. Общая версия завершила выпуск **13 ноября 2026 в 21:22:47 UTC**.
 
-**Черновик отчёта, 21:13 UTC:** [CI итогового main-коммита](https://github.com/mvnby/air-api/actions/runs/43505048698) ещё выполняется. Общий выпуск пока не объявлен завершённым.
+| Код | CI main | Развёртывание |
+| --- | --- | --- |
+| Runtime: ea9bb41 | [43500837826](https://github.com/mvnby/air-api/actions/runs/43500837826) | [43504824140](https://github.com/mvnby/air-api/actions/runs/43504824140) |
+| Все исправления: a18ebde | [43505048698](https://github.com/mvnby/air-api/actions/runs/43505048698) | [43508895102](https://github.com/mvnby/air-api/actions/runs/43508895102) |
+
+Для итогового образа зафиксирован digest `ghcr.io/mvnby/air-api/backend@sha256:5d320fe7c13e660b7018a7292dbdd025e20d0b666304dd92438d1b1e7db59e86`. Выбранный primary, replica, deployment-complete и backend-release завершились успешно. Подтверждена согласованность API и communications worker на обоих узлах.
+
+[Smoke helper](../scripts/deploy_backend_blue_green.sh) подтвердил контракты `/api/health`, `/api/v1/products?limit=5` и `/api/v1/filters/config` на локальном новом экземпляре API. Отдельно прошёл публичный `https://api.mvn.by/api/ready`. Это не проверка всех трёх маршрутов через публичный CDN. В финальном primary-job 132176449627 зафиксированы PASS контрактов в 21:21:24 UTC, публичная readiness в 21:21:25 и API/worker parity в 21:22:34; затем успешно завершился весь rollout.
 
 ## Исправления
 
@@ -52,7 +59,14 @@
 
 Локального PostgreSQL не было. SQLite применялся для ORM identity map, числа SQL-запросов и денежных расчётов; это не доказательство блокировок PostgreSQL. Настоящие PostgreSQL-регрессии инвалидации выполнились в CI: пакет ревизий прошёл 1 479 интеграционных тестов. Два существующих пропуска unit-набора отражены в CI, а не выданы за выполненные тесты.
 
-[Совместный CI 43501098822](https://github.com/mvnby/air-api/actions/runs/43501098822) завершился успешно на точном head ece37d5a0b4aa0f8fa334fed641b38013f8115da: 6 816 unit-тестов прошли, 2 пропущены; 1 479 интеграционных тестов и 1 854 теста Manager прошли. Отдельная проверка физической изоляции четырёх workers прошла в каждом pytest-наборе. Миграции с пустой БД, актуальность API-клиента и обязательный test gate прошли. Результаты проверки final main и развёртывания будут добавлены после завершения.
+Полные проверки общей версии прошли и до слияния, и на итоговом main-коммите; оба запуска завершились с первой попытки.
+
+| Проверка | Ревизия | Unit | Integration | Manager |
+| --- | --- | --- | --- | --- |
+| [PR #1269](https://github.com/mvnby/air-api/actions/runs/43501098822) | ece37d5 | 6 816 прошли, 2 пропущены | 1 479 прошли | 1 854 прошли |
+| [Итоговый main](https://github.com/mvnby/air-api/actions/runs/43505048698) | a18ebde | 6 816 прошли, 2 пропущены | 1 479 прошли | 1 854 прошли |
+
+Итого **10 149 успешных тестов основных наборов** в каждом из двух запусков. Manager обнаружил 194 файла; UI logic и native-dialog audit также прошли. В каждом pytest-наборе отдельно прошла проверка физической изоляции четырёх workers. Все семь CI jobs, включая миграции с пустой БД, актуальность API-клиента и обязательный `test` gate, завершились успешно. Это результаты точных ревизий, а не перенос статуса с предыдущего коммита.
 
 ## Приоритетные оставшиеся риски
 
