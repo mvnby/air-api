@@ -81,6 +81,17 @@ class OrderEmailTemplateService:
             return f"{values[0]} и {values[1]}"
         return ", ".join(values[:-1]) + f" и {values[-1]}"
 
+    @staticmethod
+    def _mentions_conditioners(title: str) -> bool:
+        for match in re.finditer(r"\bкондицион", title):
+            before, after = title[:match.start()], title[match.end():]
+            if re.search(r"\bбез\b[^,;.!]*$", before):
+                continue
+            if re.match(r"\w*\s+не\s+(?:вход|включ|треб|предусмотр)", after):
+                continue
+            return True
+        return False
+
     @classmethod
     def _scenario_label(cls, order: Order, documents: List[OrderDocument] | None = None) -> str:
         # Only the edition being attached is evidence of its contents. Never infer
@@ -93,8 +104,11 @@ class OrderEmailTemplateService:
                 return ""
             rows.extend(document_rows)
         labels = []
-        if any(row.get("line.kind") == "product" for row in rows):
-            labels.append("поставку товаров")
+        product_titles = [str(row.get("line.title", "")).split("\n", 1)[0].lower() for row in rows
+                          if row.get("line.kind") == "product"]
+        if product_titles:
+            labels.append("поставку кондиционеров" if all(cls._mentions_conditioners(title) for title in product_titles)
+                          else "поставку товаров")
         service_titles = [str(row.get("line.title", "")).split("\n", 1)[0].lower() for row in rows
                           if row.get("line.kind") == "service"]
         rules = [(r"\bдиагност", "диагностику оборудования"),
@@ -113,13 +127,28 @@ class OrderEmailTemplateService:
                         continue
                     if re.match(r"\w*\s+(?:не\s+(?:вход|включ|треб|предусмотр)|оплачивается отдельно)", after):
                         continue
-                    matched.append(label)
+                    equipment = "кондиционеров" if cls._mentions_conditioners(title) else "оборудования"
+                    matched.append(label.replace("оборудования", equipment))
                     break
             labels.extend(matched)
             unmatched |= not bool(matched)
         if unmatched:
             labels.append("другие работы и услуги" if labels else "выполнение работ")
         return cls._join_labels(labels) if labels else ""
+
+    @classmethod
+    def _request_reference(cls, order: Order) -> str:
+        # Only the selected native reference is customer-facing. Provider record
+        # IDs, CRM IDs and historical mirror aliases are not tender numbers.
+        meta = order.technical_meta if isinstance(order.technical_meta, dict) else {}
+        provider = meta.get("belzakupki")
+        tender = provider.get("tender") if isinstance(provider, dict) else None
+        number = tender.get("external_id") if isinstance(tender, dict) else None
+        if isinstance(number, (str, int)) and not isinstance(number, bool):
+            number = cls._clean(number)
+            if number:
+                return f"по тендеру № {number}"
+        return "по вашей заявке"
 
     @classmethod
     async def _signature(cls, session, *, tenant_scope, order, staff_user_id, company_name):
@@ -378,6 +407,7 @@ class OrderEmailTemplateService:
         signer_keys = {"signer_name", "signer_position", "acting_basis"}
         signer_missing = [item for item in missing if item["key"] in signer_keys]
         scenario = cls._scenario_label(order, documents)
+        reference = cls._request_reference(order)
         sender_name = await cls._sender_name(
             session,
             tenant_scope=tenant_scope,
@@ -403,7 +433,7 @@ class OrderEmailTemplateService:
                 signer_only=True,
             )
         elif selected_template == "custom":
-            subject = f"По заказу #{order.id}"
+            subject = reference[:1].upper() + reference[1:]
             body_text = "\n".join(["Добрый день!", "", "", "С уважением,", sender_name])
         else:
             body_labels = [
@@ -428,8 +458,12 @@ class OrderEmailTemplateService:
                 subject_document_label = (
                     "Документы" if documents else "Свидетельство о регистрации"
                 )
-            context_label = f"на {scenario}" if scenario and certificate is None else f"по заказу #{order.id}"
-            subject = f"{subject_document_label} {context_label}"
+            scenario_context = f"на {scenario}" if scenario and certificate is None else ""
+            context_label = " ".join(value for value in (scenario_context, reference) if value)
+            subject_context = scenario_context or reference
+            if scenario_context and reference != "по вашей заявке":
+                subject_context += f" — {reference}"
+            subject = f"{subject_document_label} {subject_context}"
             body_text = "\n".join(
                 [
                     "Добрый день!",
@@ -445,6 +479,9 @@ class OrderEmailTemplateService:
                     sender_name,
                 ]
             )
+
+        if selected_template in {"request_requisites", "request_signer"} and reference != "по вашей заявке":
+            subject += f" — {reference}"
 
         return {
             "template_key": selected_template,

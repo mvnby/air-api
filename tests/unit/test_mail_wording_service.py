@@ -49,3 +49,19 @@ async def test_ai_refines_only_introduction_preserving_signature_and_next_step(m
     else:
         assert result.body_text == body
     assert "sales@example.test" not in provider.call_args.kwargs["prompt"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("number", ["3837629", "AB-CD"])
+async def test_optional_editor_preserves_external_tender_reference(monkeypatch, number):
+    body = f"Добрый день!\n\nНаправляем коммерческое предложение по тендеру № {number}.\nДокумент приложен к письму."
+    row = SimpleNamespace(id=80, version=3, status="draft", order_id=742,
+                          subject=f"Коммерческое предложение по тендеру № {number}", body_text=body)
+    monkeypatch.setattr("services.mail_wording_service.MailWorkspaceService._get", AsyncMock(return_value=row))
+    provider = AsyncMock()
+    monkeypatch.setattr("services.deepseek_provider_service.request_deepseek_completion", provider)
+    result = await Wording.suggest(None, actor=SimpleNamespace(tenant_scope=SimpleNamespace(tenant_id=1)),
+                                   draft_id=80, expected_version=3)
+    assert result.subject == row.subject
+    assert result.body_text == body
+    provider.assert_not_awaited()
