@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from models import BankReceipt, Customer, Order, OrderDocument, OrderStatus, Payment, PaymentCurrency, PaymentType
 from services.bank_email_parser_service import BankEmailParseError, BankEmailParserService, ParsedBankReceipt
+from services.bank_receipt_currency import receipt_order_amounts, require_receipt_order_amounts
 from services.order_service import OrderService
 
 
@@ -268,21 +269,28 @@ class BankReceiptService:
         if unique_order_ids and len({int(order.id or 0) for order in orders}) != len(unique_order_ids):
             raise ValueError("Some group orders were not found or are already closed")
 
+        eligible_orders = []
         for order in orders:
             await session.refresh(order, attribute_names=["payments", "proposals", "product_links", "service_links", "installers"])
             order.calculate_totals()
-        return orders
+            if receipt_order_amounts(order, receipt.currency) is None:
+                if unique_order_ids:
+                    require_receipt_order_amounts(order, receipt.currency)
+                continue
+            eligible_orders.append(order)
+        return eligible_orders
 
     @staticmethod
-    def _order_to_group_item(order: Order, *, balance_due: Optional[float] = None) -> dict[str, Any]:
+    def _order_to_group_item(order: Order, *, currency: PaymentCurrency) -> dict[str, Any]:
+        amounts = require_receipt_order_amounts(order, currency)
         return {
             "order_id": int(order.id or 0),
             "title": order.title,
             "customer_name": order.customer.name if order.customer else None,
             "status": order.status.value if hasattr(order.status, "value") else str(order.status),
-            "total_amount": BankReceiptService._money(order.total_amount),
-            "total_payments": BankReceiptService._money(order.total_payments),
-            "balance_due": BankReceiptService._money(order.balance_due if balance_due is None else balance_due),
+            "total_amount": BankReceiptService._money(amounts.total_amount),
+            "total_payments": BankReceiptService._money(amounts.total_payments),
+            "balance_due": BankReceiptService._money(amounts.balance_due),
         }
 
     @staticmethod
@@ -315,8 +323,11 @@ class BankReceiptService:
 
     @staticmethod
     def _build_group_match_meta(receipt: BankReceipt, orders: list[Order]) -> dict[str, Any]:
-        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
-        open_items = [BankReceiptService._order_to_group_item(order) for order in debt_orders if order.id]
+        open_items = [
+            BankReceiptService._order_to_group_item(order, currency=receipt.currency)
+            for order in orders
+            if order.id and require_receipt_order_amounts(order, receipt.currency).balance_due > BankReceiptService.EXACT_AMOUNT_TOLERANCE
+        ]
         open_balance_due = BankReceiptService._money(sum(item["balance_due"] for item in open_items))
         receipt_amount = BankReceiptService._money(receipt.amount)
         selection_mode = "all_open"
@@ -358,11 +369,16 @@ class BankReceiptService:
         manual: bool = False,
         base_meta: Optional[dict[str, Any]] = None,
     ) -> BankReceipt:
-        debt_orders = [order for order in orders if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE]
+        debt_orders = [
+            order for order in orders
+            if require_receipt_order_amounts(order, receipt.currency).balance_due > BankReceiptService.EXACT_AMOUNT_TOLERANCE
+        ]
         if len(debt_orders) < 2:
             raise ValueError("Group payment requires at least two orders with unpaid balance")
 
-        total_balance_due = BankReceiptService._money(sum(float(order.balance_due or 0) for order in debt_orders))
+        total_balance_due = BankReceiptService._money(sum(
+            require_receipt_order_amounts(order, receipt.currency).balance_due for order in debt_orders
+        ))
         receipt_amount = BankReceiptService._money(receipt.amount)
         if abs(total_balance_due - receipt_amount) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
             raise ValueError(f"Receipt amount {receipt_amount} does not match group debt {total_balance_due}")
@@ -373,7 +389,7 @@ class BankReceiptService:
             if index == len(debt_orders) - 1:
                 amount = BankReceiptService._money(receipt_amount - allocated)
             else:
-                amount = BankReceiptService._money(order.balance_due)
+                amount = BankReceiptService._money(require_receipt_order_amounts(order, receipt.currency).balance_due)
                 allocated = BankReceiptService._money(allocated + amount)
             if amount <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
                 continue
@@ -456,7 +472,8 @@ class BankReceiptService:
         document_candidates = await BankReceiptService.find_document_reference_candidates(session, receipt)
         exact_orders: List[Order] = []
         for order in orders:
-            if order.balance_due > 0 and abs(float(order.balance_due) - float(receipt.amount)) <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
+            balance_due = require_receipt_order_amounts(order, receipt.currency).balance_due
+            if balance_due > 0 and abs(balance_due - float(receipt.amount)) <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
                 exact_orders.append(order)
 
         candidate_ids = [int(order.id) for order in orders if order.id is not None]
@@ -564,7 +581,7 @@ class BankReceiptService:
             order_ids=[order_id],
         )
         order = orders[0]
-        balance_due = BankReceiptService._money(order.balance_due)
+        balance_due = BankReceiptService._money(require_receipt_order_amounts(order, receipt.currency).balance_due)
         if balance_due <= BankReceiptService.EXACT_AMOUNT_TOLERANCE:
             raise ValueError("Order has no outstanding balance")
 
@@ -633,10 +650,10 @@ class BankReceiptService:
         allocations = [
             {
                 "order_id": int(order.id or 0),
-                "amount": BankReceiptService._money(order.balance_due),
+                "amount": BankReceiptService._money(require_receipt_order_amounts(order, receipt.currency).balance_due),
             }
             for order in orders
-            if float(order.balance_due or 0) > BankReceiptService.EXACT_AMOUNT_TOLERANCE
+            if require_receipt_order_amounts(order, receipt.currency).balance_due > BankReceiptService.EXACT_AMOUNT_TOLERANCE
         ]
         total_allocated = BankReceiptService._money(sum(item["amount"] for item in allocations))
         if abs(total_allocated - BankReceiptService._money(receipt.amount)) > BankReceiptService.EXACT_AMOUNT_TOLERANCE:

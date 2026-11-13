@@ -29,6 +29,7 @@ const emit = defineEmits<{
 }>();
 
 const rows = reactive<AllocationRow[]>([]);
+const resetAllRequested = ref(false);
 const dialogRef = ref<HTMLElement | null>(null);
 const closeButtonRef = ref<HTMLElement | null>(null);
 
@@ -38,13 +39,22 @@ const money = (value?: number | null) => new Intl.NumberFormat('ru-BY', {
 }).format(Number(value || 0));
 
 const currency = computed(() => props.detail?.currency || 'BYN');
-const allocated = computed(() => rows.reduce((sum, row) => sum + (row.selected ? Number(row.amount || 0) : 0), 0));
+const hiddenAllocation = computed(() => Math.max(0,
+  Number(props.detail?.allocated_amount || 0)
+  - (props.detail?.orders || []).reduce((sum, row) => sum + Number(row.current_allocation || 0), 0),
+));
+const hasHiddenAllocations = computed(() => hiddenAllocation.value > 0.005);
+const allocated = computed(() => resetAllRequested.value ? 0 : (
+  rows.reduce((sum, row) => sum + (row.selected ? Number(row.amount || 0) : 0), 0)
+  + hiddenAllocation.value
+));
 const remainder = computed(() => Math.max(0, Number(props.detail?.receipt_amount || 0) - allocated.value));
 const changed = computed(() => rows.some((row) => (
   Math.abs((row.selected ? Number(row.amount || 0) : 0) - Number(row.current_allocation || 0)) > 0.005
 )));
 const validationError = computed(() => {
   if (!props.detail) return '';
+  if (resetAllRequested.value) return '';
   if (allocated.value - props.detail.receipt_amount > 0.005) {
     return 'Распределение превышает сумму банковского поступления.';
   }
@@ -58,7 +68,8 @@ const validationError = computed(() => {
 });
 const canSave = computed(() => (
   Boolean(props.detail)
-  && changed.value
+  && (changed.value || resetAllRequested.value)
+  && (!hasHiddenAllocations.value || resetAllRequested.value)
   && !validationError.value
   && !props.loading
   && !props.saving
@@ -68,6 +79,7 @@ watch(
   () => [props.open, props.detail] as const,
   ([open, detail]) => {
     if (!open || !detail) return;
+    resetAllRequested.value = false;
     rows.splice(0, rows.length, ...(detail.orders || []).map((order) => ({
       ...order,
       selected: Number(order.current_allocation || 0) > 0,
@@ -89,11 +101,13 @@ useDialogA11y({
 });
 
 const toggleRow = (row: AllocationRow) => {
+  if (hasHiddenAllocations.value) return;
   row.selected = !row.selected;
   if (!row.selected) row.amount = 0;
 };
 
 const fillRows = (targetRows: AllocationRow[]) => {
+  if (hasHiddenAllocations.value) return;
   let available = Number(props.detail?.receipt_amount || 0);
   rows.forEach((row) => {
     row.amount = 0;
@@ -115,6 +129,7 @@ const fillSelected = () => {
 const fillOldestFirst = () => fillRows([...rows]);
 
 const clear = () => {
+  if (hasHiddenAllocations.value) resetAllRequested.value = true;
   rows.forEach((row) => {
     row.selected = false;
     row.amount = 0;
@@ -123,6 +138,10 @@ const clear = () => {
 
 const save = () => {
   if (!canSave.value) return;
+  if (resetAllRequested.value) {
+    emit('save', []);
+    return;
+  }
   emit('save', rows
     .filter((row) => row.selected && Number(row.amount || 0) > 0)
     .map((row) => ({
@@ -193,18 +212,24 @@ const save = () => {
               </div>
             </div>
 
+            <p v-if="hasHiddenAllocations" class="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              Некоторые прежние распределения нельзя показать в валюте поступления.
+              Можно снять все распределения, включая показанные, и затем распределить поступление заново.
+              <span v-if="resetAllRequested">Все распределения будут сняты после сохранения.</span>
+            </p>
+
             <div class="mb-3 flex flex-wrap gap-2">
-              <button type="button" class="btn-mini-outline" @click="fillSelected">
+              <button type="button" class="btn-mini-outline" :disabled="hasHiddenAllocations" @click="fillSelected">
                 <Check class="h-4 w-4" />
                 По выбранным долгам
               </button>
-              <button type="button" class="btn-mini-outline" @click="fillOldestFirst">
+              <button type="button" class="btn-mini-outline" :disabled="hasHiddenAllocations" @click="fillOldestFirst">
                 <ListOrdered class="h-4 w-4" />
                 Старые долги сначала
               </button>
               <button type="button" class="btn-mini-outline" @click="clear">
                 <RotateCcw class="h-4 w-4" />
-                Очистить
+                {{ hasHiddenAllocations ? 'Снять все распределения' : 'Очистить' }}
               </button>
             </div>
 
@@ -219,6 +244,7 @@ const save = () => {
                     :checked="row.selected"
                     class="mt-1 h-4 w-4 shrink-0 accent-brand-600"
                     type="checkbox"
+                    :disabled="hasHiddenAllocations"
                     :aria-label="`Выбрать заказ ${row.order_id}`"
                     @change="toggleRow(row)"
                   />
@@ -246,7 +272,7 @@ const save = () => {
                       type="number"
                       min="0"
                       step="0.01"
-                      :disabled="!row.selected"
+                      :disabled="!row.selected || hasHiddenAllocations"
                     />
                     <span class="shrink-0 text-slate-500"><template v-if="currency === 'BYN'"><BynSymbol /><span class="sr-only"> BYN</span></template><template v-else>{{ currency }}</template></span>
                   </div>

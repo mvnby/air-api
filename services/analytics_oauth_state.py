@@ -11,6 +11,11 @@ from core.security import OWNER_ACCESS_ROLES, AuthenticatedUser
 from models import Storefront, Tenant, TenantMembership
 from models.tenancy import TenantScope
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
+from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
+from services.manager_tenant_access_service import (
+    ManagerTenantAccessResolutionError,
+    ManagerTenantAccessResolver,
+)
 from services.staff_user_service import StaffUserService
 
 
@@ -39,6 +44,7 @@ def start_google_oauth_state(
         "staff_user_id": auth.staff_user_id,
         "username": auth.username,
         "tenant_membership_id": auth.tenant_membership_id,
+        "access_kind": auth.access_kind,
         "tenant_id": scope.tenant_id,
         "storefront_id": scope.storefront_id,
     }
@@ -109,7 +115,6 @@ async def pending_actor_scope(
 
     try:
         staff_user_id = int(pending.get("staff_user_id"))
-        membership_id = int(pending.get("tenant_membership_id"))
         auth_version = int(pending.get("auth_version"))
     except (TypeError, ValueError):
         return None
@@ -119,6 +124,45 @@ async def pending_actor_scope(
         or not StaffUserService.is_active(staff_user)
         or int(staff_user.auth_version) != auth_version
     ):
+        return None
+    access_kind = pending.get("access_kind", "membership")
+    if access_kind == "platform_support":
+        # A support context has no membership. Re-prove its durable owner
+        # authority; a role or flag retained in the browser is never a grant.
+        if pending.get("tenant_membership_id") is not None or username not in {
+            staff_user.username, str(getattr(staff_user, "telegram_id", None) or ""),
+        }:
+            return None
+        state = await LegacyOwnerAuthGuard.state(session)
+        if not LegacyOwnerAuthGuard.allows_bound_staff(state, staff_user_id=staff_user_id):
+            return None
+        if not LegacyOwnerAuthGuard.allows_staff_identity(
+            state, staff_user_id=staff_user_id, username=str(staff_user.username or ""),
+        ):
+            return None
+        if not await LegacyOwnerManagedIdentityService.exact_bound_staff_identity_allowed(
+            session, state=state, user=staff_user,
+        ):
+            return None
+        try:
+            access = await ManagerTenantAccessResolver.platform_support(
+                session, tenant_id=tenant_id,
+            )
+        except ManagerTenantAccessResolutionError:
+            return None
+        if access.tenant_scope.demo_read_only:
+            return None
+        return TenantScope(
+            tenant_id=access.tenant_scope.tenant_id,
+            storefront_id=storefront_id,
+            is_system=access.tenant_scope.is_system,
+            is_canonical_storefront=bool(storefront.is_default),
+        )
+    if access_kind != "membership":
+        return None
+    try:
+        membership_id = int(pending.get("tenant_membership_id"))
+    except (TypeError, ValueError):
         return None
     membership = (
         await session.execute(

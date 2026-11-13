@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from models import BankReceipt, Order, Payment, PaymentType
+from services.bank_receipt_currency import require_receipt_order_amounts
 from services.bank_receipt_service import BankReceiptService
 from services.order_service import OrderService
 
@@ -67,9 +68,10 @@ class BankReceiptAllocationService:
         items: list[dict[str, Any]] = []
         for order in orders:
             order_id = int(order.id or 0)
+            amounts = require_receipt_order_amounts(order, receipt.currency)
             current_allocation = allocation_by_order.get(order_id, 0.0)
-            other_payments = BankReceiptService._money(float(order.total_payments or 0) - current_allocation)
-            balance_before = BankReceiptService._money(max(0.0, float(order.total_amount or 0) - other_payments))
+            other_payments = BankReceiptService._money(amounts.total_payments - current_allocation)
+            balance_before = BankReceiptService._money(max(0.0, amounts.total_amount - other_payments))
             if balance_before <= BankReceiptService.EXACT_AMOUNT_TOLERANCE and not current_allocation:
                 continue
             items.append(
@@ -79,8 +81,8 @@ class BankReceiptAllocationService:
                     "customer_name": order.customer.name if order.customer else None,
                     "status": order.status.value if hasattr(order.status, "value") else str(order.status),
                     "created_at": order.created_at,
-                    "total_amount": BankReceiptService._money(order.total_amount),
-                    "total_payments": BankReceiptService._money(order.total_payments),
+                    "total_amount": BankReceiptService._money(amounts.total_amount),
+                    "total_payments": BankReceiptService._money(amounts.total_payments),
                     "balance_due_before_receipt": balance_before,
                     "current_allocation": current_allocation,
                     "resulting_balance_due": BankReceiptService._money(
@@ -172,12 +174,13 @@ class BankReceiptAllocationService:
         orders_by_id = {int(order.id or 0): order for order in orders}
         for item in normalized_allocations:
             order = orders_by_id[item["order_id"]]
+            amounts = require_receipt_order_amounts(order, receipt.currency)
             order_unp = BankReceiptService._normalize_unp(order.customer.inn if order.customer else "")
             if not allow_payer_unp_mismatch and order_unp != expected_unp:
                 raise ValueError("Selected orders do not belong to the bank receipt payer UNP")
             current_allocation = existing_by_order.get(item["order_id"], 0.0)
-            other_payments = BankReceiptService._money(float(order.total_payments or 0) - current_allocation)
-            balance_before = BankReceiptService._money(max(0.0, float(order.total_amount or 0) - other_payments))
+            other_payments = BankReceiptService._money(amounts.total_payments - current_allocation)
+            balance_before = BankReceiptService._money(max(0.0, amounts.total_amount - other_payments))
             if item["amount"] - balance_before > BankReceiptService.EXACT_AMOUNT_TOLERANCE:
                 raise ValueError(
                     f"Allocation for order #{item['order_id']} exceeds its debt "

@@ -172,9 +172,14 @@ class CatalogRevisionDAO:
             tenant_scope=tenant_scope,
             now=now,
         )
-        statement = select(StorefrontCatalogRevision).where(
-            StorefrontCatalogRevision.tenant_id == tenant_scope.tenant_id,
-            StorefrontCatalogRevision.storefront_id == tenant_scope.storefront_id,
+        # The lock must refresh any earlier ORM snapshot retained by this session.
+        statement = (
+            select(StorefrontCatalogRevision)
+            .execution_options(populate_existing=True)
+            .where(
+                StorefrontCatalogRevision.tenant_id == tenant_scope.tenant_id,
+                StorefrontCatalogRevision.storefront_id == tenant_scope.storefront_id,
+            )
         )
         if session.get_bind().dialect.name == "postgresql":
             statement = statement.with_for_update()
@@ -317,8 +322,11 @@ class CatalogRevisionDAO:
             scope=scope,
             now=now,
         )
-        statement = select(GlobalConfig).where(
-            GlobalConfig.key == CATALOG_REVISION_KEY
+        # SELECT FOR UPDATE alone does not replace an identity-map cached value.
+        statement = (
+            select(GlobalConfig)
+            .execution_options(populate_existing=True)
+            .where(GlobalConfig.key == CATALOG_REVISION_KEY)
         )
         if session.get_bind().dialect.name == "postgresql":
             statement = statement.with_for_update()

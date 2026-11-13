@@ -148,7 +148,7 @@ class InstallationDiscountService:
         )
         metrics: Mapping[int, Mapping[str, object]] = {}
         if policy.is_enabled or include_economics:
-            metrics = supply_metrics or (
+            metrics = supply_metrics if supply_metrics is not None else (
                 await ProductSupplyMetricsService.compute_for_products(
                     session,
                     list(product_by_id.values()),
@@ -246,6 +246,11 @@ class InstallationDiscountService:
         return [
             replace(
                 projection,
+                supply_metrics=(
+                    dict(supply_metrics.get(int(projection.product.id), {}))
+                    if supply_metrics is not None and projection.product.id is not None
+                    else projection.supply_metrics
+                ),
                 installation_discount=(
                     decisions[int(projection.product.id)].applied_discount
                     if projection.product.id is not None

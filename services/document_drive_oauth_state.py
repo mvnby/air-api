@@ -28,6 +28,7 @@ def start_document_drive_oauth_state(
         "staff_user_id": auth.staff_user_id,
         "username": auth.username,
         "tenant_membership_id": auth.tenant_membership_id,
+        "access_kind": auth.access_kind,
         "tenant_id": scope.tenant_id,
         "storefront_id": scope.storefront_id,
     }
