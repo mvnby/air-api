@@ -55,7 +55,10 @@ const phoneModel = computed({
   },
 });
 const phoneMask = useBelarusPhoneMask(phoneInputRef, phoneModel);
-const { lookupCompany, isEgrLoading, egrError } = useB2BLookup();
+const { lookupCompany, invalidateLookups, isEgrLoading, egrError } = useB2BLookup({
+  companyInput: () => form.value.inn,
+  context: [() => form.value.type],
+});
 const business = computed(() => isBusinessCustomer(form.value.type));
 const partyTypeWarning = computed(() => customerPartyTypeWarning(form.value));
 
@@ -76,17 +79,20 @@ const setCustomerType = (type: CustomerPartyType) => {
 const handleInnBlur = async () => {
   form.value.inn = normalizeUnp(form.value.inn);
   if (form.value.inn.length !== 9) return;
-  const company = await lookupCompany(form.value.inn);
-  if (!company) return;
-  form.value.full_legal_name = company.fullLegalName || form.value.full_legal_name;
-  form.value.legal_address = company.legalAddress || form.value.legal_address;
-  if (!form.value.name.trim()) {
-    form.value.name = company.fullLegalName || '';
-  }
+  await lookupCompany(form.value.inn, company => {
+    form.value.full_legal_name = company.fullLegalName || form.value.full_legal_name;
+    form.value.legal_address = company.legalAddress || form.value.legal_address;
+    if (!form.value.name.trim()) {
+      form.value.name = company.fullLegalName || '';
+    }
+  });
 };
 
 const handleClose = () => {
-  if (!saving.value) emit('close');
+  if (!saving.value) {
+    invalidateLookups();
+    emit('close');
+  }
 };
 
 const handleCreate = async () => {
