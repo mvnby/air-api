@@ -23,7 +23,11 @@ const saving = ref(false);
 const error = ref('');
 const serverErrors = ref<Record<string, string>>({});
 const ibanError = ref('');
-const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup();
+const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup({
+  companyInput: () => form.value.inn,
+  bankInput: () => form.value.iban,
+  context: [() => props.customer.id, () => editing.value, () => form.value.type],
+});
 const diff = computed(() => Object.fromEntries((Object.keys(form.value) as (keyof CustomerForm)[]).map((key) => [key, form.value[key] !== baseline.value[key]])) as Record<keyof CustomerForm, boolean>);
 const dirty = computed(() => editing.value && Object.values(diff.value).some(Boolean));
 watch(dirty, value => emit('dirty', value));
@@ -35,14 +39,18 @@ const fieldClass = (key: keyof CustomerForm) => ({ 'field-input': true, changed:
 async function onInnBlur() {
   form.value.inn = normalizeUnp(form.value.inn);
   if (form.value.inn.length !== 9) return;
-  const company = await lookupCompany(form.value.inn);
-  if (company) { form.value.full_legal_name ||= company.fullLegalName || ''; form.value.legal_address ||= company.legalAddress || ''; }
+  await lookupCompany(form.value.inn, company => {
+    form.value.full_legal_name ||= company.fullLegalName || '';
+    form.value.legal_address ||= company.legalAddress || '';
+  });
 }
 async function onIbanBlur() {
   form.value.iban = normalizeIban(form.value.iban);
   if (form.value.iban.length < 15) return;
-  const bank = await lookupBank(form.value.iban);
-  if (bank) { form.value.bank_name ||= bank.bankName || ''; form.value.bic ||= bank.bic || ''; }
+  await lookupBank(form.value.iban, bank => {
+    form.value.bank_name ||= bank.bankName || '';
+    form.value.bic ||= bank.bic || '';
+  });
 }
 async function save() {
   if (saving.value || !dirty.value) return;

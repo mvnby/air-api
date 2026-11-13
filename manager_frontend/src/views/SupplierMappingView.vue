@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import MoneyAmount from '../components/money/MoneyAmount.vue';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api } from '../api';
 import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog } from '../services/ui-feedback';
@@ -31,6 +31,10 @@ const query = ref('');
 const page = ref(1);
 const limit = 25;
 const meta = ref({ total: 0, page: 1, limit, pages: 1 });
+let disposed = false;
+let listRequestId = 0;
+let sourceUrlRequestId = 0;
+const filterRevision = ref(0);
 
 const keyOf = (offer: any) => `${offer.supplier_id}:${offer.external_id}`;
 const readyToApplyCount = computed(() => Object.keys(bulkSelection.value).filter((k) => bulkSelection.value[k] && selectedProductMap.value[k]).length);
@@ -60,30 +64,37 @@ const filteredSources = computed(() =>
 
 const loadFilters = async () => {
   const [sup, src] = await Promise.all([api.listSuppliers(), api.listSupplierSources()]);
+  if (disposed) return;
   suppliers.value = sup.items || [];
   sources.value = src.items || [];
 };
 
 const loadUnmapped = async () => {
+  if (disposed) return;
+  const requestId = ++listRequestId;
+  const requestedPage = page.value;
   loading.value = true;
   error.value = '';
   try {
-    const res = await supplierMappingApi.listUnmapped(page.value, limit, {
+    const res = await supplierMappingApi.listUnmapped(requestedPage, limit, {
       supplierId: supplierFilterId.value ? Number(supplierFilterId.value) : undefined,
       sourceId: sourceFilterId.value ? Number(sourceFilterId.value) : undefined,
       q: query.value,
     });
+    if (disposed || requestId !== listRequestId) return;
     unmapped.value = res.items || [];
-    meta.value = res.meta || { total: 0, page: page.value, limit, pages: 1 };
+    meta.value = res.meta || { total: 0, page: requestedPage, limit, pages: 1 };
     expandedKey.value = null;
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    if (!disposed && requestId === listRequestId) error.value = getApiErrorMessage(e);
   } finally {
-    loading.value = false;
+    if (!disposed && requestId === listRequestId) loading.value = false;
   }
 };
 
 const loadSourceUrlCandidates = async () => {
+  if (disposed) return;
+  const requestId = ++sourceUrlRequestId;
   sourceUrlLoading.value = true;
   error.value = '';
   try {
@@ -92,20 +103,21 @@ const loadSourceUrlCandidates = async () => {
       supplierFilterId.value ? Number(supplierFilterId.value) : undefined,
       sourceFilterId.value ? Number(sourceFilterId.value) : undefined,
     );
+    if (disposed || requestId !== sourceUrlRequestId) return;
     sourceUrlCandidates.value = res.items || [];
     sourceUrlSelection.value = {};
     for (const item of sourceUrlCandidates.value) {
       if (item.source_url) sourceUrlSelection.value[item.source_url] = true;
     }
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    if (!disposed && requestId === sourceUrlRequestId) error.value = getApiErrorMessage(e);
   } finally {
-    sourceUrlLoading.value = false;
+    if (!disposed && requestId === sourceUrlRequestId) sourceUrlLoading.value = false;
   }
 };
 
 const runSuggestions = async (offers: any[]) => {
-  if (!offers.length) return;
+  if (disposed || !offers.length) return;
   suggestionLoading.value = true;
   try {
     const payload = {
@@ -113,6 +125,7 @@ const runSuggestions = async (offers: any[]) => {
       limit_per_offer: 5,
     };
     const res = await api.suggestSupplierOffers(payload);
+    if (disposed) return;
     for (const row of res.items || []) {
       const key = `${row.supplier_id}:${row.external_id}`;
       suggestionMap.value[key] = row;
@@ -125,9 +138,9 @@ const runSuggestions = async (offers: any[]) => {
       }
     }
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    if (!disposed) error.value = getApiErrorMessage(e);
   } finally {
-    suggestionLoading.value = false;
+    if (!disposed) suggestionLoading.value = false;
   }
 };
 
@@ -144,11 +157,14 @@ const toggleMap = async (offer: any) => {
 };
 
 const searchInline = async (offer: any) => {
+  if (disposed) return;
   const key = keyOf(offer);
   const q = (inlineSearchQuery.value[key] || '').trim();
   if (!q) return;
   try {
-    inlineCandidates.value[key] = (await api.smartSearchProducts(q, 20)).map(normalizeCandidate);
+    const candidates = await api.smartSearchProducts(q, 20);
+    if (disposed) return;
+    inlineCandidates.value[key] = candidates.map(normalizeCandidate);
     suggestionMap.value[key] = {
       ...(suggestionMap.value[key] || {}),
       auto_eligible: inlineCandidates.value[key].length === 1,
@@ -158,7 +174,7 @@ const searchInline = async (offer: any) => {
       selectedProductMap.value[key] = inlineCandidates.value[key][0].id;
     }
   } catch (e) {
-    error.value = getApiErrorMessage(e);
+    if (!disposed) error.value = getApiErrorMessage(e);
   }
 };
 
@@ -214,6 +230,7 @@ const applyBulk = async () => {
 };
 
 const startSourceUrlImport = async () => {
+  const requestId = sourceUrlRequestId;
   const urls = sourceUrlCandidates.value
     .map((item) => item.source_url)
     .filter((url) => url && sourceUrlSelection.value[url]);
@@ -228,6 +245,7 @@ const startSourceUrlImport = async () => {
     confirmText: 'Запустить импорт',
     variant: 'warning',
   })) return;
+  if (disposed || requestId !== sourceUrlRequestId) return;
 
   sourceUrlImportLoading.value = true;
   try {
@@ -245,20 +263,25 @@ const startSourceUrlImport = async () => {
   }
 };
 
-watch(supplierFilterId, async (value) => {
-  if (!value) {
-    sourceFilterId.value = '';
-  } else {
-    const sourceValid = filteredSources.value.some((s) => String(s.id) === sourceFilterId.value);
+watch([supplierFilterId, sourceFilterId], ([supplierId, sourceId], [previousSupplierId]) => {
+  // Invalidate immediately, including A → B → A changes within one Vue tick.
+  ++listRequestId;
+  ++sourceUrlRequestId;
+  sourceUrlCandidates.value = [];
+  sourceUrlSelection.value = {};
+  sourceUrlLoading.value = false;
+  page.value = 1;
+  ++filterRevision.value;
+
+  if (supplierId !== previousSupplierId && sourceId) {
+    const sourceValid = supplierId && filteredSources.value.some((source) => String(source.id) === sourceId);
     if (!sourceValid) sourceFilterId.value = '';
   }
-  page.value = 1;
-  await loadUnmapped();
-});
+}, { flush: 'sync' });
 
-watch(sourceFilterId, async () => {
-  page.value = 1;
-  await loadUnmapped();
+// Batch the normalized supplier/source pair into one effective list request.
+watch(filterRevision, () => {
+  void loadUnmapped();
 });
 
 const applySearch = async () => {
@@ -273,8 +296,18 @@ const goToPage = async (nextPage: number) => {
 };
 
 onMounted(async () => {
-  await loadFilters();
-  await loadUnmapped();
+  try {
+    await loadFilters();
+    if (!disposed && listRequestId === 0) await loadUnmapped();
+  } catch (e) {
+    if (!disposed) error.value = getApiErrorMessage(e);
+  }
+});
+
+onBeforeUnmount(() => {
+  disposed = true;
+  ++listRequestId;
+  ++sourceUrlRequestId;
 });
 </script>
 

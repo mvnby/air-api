@@ -73,6 +73,10 @@ exec /bin/mv "$@"
         """#!/usr/bin/env bash
 set -u
 printf 'docker %s\n' "$*" >> "$COMMAND_LOG"
+if [[ "${1:-}" == "login" && "$*" == *"--password-stdin"* ]]; then
+  cat >/dev/null
+  exit 0
+fi
 if [[ "${1:-}" == "inspect" ]]; then
   if [[ "$*" == *"{{json .Config.Env}}"* ]]; then
     printf '%s\\n' "${FAKE_KEYRING_RUNTIME_ENV:-[]}"

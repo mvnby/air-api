@@ -80,6 +80,8 @@ const uploadTags = ref('');
 const uploadUrl = ref('');
 const uploadInput = ref<HTMLInputElement | null>(null);
 const selectedAsset = ref<ManagerMediaAssetResponse | null>(null);
+let disposed = false;
+let assetsRequestVersion = 0;
 const processingJobs = ref<ManagerMediaProcessingJobResponse[]>([]);
 const processingJobsLoading = ref(false);
 let processingJobsTimer: ReturnType<typeof window.setInterval> | null = null;
@@ -214,6 +216,9 @@ const appendUploadedAssets = (items: ManagerMediaAssetResponse[], count: number)
 };
 
 const loadAssets = async () => {
+  if (disposed) return;
+  const requestVersion = ++assetsRequestVersion;
+  const isCurrent = () => !disposed && requestVersion === assetsRequestVersion;
   loading.value = true;
   try {
     const response = await api.listMediaAssets({
@@ -224,6 +229,7 @@ const loadAssets = async () => {
       tag: tag.value || null,
       status: status.value || null,
     });
+    if (!isCurrent()) return;
     assets.value = response.items || [];
     total.value = response.meta.total;
     pages.value = response.meta.pages;
@@ -232,16 +238,18 @@ const loadAssets = async () => {
       if (refreshed) selectedAsset.value = refreshed;
     }
   } catch (err) {
-    setToast(mediaErrorMessage(err, 'Не удалось загрузить медиатеку'), 'error');
+    if (isCurrent()) setToast(mediaErrorMessage(err, 'Не удалось загрузить медиатеку'), 'error');
   } finally {
-    loading.value = false;
+    if (isCurrent()) loading.value = false;
   }
 };
 
 const loadBackgroundRemovalConfig = async () => {
+  if (disposed) return;
   backgroundModelsLoading.value = true;
   try {
     const config = await api.getMediaBackgroundRemovalConfig();
+    if (disposed) return;
     if (config.default_provider) {
       backgroundProvider.value = config.default_provider as BackgroundRemovalProvider;
     }
@@ -252,13 +260,14 @@ const loadBackgroundRemovalConfig = async () => {
       backgroundModel.value = config.default_rembg_model;
     }
   } catch (err) {
-    console.warn('Failed to load background removal config', err);
+    if (!disposed) console.warn('Failed to load background removal config', err);
   } finally {
-    backgroundModelsLoading.value = false;
+    if (!disposed) backgroundModelsLoading.value = false;
   }
 };
 
 const loadProcessingJobs = async () => {
+  if (disposed) return;
   const activeBefore = new Set(
     processingJobs.value
       .filter((job) => job.status === 'queued' || job.status === 'running')
@@ -267,6 +276,7 @@ const loadProcessingJobs = async () => {
   processingJobsLoading.value = true;
   try {
     const response = await api.listMediaProcessingJobs({ limit: 12 });
+    if (disposed) return;
     processingJobs.value = response.items || [];
     const finished = processingJobs.value.some((job) => (
       activeBefore.has(job.job_id) && (job.status === 'success' || job.status === 'failed')
@@ -275,9 +285,9 @@ const loadProcessingJobs = async () => {
       void loadAssets();
     }
   } catch (err) {
-    console.warn('Failed to load media processing jobs', err);
+    if (!disposed) console.warn('Failed to load media processing jobs', err);
   } finally {
-    processingJobsLoading.value = false;
+    if (!disposed) processingJobsLoading.value = false;
   }
 };
 
@@ -597,6 +607,12 @@ const applyFilters = () => {
   void loadAssets();
 };
 
+// Filters are submitted explicitly, but editing them already makes a pending read obsolete.
+watch([query, kind, tag, status, page, limit], () => {
+  assetsRequestVersion += 1;
+  loading.value = false;
+}, { flush: 'sync' });
+
 watch(page, () => void loadAssets());
 
 onMounted(() => {
@@ -612,6 +628,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  disposed = true;
   document.removeEventListener('paste', onPaste);
   if (processingJobsTimer) window.clearInterval(processingJobsTimer);
 });

@@ -84,7 +84,15 @@ const newBranchName = ref('');
 const newBranchAddress = ref('');
 const creatingBranch = ref(false);
 
-const { lookupCompany, lookupBank, isEgrLoading, isBankLoading } = useB2BLookup();
+const { lookupCompany, lookupBank, invalidateLookups, isEgrLoading, isBankLoading } = useB2BLookup({
+  companyInput: () => companyInn.value,
+  bankInput: () => companyIban.value,
+  context: [() => props.lead, () => props.lead.id, () => customerType.value, () => existingCustomerId.value],
+});
+const close = () => {
+  invalidateLookups();
+  emit('close');
+};
 
 const searchTimeout = ref<number | null>(null);
 const searchStatus = ref<'idle' | 'searching' | 'found' | 'not_found'>('idle');
@@ -226,21 +234,19 @@ watch(() => props.lead, () => {
 
 const onInnBlur = async () => {
   if (!companyInn.value || companyInn.value.length !== 9) return;
-  const data = await lookupCompany(companyInn.value);
-  if (data) {
+  await lookupCompany(companyInn.value, data => {
     if (!companyFullLegalName.value) companyFullLegalName.value = data.fullLegalName || '';
     if (!companyLegalAddress.value) companyLegalAddress.value = data.legalAddress || '';
     if (!companyName.value) companyName.value = data.fullLegalName || '';
-  }
+  });
 };
 
 const onIbanBlur = async () => {
   if (!companyIban.value || companyIban.value.length < 15) return;
-  const data = await lookupBank(companyIban.value);
-  if (data) {
+  await lookupBank(companyIban.value, data => {
     if (!companyBankName.value) companyBankName.value = data.bankName || '';
     if (!companyBic.value) companyBic.value = data.bic || '';
-  }
+  });
 };
 
 const createBranchForExistingCustomer = async () => {
@@ -406,7 +412,7 @@ const submitQualify = async () => {
         </div>
         <button
           class="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
-          @click="emit('close')"
+          @click="close"
         >
           <span class="material-icons-round text-[18px]">close</span>
         </button>
