@@ -4,7 +4,6 @@ const { canManagePlatform, canDeleteCatalog } = useCatalogAccess();
 import BynSymbol from '../components/money/BynSymbol.vue';
 import MoneyAmount from '../components/money/MoneyAmount.vue';
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
-import { watchDebounced } from '@vueuse/core';
 import {
     api,
     type Product,
@@ -629,13 +628,30 @@ watch(showModal, (val) => {
 });
 
 let listGeneration = 0;
-const loadProducts = async () => {
+let disposed = false;
+let initialized = false;
+let filterReloadTimer: ReturnType<typeof window.setTimeout> | undefined;
+let filterMaxWaitTimer: ReturnType<typeof window.setTimeout> | undefined;
+const cancelScheduledFilterReload = () => {
+    window.clearTimeout(filterReloadTimer);
+    window.clearTimeout(filterMaxWaitTimer);
+    filterReloadTimer = undefined;
+    filterMaxWaitTimer = undefined;
+};
+const invalidateProductList = () => {
+    listGeneration += 1;
+    loadingMore.value = false;
+};
+const loadProducts = async (): Promise<boolean> => {
+  if (disposed) return false;
+  cancelScheduledFilterReload();
+  loadingMore.value = false;
   const generation = ++listGeneration;
   loading.value = true;
   page.value = 1;
   try {
     const data = await catalogManagementApi.list(currentFilters(), 1, sortMode.value);
-    if (generation !== listGeneration) return;
+    if (disposed || generation !== listGeneration) return false;
     products.value = data.items;
     totalProducts.value = data.meta.total;
     if (!data.meta.total) catalogUsage.track('filter_zero_results', 'zero_results');
@@ -649,9 +665,10 @@ const loadProducts = async () => {
         try {
           target = await api.getManagerProduct(pendingEditProductId.value);
         } catch (error) {
-          console.error(error);
+          if (!disposed && generation === listGeneration) console.error(error);
         }
       }
+      if (disposed || generation !== listGeneration) return false;
       if (target) {
         pendingEditHandled.value = true;
         if (pendingProductPanel.value === 'media') openSearchModal(target);
@@ -661,30 +678,35 @@ const loadProducts = async () => {
         setToast(`Товар #${pendingEditProductId.value} не найден`);
       }
     }
+    return true;
   } catch (e) {
-    if (generation !== listGeneration) return;
+    if (disposed || generation !== listGeneration) return false;
     setToast(`Ошибка загрузки товаров: ${getApiErrorMessage(e)}`);
     console.error(e);
+    return false;
   } finally {
-    if (generation === listGeneration) loading.value = false;
+    if (!disposed && generation === listGeneration) loading.value = false;
   }
 };
 
-const loadMore = async () => {
-    if (loading.value || loadingMore.value || !hasMore.value) return;
+const loadMore = async (): Promise<boolean> => {
+    if (disposed || loading.value || loadingMore.value || !hasMore.value) return false;
     const generation = listGeneration;
     loadingMore.value = true;
     const nextPage = page.value + 1;
     try {
         const data = await catalogManagementApi.list(currentFilters(), nextPage, sortMode.value);
-        if (generation !== listGeneration) return;
+        if (disposed || generation !== listGeneration) return false;
         page.value = nextPage;
         const seen = new Set(products.value.map(item => item.id));
         products.value.push(...data.items.filter(item => !seen.has(item.id)));
         totalProducts.value = data.meta.total;
         hasMore.value = page.value < data.meta.pages;
-    } catch (error) { if (generation === listGeneration) setToast(getApiErrorMessage(error)); }
-    finally { loadingMore.value = false; }
+        return true;
+    } catch (error) {
+        if (!disposed && generation === listGeneration) setToast(getApiErrorMessage(error));
+        return false;
+    } finally { if (!disposed && generation === listGeneration) loadingMore.value = false; }
 };
 
 const startEditingPrice = (product: Product) => {
@@ -1246,6 +1268,11 @@ const selectImage = async (url: string) => {
 };
 
 // Intersection Observer for infinite scroll
+watch(sentinel, (element, previous) => {
+    if (previous) catalogObserver?.unobserve(previous);
+    if (element) catalogObserver?.observe(element);
+}, { flush: 'post' });
+
 onMounted(async () => {
     const params = new URLSearchParams(window.location.search);
     const savedContext = loadProductWorkspaceContext();
@@ -1261,6 +1288,7 @@ onMounted(async () => {
         const brandSlug = params.get('brand');
         if (brandSlug) {
             const response = await api.listManagerBrands();
+            if (disposed) return;
             const brand = response.items.find(item => item.slug === brandSlug);
             if (brand) managementFilters.value.brandIds = [brand.id];
         }
@@ -1273,30 +1301,33 @@ onMounted(async () => {
     pendingReturnTo.value = params.get('returnTo') || '';
     pendingProductPanel.value = params.get('productPanel') === 'media' ? 'media' : 'edit';
     document.addEventListener('paste', onProductImagePaste);
-    await loadProducts();
-    if (savedContext && contextMatchesList) {
-        while (page.value < savedContext.page && hasMore.value) {
-            await loadMore();
+    initialized = true;
+    const loaded = await loadProducts();
+    if (disposed) return;
+    const generation = listGeneration;
+    if (loaded && savedContext && contextMatchesList) {
+        while (!disposed && generation === listGeneration && page.value < savedContext.page && hasMore.value) {
+            if (!await loadMore()) break;
         }
         await nextTick();
-        const scrollContainer = getProductsScrollContainer();
-        if (scrollContainer) scrollContainer.scrollTop = savedContext.scrollTop;
+        if (!disposed && generation === listGeneration) {
+            const scrollContainer = getProductsScrollContainer();
+            if (scrollContainer) scrollContainer.scrollTop = savedContext.scrollTop;
+        }
     }
-
+    if (disposed) return;
     catalogObserver = new IntersectionObserver((entries) => {
-        if (entries[0]?.isIntersecting && hasMore.value && !loadingMore.value) {
-            loadMore();
+        if (!disposed && entries[0]?.isIntersecting && hasMore.value && !loadingMore.value) {
+            void loadMore();
         }
     }, { threshold: 0.1 });
-
-    initialized = true;
-    // Watch for sentinel element
-    watch(sentinel, (el) => {
-        if (el) catalogObserver?.observe(el);
-    });
+    if (sentinel.value) catalogObserver.observe(sentinel.value);
 });
 
 onUnmounted(() => {
+    disposed = true;
+    invalidateProductList();
+    cancelScheduledFilterReload();
     catalogObserver?.disconnect();
     document.removeEventListener('paste', onProductImagePaste);
 });
@@ -1329,11 +1360,22 @@ const deleteProduct = async (product: Product) => {
     }
 };
 
-let initialized = false;
-watchDebounced(
+const runScheduledFilterReload = () => {
+    cancelScheduledFilterReload();
+    if (!disposed && initialized) applyFilters();
+};
+watch(
     () => [managementFilters.value, sortMode.value],
-    () => { if (initialized) applyFilters(); },
-    { debounce: 350, maxWait: 1000, deep: true },
+    () => {
+        if (!initialized || disposed) return;
+        // Old criteria become invalid immediately, including during debounce.
+        invalidateProductList();
+        loading.value = true;
+        window.clearTimeout(filterReloadTimer);
+        filterReloadTimer = window.setTimeout(runScheduledFilterReload, 350);
+        filterMaxWaitTimer ??= window.setTimeout(runScheduledFilterReload, 1000);
+    },
+    { deep: true, flush: 'sync' },
 );
 
 </script>
