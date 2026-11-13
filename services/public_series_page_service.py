@@ -14,7 +14,6 @@ from schemas import (
     PublicSeriesPageResponse,
 )
 from services.feature_resolver_service import FeatureResolverService
-from services.product_read_service import ProductReadService
 from services.product_response_mapper import map_product_to_response
 from services.product_series_payloads import build_product_series_response
 from services.public_catalog_service import PublicCatalogService
@@ -73,7 +72,6 @@ class PublicSeriesPageService:
         if not projections and not is_canonical:
             return None
         products = [projection.product for projection in projections]
-        supply_metrics = await ProductReadService.get_supply_metrics_map(session, products)
         await FeatureResolverService.resolve_for_products(session, products)
         await enrich_public_products(session, products, tenant_scope=tenant_scope)
         series.__dict__["_catalog_documents"] = await CatalogDocumentService.get_effective_documents(
@@ -104,7 +102,7 @@ class PublicSeriesPageService:
             products=[
                 map_product_to_response(
                     projection,
-                    supply_metrics=supply_metrics.get(int(projection.product.id)),
+                    supply_metrics=projection.supply_metrics,
                     warranties=warranties,
                 )
                 for projection in projections

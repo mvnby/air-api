@@ -13,7 +13,6 @@ from services.feature_resolver_service import FeatureResolverService
 from services.public_catalog_service import PublicCatalogService, PublicProductPage
 from services.public_catalog_visibility_service import PublicProductProjection
 from services.public_catalog_disclosure import CANONICAL_PUBLIC_DISCLOSURE
-from services.product_service import ProductService
 from services.warranty_policy_resolver import WarrantyPolicyResolver
 
 
@@ -95,25 +94,20 @@ async def test_public_catalog_includes_city_availability(monkeypatch):
                     price=product.price,
                     old_price=product.old_price,
                     disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
+                    supply_metrics={
+                        "vitebsk_qty": 0,
+                        "minsk_qty": 3,
+                        "availability_status": "available_2_3_days",
+                    },
                 )
             ],
             "meta": {"total": 1, "page": 1, "limit": 20, "pages": 1},
-        }
-
-    async def fake_get_supply_metrics_map(*args, **kwargs):
-        return {
-            product.id: {
-                "vitebsk_qty": 0,
-                "minsk_qty": 3,
-                "availability_status": "available_2_3_days",
-            }
         }
 
     async def fake_resolve_features(*args, **kwargs):
         return {}
 
     monkeypatch.setattr(PublicCatalogService, "get_catalog_page", fake_get_catalog_page)
-    monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
     monkeypatch.setattr(api_products, "enrich_public_products", AsyncMock(return_value=None))
     monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))
@@ -161,24 +155,19 @@ async def test_public_product_detail_includes_city_availability(monkeypatch):
                 price=product.price,
                 old_price=product.old_price,
                 disclosure_policy=CANONICAL_PUBLIC_DISCLOSURE,
+                supply_metrics={
+                    "vitebsk_qty": 0,
+                    "minsk_qty": 0,
+                    "availability_status": "check_availability",
+                },
             ),
             siblings=[],
         )
-
-    async def fake_get_supply_metrics_map(*args, **kwargs):
-        return {
-            product.id: {
-                "vitebsk_qty": 0,
-                "minsk_qty": 0,
-                "availability_status": "check_availability",
-            }
-        }
 
     async def fake_resolve_features(*args, **kwargs):
         return {}
 
     monkeypatch.setattr(PublicCatalogService, "get_product_page", fake_get_product_page)
-    monkeypatch.setattr(ProductService, "get_supply_metrics_map", fake_get_supply_metrics_map)
     monkeypatch.setattr(FeatureResolverService, "resolve_for_products", fake_resolve_features)
     monkeypatch.setattr(api_products, "enrich_public_products", AsyncMock(return_value=None))
     monkeypatch.setattr(WarrantyPolicyResolver, "resolve_public", AsyncMock(return_value={}))

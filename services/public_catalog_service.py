@@ -52,9 +52,14 @@ class PublicCatalogService:
         session: AsyncSession,
         projections: list[PublicProductProjection],
     ) -> list[PublicProductProjection]:
+        supply_metrics = await ProductReadService.get_supply_metrics_map(
+            session,
+            [projection.product for projection in projections],
+        )
         return await InstallationDiscountService.decorate_public_projections(
             session,
             projections,
+            supply_metrics=supply_metrics,
         )
 
     @staticmethod
@@ -196,17 +201,15 @@ class PublicCatalogService:
             )
             projections = await PublicCatalogService._with_installation_discounts(
                 session,
-                [
-                    PublicCatalogVisibilityService.project_product(product),
-                    *[
-                        PublicCatalogVisibilityService.project_product(sibling)
-                        for sibling in siblings
-                    ],
-                ],
+                [PublicCatalogVisibilityService.project_product(product)],
             )
             return PublicProductPage(
                 product=projections[0],
-                siblings=projections[1:],
+                # Sibling cards expose prices, but no supply or discount fields.
+                siblings=[
+                    PublicCatalogVisibilityService.project_product(sibling)
+                    for sibling in siblings
+                ],
             )
 
         row = await PublicCatalogDAO.get_by_identifier(
@@ -231,9 +234,9 @@ class PublicCatalogService:
         )[:sibling_limit]
         decorated = await PublicCatalogService._with_installation_discounts(
             session,
-            [projection, *ordered],
+            [projection],
         )
-        return PublicProductPage(product=decorated[0], siblings=decorated[1:])
+        return PublicProductPage(product=decorated[0], siblings=ordered)
 
     @staticmethod
     async def get_vitebsk_featured_products(
