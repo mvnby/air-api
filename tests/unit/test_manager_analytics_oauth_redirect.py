@@ -16,6 +16,7 @@ def _auth():
         staff_user_id=42,
         username="owner",
         tenant_membership_id=8,
+        access_kind="membership",
     )
 
 

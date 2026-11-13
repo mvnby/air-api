@@ -192,7 +192,6 @@ async def get_catalog(
         search=q,
     )
     products = [projection.product for projection in payload["items"]]
-    supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
     await enrich_public_products(session, products, tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(session, products)
@@ -201,7 +200,7 @@ async def get_catalog(
         items=[
             map_product_to_response(
                 projection,
-                supply_metrics=supply_metrics.get(projection.product.id),
+                supply_metrics=projection.supply_metrics,
                 warranties=warranties,
             )
             for projection in payload["items"]
@@ -235,14 +234,13 @@ async def get_vitebsk_featured_products(
         limit=6,
     )
     products = [projection.product for projection in projections]
-    supply_metrics = await ProductService.get_supply_metrics_map(session, products)
     await FeatureResolverService.resolve_for_products(session, products)
     await enrich_public_products(session, products, tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(session, products)
     return [
         map_product_to_response(
             projection,
-            supply_metrics=supply_metrics.get(projection.product.id),
+            supply_metrics=projection.supply_metrics,
             warranties=warranties,
         )
         for projection in projections
@@ -304,7 +302,6 @@ async def get_product_by_identifier(
     product = page.product.product
     siblings = [projection.product for projection in page.siblings]
     visible_products = [product, *siblings]
-    supply_metrics = await ProductService.get_supply_metrics_map(session, [product])
     await FeatureResolverService.resolve_for_products(session, [product])
     await enrich_public_products(session, [product], tenant_scope=tenant_scope)
     warranties = await WarrantyPolicyResolver.resolve_public(
@@ -314,6 +311,6 @@ async def get_product_by_identifier(
     return map_product_to_response(
         page.product,
         series_siblings=page.siblings,
-        supply_metrics=supply_metrics.get(product.id),
+        supply_metrics=page.product.supply_metrics,
         warranties=warranties,
     )

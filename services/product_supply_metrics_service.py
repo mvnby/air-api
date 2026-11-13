@@ -38,8 +38,6 @@ class ProductSupplyMetricsService:
         if not product_ids:
             return {}
 
-        fx_rate = await FxRateService.get_supplier_usd_byn_rate(session)
-
         mappings = await SupplierMappingDAO.list_mappings_for_products(session, product_ids)
         if not mappings:
             local_stock_rows = await ProductLocalStockDAO.list_for_products(session, product_ids)
@@ -73,9 +71,19 @@ class ProductSupplyMetricsService:
         )
         offers = list(offers_res.scalars().all())
         offer_map = {(o.supplier_id, o.external_id): o for o in offers}
+        fx_rate = None
+        if any(
+            offer.wholesale_value is not None
+            and (offer.wholesale_currency or "").upper() == "USD"
+            for offer in offers
+        ):
+            fx_rate = await FxRateService.get_supplier_usd_byn_rate(session)
 
         source_res = await session.execute(
-            select(SupplierPriceSource).where(SupplierPriceSource.is_active.is_(True))
+            select(SupplierPriceSource).where(
+                SupplierPriceSource.is_active.is_(True),
+                SupplierPriceSource.supplier_id.in_({m.supplier_id for m in mappings}),
+            )
         )
         sources = source_res.scalars().all()
         supplier_city = {}

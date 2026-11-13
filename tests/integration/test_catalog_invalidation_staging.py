@@ -10,6 +10,7 @@ import pytest
 
 from crud.catalog_revision import CatalogRevisionDAO
 from models import (
+    GlobalConfig,
     IntegrationOutboxEvent,
     Product,
     Storefront,
@@ -326,3 +327,40 @@ async def test_concurrent_first_global_revision_bumps_are_monotonic(db_engine):
             "g1-s0",
             "g2-s0",
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scoped", [False, True])
+async def test_retained_revision_cannot_reuse_an_invalidation_key(db_engine, scoped):
+    assert db_engine.dialect.name == "postgresql"
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
+    scope_kwargs = {"tenant_scope": scope} if scoped else {}
+    async with factory() as setup:
+        await CatalogRevisionService.stage_invalidation(setup, reason="initial", **scope_kwargs)
+        await setup.commit()
+
+    async with factory() as retained, factory() as concurrent:
+        if scoped:
+            original = await retained.get(StorefrontCatalogRevision, (1, 1))
+        else:
+            original = (await retained.execute(select(GlobalConfig).where(
+                GlobalConfig.key == "catalog_revision",
+            ))).scalar_one()
+        await retained.commit()
+        await CatalogRevisionService.stage_invalidation(concurrent, reason="concurrent", **scope_kwargs)
+        await concurrent.commit()
+        assert (original.revision if scoped else int(original.value)) == 1
+
+        result = await CatalogRevisionService.stage_invalidation(retained, reason="retained", **scope_kwargs)
+        await retained.commit()
+        assert result["storefront_revision" if scoped else "revision"] == 3
+
+    async with factory() as verification:
+        events = (await verification.execute(select(IntegrationOutboxEvent).where(
+            IntegrationOutboxEvent.event_type == CATALOG_CACHE_INVALIDATION_REQUESTED_EVENT,
+        ))).scalars().all()
+        assert len(events) == 3
+        assert {event.payload["cache_key"] for event in events} == (
+            {"g0-s1", "g0-s2", "g0-s3"} if scoped else {"g1-s0", "g2-s0", "g3-s0"}
+        )

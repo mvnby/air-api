@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,8 @@ class PublicProductProjection:
     old_price: int | None
     disclosure_policy: PublicCatalogDisclosurePolicy
     installation_discount: int = 0
+    # Request-local calculation shared by discount and public response mapping.
+    supply_metrics: dict[str, Any] | None = None
 
     @property
     def pricing(self) -> tuple[int, int | None]:

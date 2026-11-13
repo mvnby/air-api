@@ -104,6 +104,49 @@ describe('BankReceiptsView', () => {
 
 
 describe('bank receipt monetary display', () => {
+  it.each([false, true])('requires an explicit full reset for hidden allocations (visible row: %s)', async (withVisibleRow) => {
+    const wrapper = mount(BankReceiptAllocationDialog, {
+      props: {
+        open: true,
+        detail: {
+          receipt_id: 1, status: 'matched', currency: 'USD', receipt_amount: 150,
+          allocated_amount: 150, unallocated_amount: 0,
+          orders: withVisibleRow ? [{
+            order_id: 279, status: 'execution', created_at: '2026-09-01T10:00:00Z',
+            total_amount: 50, total_payments: 50, balance_due_before_receipt: 50,
+            current_allocation: 50, resulting_balance_due: 0,
+          }] : [],
+        },
+        loading: false,
+        saving: false,
+      },
+      attachTo: document.body,
+    });
+    mountedWrappers.push(wrapper);
+    const button = (text: string) => [...document.body.querySelectorAll('button')]
+      .find((item) => item.textContent?.trim() === text)!;
+
+    expect(document.body.textContent).toContain('Некоторые прежние распределения нельзя показать в валюте поступления.');
+    expect(document.body.textContent).toContain('включая показанные');
+    expect(wrapper.findAllComponents(MoneyAmount)[2]!.props('value')).toBe(150);
+    expect(button('По выбранным долгам').disabled).toBe(true);
+    expect(button('Старые долги сначала').disabled).toBe(true);
+    expect(button('Сохранить распределение').disabled).toBe(true);
+    if (withVisibleRow) {
+      expect(document.body.querySelector<HTMLInputElement>('input[type="number"]')!.disabled).toBe(true);
+    }
+
+    button('Снять все распределения').click();
+    await flushPromises();
+    expect(wrapper.emitted('save')).toBeUndefined();
+    expect(button('Сохранить распределение').disabled).toBe(false);
+    expect(wrapper.findAllComponents(MoneyAmount)[2]!.props('value')).toBe(0);
+    expect(document.body.textContent).toContain('Все распределения будут сняты после сохранения.');
+    button('Сохранить распределение').click();
+    await flushPromises();
+    expect(wrapper.emitted('save')).toEqual([[[]]]);
+  });
+
   it.each([0, -12.5, 12.345, 1234567890.12])('preserves ru-BY precision for %s', async (amount) => {
     const wrapper = await mountView([{ ...receipt, amount, unallocated_amount: 0 }]);
     const money = wrapper.findComponent(MoneyAmount);
