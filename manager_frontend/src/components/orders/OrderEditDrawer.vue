@@ -2,9 +2,10 @@
 import { ChevronDown, FileText, UsersRound } from 'lucide-vue-next';
 import { hasLineEdits } from './order-line-drafts';
 import { useOrderKeyboardViewport } from '../../composables/useOrderKeyboardViewport';
+import { defineManagerAsyncComponent } from '../../services/manager-async-component';
 import { readOrderProposalContext } from '../../services/order-navigation';
 import { replaceManagerLocation } from '../../services/manager-navigation-history';
-import { computed, defineAsyncComponent, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
+import { computed, nextTick, onScopeDispose, ref, toRaw, watch } from 'vue';
 import OrderResponsiblePanel from './OrderResponsiblePanel.vue';
 import { useOrderResponsibility } from '../../composables/useOrderResponsibility';
 import type { OrderWithResponsibility } from '../../services/order-responsibility';
@@ -422,7 +423,7 @@ watch(activeProposalId, (proposalId) => {
   url.searchParams.set('proposalId', String(proposalId));
   replaceManagerLocation(`${url.pathname}${url.search}`);
 }, { flush: 'sync' });
-const EnvelopePrintDialog = defineAsyncComponent(() => import('../envelopes/EnvelopePrintDialog.vue'));
+const EnvelopePrintDialog = defineManagerAsyncComponent('EnvelopePrintDialog', () => import('../envelopes/EnvelopePrintDialog.vue'), 'panel');
 const showEnvelope = ref(false);
 const customer = computed(() => props.order?.customer ?? null);
 const customerDisplayName = computed(() => customer.value?.full_legal_name || customer.value?.name || '');

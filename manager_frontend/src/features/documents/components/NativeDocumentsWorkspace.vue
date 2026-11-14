@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+import { defineManagerAsyncComponent } from '../../../services/manager-async-component';
+import { computed, nextTick, ref, watch } from 'vue';
 import { ClipboardCheck, Download, Ellipsis, Eye, FileText, Hammer, Handshake, House, LoaderCircle, PenLine, ReceiptText, Route, Send, Truck, Wrench } from 'lucide-vue-next';
 import { DOCUMENT_ROLE_OPTIONS, EXTERNAL_CONTRACT_FILE_ACCEPT } from '../model/document-constants';
 import { ManagerDocsService, type ManagedDocumentItem, type ManagerOrderDetailResponse, type ManagerOrderDocumentItem } from '../../../client';
@@ -54,7 +55,7 @@ import {
   officialDocumentTitle,
 } from '../model/native-document-options';
 
-const OrderTemplateEditor = defineAsyncComponent(() => import('./OrderTemplateEditor.vue'));
+const OrderTemplateEditor = defineManagerAsyncComponent('OrderTemplateEditor', () => import('./OrderTemplateEditor.vue'), 'panel');
 
 const props = defineProps<{
   order: ManagerOrderDetailResponse;

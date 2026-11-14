@@ -166,7 +166,8 @@ def test_ci_uses_dependency_cache_and_isolated_compose_cleanup():
     assert manager_upload["uses"] == (
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     )
-    assert manager_upload["with"]["retention-days"] == 1
+    # Release images retain recent public chunks from these non-cumulative builds.
+    assert manager_upload["with"]["retention-days"] == 8
     assert manager_upload["with"]["if-no-files-found"] == "error"
     assert manager_upload["with"]["overwrite"] is True
     manager_steps = "\n".join(

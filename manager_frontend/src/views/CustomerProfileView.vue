@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { defineManagerAsyncComponent } from '../services/manager-async-component';
 import { navigateManager, returnToManager } from '../services/manager-navigation-history';
 import { orderPageUrl } from '../services/order-navigation';
-import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ArrowLeft, Archive, Plus } from 'lucide-vue-next';
 import { api } from '../api';
 import type { ManagerCatalogCustomerItemResponse } from '../client';
@@ -17,11 +18,11 @@ import { getApiErrorMessage } from '../utils/api-errors';
 import { confirmDialog, notify } from '../services/ui-feedback';
 import { registerUnsavedNavigationGuard } from '../services/unsaved-navigation-guard';
 
-const CustomerContractsPanel = defineAsyncComponent(() => import('../components/customers/CustomerContractsPanel.vue'));
-const CustomerDocumentsPanel = defineAsyncComponent(() => import('../components/customers/CustomerDocumentsPanel.vue'));
-const CustomerEquipmentPanel = defineAsyncComponent(() => import('../components/customers/CustomerEquipmentPanel.vue'));
-const CustomerReconciliationPanel = defineAsyncComponent(() => import('../components/customers/CustomerReconciliationPanel.vue'));
-const EnvelopePrintDialog = defineAsyncComponent(() => import('../components/envelopes/EnvelopePrintDialog.vue'));
+const CustomerContractsPanel = defineManagerAsyncComponent('CustomerContractsPanel', () => import('../components/customers/CustomerContractsPanel.vue'), 'panel');
+const CustomerDocumentsPanel = defineManagerAsyncComponent('CustomerDocumentsPanel', () => import('../components/customers/CustomerDocumentsPanel.vue'), 'panel');
+const CustomerEquipmentPanel = defineManagerAsyncComponent('CustomerEquipmentPanel', () => import('../components/customers/CustomerEquipmentPanel.vue'), 'panel');
+const CustomerReconciliationPanel = defineManagerAsyncComponent('CustomerReconciliationPanel', () => import('../components/customers/CustomerReconciliationPanel.vue'), 'panel');
+const EnvelopePrintDialog = defineManagerAsyncComponent('EnvelopePrintDialog', () => import('../components/envelopes/EnvelopePrintDialog.vue'), 'panel');
 const params = new URLSearchParams(window.location.search);
 const customerId = Number(params.get('customerId'));
 const editContractId = Number(params.get('editContractId')) || undefined;

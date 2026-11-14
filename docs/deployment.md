@@ -360,6 +360,25 @@ Application release and database maintenance are separate lifecycles:
 - cleanup retains three backend releases and never runs a global
   `docker system prune -af`.
 
+Both backend image build paths retain Manager's content-hashed JS/CSS and
+supporting assets from up to five previous successful main CI builds within
+seven days. `scripts/ci/retain_manager_assets.py` reads the original CI artifacts
+(retained for eight days), verifies the successful main-push run, ancestor SHA
+and archive digest, and copies only hashed public assets into the new image.
+The current Manager dist is downloaded from the exact successful CI run selected
+by the release gate, rather than rebuilt at deployment. CI uses the production
+`WEBSITE_URL` and stamps a commit-bound release manifest, so archived and deployed
+module graphs are identical. The Patroni caller passes the same run ID and
+`actions: read` permission to its reusable workflow.
+Old HTML, source maps and runtime data are excluded. Asset-name collisions or
+history API failures stop the build; expired artifacts are skipped. Each CI
+artifact contains only its own build, so retained history does not accumulate.
+An empty history is allowed for bootstrap. Unstamped artifacts from before this
+contract are skipped because their build inputs differed from production. Tabs
+opened before the first release of this fix need one manual reload to acquire
+the recovery UI. Later tabs outside the retained window show a recovery message
+instead of a blank workspace; reloading remains user initiated.
+
 Before compose promotion, failed-candidate recovery restores the active runtime
 image and canonical compose together under the same deployment lock. After the
 Google token-directory migration, manual rollback accepts only images labeled
