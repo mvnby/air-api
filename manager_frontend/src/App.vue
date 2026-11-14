@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { defineManagerAsyncComponent } from './services/manager-async-component';
+import { managerModuleReloadKey } from './services/manager-module-recovery';
+import ManagerModuleRecoveryHost from './components/manager/ManagerModuleRecoveryHost.vue';
 import InvitationAcceptView from './views/InvitationAcceptView.vue';
 import { ManagerContextError } from './services/manager-storefront-selection';
 import ManagerStorefrontSwitcherHost from './components/manager/ManagerStorefrontSwitcherHost.vue';
 import { managerProfileApi, applyOwnProfile } from './services/manager-profile';
 import { inboxChangedEvent } from './services/lead-inbox';
 import { managerLeadsCounterState } from './services/manager-dashboard-state';
-import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, provide, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { Zap, Loader2, AlertTriangle } from 'lucide-vue-next';
 import { api } from './api';
 import { getApiErrorMessage } from './utils/api-errors';
@@ -46,55 +49,56 @@ import {
   isManagerPathAllowed,
   canReadOwnInstallerWorks,
 } from './manager-capabilities';
-const WorkerPayView = defineAsyncComponent(() => import('./views/WorkerPayView.vue'));
-const WorkerMoneyView = defineAsyncComponent(() => import('./views/WorkerMoneyView.vue'));
-const InstallerWorksView = defineAsyncComponent(() => import('./views/InstallerWorksView.vue'));
-const ProductsView = defineAsyncComponent(() => import('./views/ProductsView.vue'));
-const TenantCatalogView = defineAsyncComponent(() => import('./views/TenantCatalogView.vue'));
-const CatalogDecisionWorkspaceView = defineAsyncComponent(() => import('./views/CatalogDecisionWorkspaceView.vue'));
-const ProductCollectionsView = defineAsyncComponent(() => import('./views/ProductCollectionsView.vue'));
-const ProductWorkspaceView = defineAsyncComponent(() => import('./views/ProductWorkspaceView.vue'));
-const MediaLibraryView = defineAsyncComponent(() => import('./views/MediaLibraryView.vue'));
-const CustomersView = defineAsyncComponent(() => import('./views/CustomersView.vue'));
-const CustomerProfileView = defineAsyncComponent(() => import('./views/CustomerProfileView.vue'));
-const OrdersKanbanView = defineAsyncComponent(() => import('./views/OrdersKanbanView.vue'));
-const OrderDetailView = defineAsyncComponent(() => import('./views/OrderDetailView.vue'));
-const LeadsView = defineAsyncComponent(() => import('./views/LeadsView.vue'));
-const PersonalTasksView = defineAsyncComponent(() => import('./views/PersonalTasksView.vue'));
-const CallRecordingsView = defineAsyncComponent(() => import('./views/CallRecordingsView.vue'));
-const CalendarDashboard = defineAsyncComponent(() => import('./views/CalendarDashboard.vue'));
-const ManagerHomeView = defineAsyncComponent(() => import('./views/ManagerHome.vue'));
-const InstallersView = defineAsyncComponent(() => import('./views/InstallersView.vue'));
-const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
-const PlatformCompaniesView = defineAsyncComponent(() => import('./views/PlatformCompaniesView.vue'));
-const CompanySitesView = defineAsyncComponent(() => import('./views/CompanySitesView.vue'));
-const PlatformAccessView = defineAsyncComponent(() => import('./views/PlatformAccessView.vue'));
-const PlatformSettingsView = defineAsyncComponent(() => import('./views/PlatformSettingsView.vue'));
-const SettingsBackupView = defineAsyncComponent(() => import('./views/SettingsBackupView.vue'));
-const DocumentsSettingsView = defineAsyncComponent(() => import('./views/DocumentsSettingsView.vue'));
-const TariffsView = defineAsyncComponent(() => import('./views/TariffsView.vue'));
-const InstallationRatesView = defineAsyncComponent(() => import('./views/InstallationRatesView.vue'));
-const InstallationDiscountsView = defineAsyncComponent(() => import('./views/InstallationDiscountsView.vue'));
-const ServiceEstimatesView = defineAsyncComponent(() => import('./views/ServiceEstimatesView.vue'));
-const BankReceiptsView = defineAsyncComponent(() => import('./views/BankReceiptsView.vue'));
-const MailView = defineAsyncComponent(() => import('./views/MailView.vue'));
-const TagsView = defineAsyncComponent(() => import('./views/TagsView.vue'));
-const BrandsView = defineAsyncComponent(() => import('./views/BrandsView.vue'));
-const FeaturesView = defineAsyncComponent(() => import('./views/FeaturesView.vue'));
-const FeatureSeriesMigrationView = defineAsyncComponent(() => import('./views/FeatureSeriesMigrationView.vue'));
-const SupplierFeedsView = defineAsyncComponent(() => import('./views/SupplierFeedsView.vue'));
-const SupplierMappingView = defineAsyncComponent(() => import('./views/SupplierMappingView.vue'));
-const CatalogQualityView = defineAsyncComponent(() => import('./views/CatalogQualityView.vue'));
-const SupplyRequestsView = defineAsyncComponent(() => import('./views/SupplyRequestsView.vue'));
-const EquipmentRegistryView = defineAsyncComponent(() => import('./views/EquipmentRegistryView.vue'));
-const ProfileSecurityView = defineAsyncComponent(() => import('./views/ProfileSecurityView.vue'));
-const AnalyticsConnectionsView = defineAsyncComponent(() => import('./views/AnalyticsConnectionsView.vue'));
+const WorkerPayView = defineManagerAsyncComponent('WorkerPayView', () => import('./views/WorkerPayView.vue'));
+const WorkerMoneyView = defineManagerAsyncComponent('WorkerMoneyView', () => import('./views/WorkerMoneyView.vue'));
+const InstallerWorksView = defineManagerAsyncComponent('InstallerWorksView', () => import('./views/InstallerWorksView.vue'));
+const ProductsView = defineManagerAsyncComponent('ProductsView', () => import('./views/ProductsView.vue'));
+const TenantCatalogView = defineManagerAsyncComponent('TenantCatalogView', () => import('./views/TenantCatalogView.vue'));
+const CatalogDecisionWorkspaceView = defineManagerAsyncComponent('CatalogDecisionWorkspaceView', () => import('./views/CatalogDecisionWorkspaceView.vue'));
+const ProductCollectionsView = defineManagerAsyncComponent('ProductCollectionsView', () => import('./views/ProductCollectionsView.vue'));
+const ProductWorkspaceView = defineManagerAsyncComponent('ProductWorkspaceView', () => import('./views/ProductWorkspaceView.vue'));
+const MediaLibraryView = defineManagerAsyncComponent('MediaLibraryView', () => import('./views/MediaLibraryView.vue'));
+const CustomersView = defineManagerAsyncComponent('CustomersView', () => import('./views/CustomersView.vue'));
+const CustomerProfileView = defineManagerAsyncComponent('CustomerProfileView', () => import('./views/CustomerProfileView.vue'));
+const OrdersKanbanView = defineManagerAsyncComponent('OrdersKanbanView', () => import('./views/OrdersKanbanView.vue'));
+const OrderDetailView = defineManagerAsyncComponent('OrderDetailView', () => import('./views/OrderDetailView.vue'));
+const LeadsView = defineManagerAsyncComponent('LeadsView', () => import('./views/LeadsView.vue'));
+const PersonalTasksView = defineManagerAsyncComponent('PersonalTasksView', () => import('./views/PersonalTasksView.vue'));
+const CallRecordingsView = defineManagerAsyncComponent('CallRecordingsView', () => import('./views/CallRecordingsView.vue'));
+const CalendarDashboard = defineManagerAsyncComponent('CalendarDashboard', () => import('./views/CalendarDashboard.vue'));
+const ManagerHomeView = defineManagerAsyncComponent('ManagerHomeView', () => import('./views/ManagerHome.vue'));
+const InstallersView = defineManagerAsyncComponent('InstallersView', () => import('./views/InstallersView.vue'));
+const SettingsView = defineManagerAsyncComponent('SettingsView', () => import('./views/SettingsView.vue'));
+const PlatformCompaniesView = defineManagerAsyncComponent('PlatformCompaniesView', () => import('./views/PlatformCompaniesView.vue'));
+const CompanySitesView = defineManagerAsyncComponent('CompanySitesView', () => import('./views/CompanySitesView.vue'));
+const PlatformAccessView = defineManagerAsyncComponent('PlatformAccessView', () => import('./views/PlatformAccessView.vue'));
+const PlatformSettingsView = defineManagerAsyncComponent('PlatformSettingsView', () => import('./views/PlatformSettingsView.vue'));
+const SettingsBackupView = defineManagerAsyncComponent('SettingsBackupView', () => import('./views/SettingsBackupView.vue'));
+const DocumentsSettingsView = defineManagerAsyncComponent('DocumentsSettingsView', () => import('./views/DocumentsSettingsView.vue'));
+const TariffsView = defineManagerAsyncComponent('TariffsView', () => import('./views/TariffsView.vue'));
+const InstallationRatesView = defineManagerAsyncComponent('InstallationRatesView', () => import('./views/InstallationRatesView.vue'));
+const InstallationDiscountsView = defineManagerAsyncComponent('InstallationDiscountsView', () => import('./views/InstallationDiscountsView.vue'));
+const ServiceEstimatesView = defineManagerAsyncComponent('ServiceEstimatesView', () => import('./views/ServiceEstimatesView.vue'));
+const BankReceiptsView = defineManagerAsyncComponent('BankReceiptsView', () => import('./views/BankReceiptsView.vue'));
+const MailView = defineManagerAsyncComponent('MailView', () => import('./views/MailView.vue'));
+const TagsView = defineManagerAsyncComponent('TagsView', () => import('./views/TagsView.vue'));
+const BrandsView = defineManagerAsyncComponent('BrandsView', () => import('./views/BrandsView.vue'));
+const FeaturesView = defineManagerAsyncComponent('FeaturesView', () => import('./views/FeaturesView.vue'));
+const FeatureSeriesMigrationView = defineManagerAsyncComponent('FeatureSeriesMigrationView', () => import('./views/FeatureSeriesMigrationView.vue'));
+const SupplierFeedsView = defineManagerAsyncComponent('SupplierFeedsView', () => import('./views/SupplierFeedsView.vue'));
+const SupplierMappingView = defineManagerAsyncComponent('SupplierMappingView', () => import('./views/SupplierMappingView.vue'));
+const CatalogQualityView = defineManagerAsyncComponent('CatalogQualityView', () => import('./views/CatalogQualityView.vue'));
+const SupplyRequestsView = defineManagerAsyncComponent('SupplyRequestsView', () => import('./views/SupplyRequestsView.vue'));
+const EquipmentRegistryView = defineManagerAsyncComponent('EquipmentRegistryView', () => import('./views/EquipmentRegistryView.vue'));
+const ProfileSecurityView = defineManagerAsyncComponent('ProfileSecurityView', () => import('./views/ProfileSecurityView.vue'));
+const AnalyticsConnectionsView = defineManagerAsyncComponent('AnalyticsConnectionsView', () => import('./views/AnalyticsConnectionsView.vue'));
 const isInvitationRoute = window.location.pathname.replace(/\/$/, '') === '/manager/invite';
 // Keep the secret only in this page's memory, before rendering or making requests.
 const invitationToken = isInvitationRoute ? new URLSearchParams(window.location.hash.slice(1)).get('token') || '' : '';
 if (isInvitationRoute && window.location.hash) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
 const contextError = ref('');
 const props = defineProps<{ reloadPage?: () => void }>();
+provide(managerModuleReloadKey, () => (props.reloadPage ?? (() => window.location.reload()))());
 const { isAuthenticated, auth, recoveryRequired } = managerSession;
 const demoReadOnly = useDemoReadOnly();
 const { name: partnerName, logoUrl: partnerLogoUrl, compactLogoUrl: partnerCompactLogoUrl, contextKey: partnerContextKey } = useKitlaneIdentity();
@@ -553,6 +557,8 @@ watch(currentPath, () => {
           @error="handleLogoutError"
         />
       </template>
+
+      <ManagerModuleRecoveryHost />
 
       <div v-if="demoReadOnly" class="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100" role="status">
         Демонстрационная компания: рабочие данные доступны только для просмотра.

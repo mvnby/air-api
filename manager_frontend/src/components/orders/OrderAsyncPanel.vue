@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onScopeDispose, shallowRef, ref, type Component } from 'vue';
+import { loadManagerModule } from '../../services/manager-module-loader';
 import { reloadManagerLocation } from '../../services/manager-navigation-history';
 const props = defineProps<{ load: () => Promise<{ default: Component }>; label: string }>();
 const component = shallowRef<Component | null>(null);
@@ -18,7 +19,7 @@ const loadComponent = async () => {
   loading.value = true;
   failed.value = false;
   try {
-    const result = await props.load();
+    const result = await loadManagerModule('OrderWorkspacePanel', props.load, 'panel');
     if (request === generation) component.value = result.default;
     await nextTick();
     return request === generation;

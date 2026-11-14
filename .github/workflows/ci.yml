@@ -100,9 +100,14 @@ jobs:
 
       - name: Build Manager Frontend
         working-directory: ./manager_frontend
+        env:
+          WEBSITE_URL: https://mvn.by
         run: |
           npm ci
           npm run build
+
+      - name: Stamp exact Manager release artifact
+        run: python3 scripts/ci/retain_manager_assets.py --stamp --repository "$GITHUB_REPOSITORY" --deploy-sha "$GITHUB_SHA"
 
       - name: Upload Manager Frontend Build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -110,7 +115,7 @@ jobs:
           name: manager-dist-${{ github.run_id }}
           path: manager_frontend/dist
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 8
           overwrite: true
 
   manager:
