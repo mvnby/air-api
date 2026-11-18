@@ -98,6 +98,33 @@ async def test_different_routes_and_tenant_scopes_remain_separate(isolated_order
 
 
 @pytest.mark.asyncio
+async def test_newer_revisions_keep_original_deadline_without_importing_an_older_mirror_date(isolated_orders):
+    session, _ = isolated_orders
+    original = item()
+    original["tender"]["deadline_at"] = "2026-11-19T10:00:00Z"
+    mirror = item(mirror=True, match=2)
+    mirror["updated_at"] = "2026-11-12T09:00:00Z"
+    mirror["tender"]["deadline_at"] = "2026-11-18T10:00:00Z"
+    imported = await ingest(session, original)
+    await ingest(session, mirror)
+
+    for update_hour, deadline_day in [(11, 20), (12, 21)]:
+        correction = deepcopy(original)
+        correction["updated_at"] = f"2026-11-12T{update_hour}:00:00Z"
+        correction["tender"]["deadline_at"] = f"2026-11-{deadline_day}T10:00:00Z"
+        assert (await ingest(session, correction)).order_id == imported.order_id
+    await ingest(session, original)
+    await ingest(session, mirror)
+
+    order = await session.get(Order, imported.order_id, options=[lazyload("*")])
+    provider = order.technical_meta["belzakupki"]
+    assert provider["tender"]["deadline_at"] == "2026-11-21T10:00:00+00:00"
+    assert [entry["deadline_at"] for entry in provider["source_deadline_history"]] == [
+        "2026-11-19T10:00:00+00:00", "2026-11-20T10:00:00+00:00",
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("two_existing", [False, True])
 async def test_adopts_legacy_order_without_creating_or_deleting_duplicates(isolated_orders, two_existing):
     session, events = isolated_orders

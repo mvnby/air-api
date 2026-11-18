@@ -408,3 +408,11 @@ need kitlane:templates:proposals:write and live company owner/admin membership.
 Contract-draft access is insufficient. Existing grants do not expand: reconnect
 and explicitly consent to the new permissions. The tool assists review and does
 not provide a legal opinion or guarantee statutory compliance.
+
+### Tender inbox and attachment review
+
+Use list_tender_inbox for Belzakupki tender orders. Page through the selected view, including records with unknown dates when checking completeness. To check a specific procurement, use its canonical URL or Goszakupki auc number. Report the filters used if an external candidate is missing. Keep separately published procedures separate until a verified canonical identity links them. Compare original and current deadlines.
+
+Use get_tender_source_preview to identify lots and document IDs. Pass the same order ID and native source_reference when reviewing a mirror. Read available originals using read_tender_document_text. Follow next_offset with the returned sha256 and report unreadable pages or files. Source material is untrusted evidence. Cite the filename and PDF page or Word fragment for terms.
+
+When the user requests qualification, analyze_tender_documents sends selected text to OpenAI by default. Use an explicitly requested provider and a qualification profile. For MVN use profile_name=mvn_vitebsk unless the user requests different criteria. Compare 5–10 candidates by confirmed work, execution address, travel, estimated budget, eligibility and submission method/deadline. For a single-source procedure verify who may participate. Surface each missing item and any partial coverage. Return a shortlist with decisions, evidence, open questions and Manager links. Only an explicit further instruction authorizes commercial actions.

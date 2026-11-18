@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import mimetypes
 from io import BytesIO
@@ -55,6 +56,19 @@ _EQUIPMENT_MODEL = re.compile(
 _UNP = re.compile(r"\b(?:УНП|унп)\s*[:№]?\s*(\d{9})\b")
 _PHONE = re.compile(r"(?:\+375|8\s*0)\s*\(?\d{2}\)?[\s()-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}")
 _EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
+MAX_SOURCE_DETAIL_BYTES = 16 * 1024 * 1024
+
+
+class SourceDocumentTooLarge(ValueError):
+    pass
+
+
+class SourceDocumentNotFound(LookupError):
+    pass
+
+
+class SourceDocumentInventoryUnavailable(ValueError):
+    pass
 
 
 def _text(value: Any, limit: int = 4000) -> str | None:
@@ -105,13 +119,12 @@ def _original_file_type(content: bytes, filename: str, supplied_type: str) -> tu
     if content.startswith(b"PK\x03\x04"):
         try:
             with ZipFile(BytesIO(content)) as archive:
-                names = set(archive.namelist()[:200])
+                if "word/document.xml" in archive.NameToInfo:
+                    return filename if filename.lower().endswith(".docx") else filename + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                if "xl/workbook.xml" in archive.NameToInfo:
+                    return filename if filename.lower().endswith(".xlsx") else filename + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         except BadZipFile:
-            names = set()
-        if "word/document.xml" in names:
-            return filename if filename.lower().endswith(".docx") else filename + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        if "xl/workbook.xml" in names:
-            return filename if filename.lower().endswith(".xlsx") else filename + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            pass
     if mime in ServiceAttachmentService.SAFE_MIME_TYPES:
         return filename, mime
     return filename, "application/octet-stream"
@@ -184,18 +197,39 @@ class BelzakupkiEnrichmentService:
         return order
 
     @staticmethod
-    async def _fetch(source: str, external_id: str, document_id: str | None = None) -> httpx.Response:
+    async def _fetch(
+        source: str, external_id: str, document_id: str | None = None, *, max_bytes: int | None = None,
+    ) -> httpx.Response:
         base = str(settings.BELZAKUPKI_API_BASE_URL or "").strip().rstrip("/")
         key = settings.BELZAKUPKI_INTEGRATION_KEY
         if not base or not key:
             raise RuntimeError("Belzakupki integration is not configured")
+        if {source, external_id, document_id} & {".", ".."}:
+            raise ValueError("Invalid Belzakupki source identity")
         path = f"/api/v1/tenders/{quote(source, safe='')}/{quote(external_id, safe='')}"
         if document_id is not None:
             path += f"/documents/{quote(document_id, safe='')}"
-        async with httpx.AsyncClient(timeout=settings.BELZAKUPKI_IMPORT_TIMEOUT_SECONDS) as client:
-            response = await client.get(base + path, headers={"Authorization": f"Bearer {key}"})
-            response.raise_for_status()
-            return response
+        if max_bytes is None:
+            max_bytes = MAX_SOURCE_DETAIL_BYTES if document_id is None else int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES)
+        timeout = settings.BELZAKUPKI_IMPORT_TIMEOUT_SECONDS
+        headers = {"Authorization": f"Bearer {key}", "Accept-Encoding": "identity"}
+        try:
+            async with asyncio.timeout(timeout), httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                async with client.stream("GET", base + path, headers=headers) as response:
+                    response.raise_for_status()
+                    size = response.headers.get("content-length", "")
+                    if size.isdecimal() and int(size) > max_bytes:
+                        raise SourceDocumentTooLarge("Source response exceeds the configured size limit")
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise httpx.DecodingError("Unexpected encoding of Belzakupki source response")
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=65536):
+                        if len(content) + len(chunk) > max_bytes:
+                            raise SourceDocumentTooLarge("Source response exceeds the configured size limit")
+                        content.extend(chunk)
+                    return httpx.Response(response.status_code, headers=response.headers, content=bytes(content))
+        except TimeoutError as exc:
+            raise httpx.TimeoutException("Belzakupki source response timed out") from exc
 
     @classmethod
     async def _detail(cls, order: Order) -> dict[str, Any]:
@@ -443,19 +477,34 @@ class BelzakupkiEnrichmentService:
         return preview
 
     @classmethod
-    async def document(cls, session: AsyncSession, *, order_id: int, document_id: str, scope: TenantScope) -> tuple[bytes, str, str]:
+    async def document(
+        cls, session: AsyncSession, *, order_id: int, document_id: str, scope: TenantScope,
+        max_bytes: int | None = None, source_reference: str | None = None,
+    ) -> tuple[bytes, str, str]:
         order = await cls._order(session, order_id, scope)
-        detail = await cls._detail(order)
-        doc = next((item for item in cls._documents(detail) if str(item["id"]) == document_id), None)
-        if doc is None:
-            raise LookupError("Source document not found")
-        source, external_id = _source_identity(order)
-        response = await cls._fetch(source, external_id, document_id)
+        if source_reference is None:
+            source, external_id = _source_identity(order)
+        else:
+            from services.tender_source_reference import detail_for_reference, resolve_source_reference
+
+            source, external_id = resolve_source_reference(order, source_reference)
+        try:
+            detail = await cls._detail(order) if source_reference is None else await detail_for_reference(order, source_reference)
+        except ValueError as exc:
+            raise SourceDocumentInventoryUnavailable("Belzakupki document inventory is unavailable") from exc
+        candidates = [item for item in cls._documents(detail) if str(item["id"]) == document_id]
+        if not candidates:
+            raise SourceDocumentNotFound("Source document not found")
+        if len(candidates) != 1:
+            raise SourceDocumentInventoryUnavailable("Belzakupki source returned ambiguous document IDs")
+        attachment_limit = int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES)
+        limit = attachment_limit if max_bytes is None else min(max_bytes, attachment_limit)
+        response = await cls._fetch(source, external_id, document_id, max_bytes=limit)
         content_type = response.headers.get("content-type", "application/octet-stream").split(";", 1)[0]
-        if len(response.content) > int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES):
-            raise ValueError("Source document exceeds the configured size limit")
-        filename, content_type = _original_file_type(
-            response.content, _text(doc.get("name"), 230) or "document", content_type,
+        if len(response.content) > limit:
+            raise SourceDocumentTooLarge("Source document exceeds the configured size limit")
+        filename, content_type = await asyncio.to_thread(
+            _original_file_type, response.content, _text(candidates[0].get("name"), 230) or "document", content_type,
         )
         return response.content, filename, content_type
 

@@ -121,7 +121,7 @@ async def test_real_sdk_handshake_discovery_and_actor_isolation(mcp_client):
     for tool in tools.values():
         assert "actor" not in tool["inputSchema"].get("properties", {})
         assert "tenant_id" not in tool["inputSchema"].get("properties", {})
-        assert tool["annotations"]["openWorldHint"] is (tool["name"] == "send_mail_draft")
+        assert tool["annotations"]["openWorldHint"] is (tool["name"] in {"send_mail_draft", "analyze_tender_documents"})
     first = (await _rpc(client, "tools/call", {"name": "get_current_context", "arguments": {}})).json()["result"]
     second = (await _rpc(client, "tools/call", {"name": "get_current_context", "arguments": {}}, token="token-two")).json()["result"]
     assert not first["isError"] and not second["isError"]
@@ -310,3 +310,19 @@ async def test_service_order_scopes_are_separate_and_qualifying_requires_incomin
     await denied("prepare_service_order_contract", prepare, "kitlane:contracts:drafts:write")
     await denied("create_service_order", {**create, "incoming_id": 1, "expected_incoming_version": 1}, "kitlane:incoming:write")
     await denied("create_service_order", {**create, "incoming_order_id": 1, "expected_incoming_order_revision": 0}, "kitlane:incoming:write")
+
+
+@pytest.mark.asyncio
+async def test_tender_tools_require_live_analysis_consent_and_system_owner(mcp_client):
+    client, access, checks, _ = mcp_client
+    catalog = {item["name"]: item for item in (await _rpc(client, "tools/list")).json()["result"]["tools"]}
+    for name in ("list_tender_inbox", "get_tender_source_preview", "read_tender_document_text", "analyze_tender_documents"):
+        assert catalog[name]["annotations"]["readOnlyHint"]
+    tool = catalog["analyze_tender_documents"]
+    assert not tool["annotations"]["idempotentHint"]
+    params = {"name": tool["name"], "arguments": {"order_id": 3, "document_ids": ["spec"]}}
+    denied = await _rpc(client, "tools/call", params)
+    assert denied.json()["result"]["structuredContent"]["error"]["code"] == "insufficient_scope"
+    access["token-one"].add("kitlane:tenders:analyze")
+    denied = await _rpc(client, "tools/call", params)
+    assert denied.json()["result"]["structuredContent"]["error"]["code"] == "access_denied"
