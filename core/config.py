@@ -693,6 +693,8 @@ class Settings(BaseSettings):
     BELZAKUPKI_IMPORT_PAGE_SIZE: int = Field(default=100, ge=1, le=100)
     BELZAKUPKI_IMPORT_INCLUDE_RULES_ONLY: bool = False
     BELZAKUPKI_IMPORT_TIMEOUT_SECONDS: float = Field(default=10.0, ge=0.1, le=60.0)
+    OPENAI_API_KEY: str = Field(default="", repr=False, exclude=True)
+    TENDER_OPENAI_MODEL: str = "gpt-5.4-mini"
     MAIL_SMTP_HOST: str = "smtp.yandex.ru"
     MAIL_SMTP_PORT: int = 465
     MAIL_SMTP_USE_SSL: bool = True

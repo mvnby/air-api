@@ -14,6 +14,7 @@ from schemas_belzakupki_enrichment import (
     SourceEquipmentCandidateItem, SourceObjectDraft, SourceOriginalFile, SourceEquipmentPrefillResult,
     SourceSubmissionDraft,
 )
+from services.tender_source_reference import resolve_source_reference, tender_snapshot_for_reference
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, _source_identity, _text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.belzakupki_installation_facts import installation_facts
@@ -33,11 +34,15 @@ class BelzakupkiSourceEquipmentService:
         return [SourceObjectDraft.model_validate(item) for item in enrichment.get("objects") or []]
 
     @classmethod
-    async def card(cls, session: AsyncSession, *, order_id: int, scope: TenantScope) -> ManagerOrderSourceCard:
+    async def card(cls, session: AsyncSession, *, order_id: int, scope: TenantScope,
+                   source_reference: str | None = None) -> ManagerOrderSourceCard:
         order = await BelzakupkiEnrichmentService._order(session, order_id, scope)
-        source, external_id = _source_identity(order)
+        source, external_id = resolve_source_reference(order, source_reference)
         meta = (order.technical_meta or {}).get("belzakupki") or {}
-        tender = meta.get("tender") or {}
+        tender = tender_snapshot_for_reference(order, (source, external_id))
+        enrichment = meta.get("enrichment") or {}
+        if (enrichment.get("source"), enrichment.get("external_id")) != (source, external_id):
+            enrichment = {}
         rows = (await session.execute(select(ServiceAttachment).join(
             OrderAttachmentLink, OrderAttachmentLink.attachment_id == ServiceAttachment.id,
         ).where(
@@ -51,13 +56,13 @@ class BelzakupkiSourceEquipmentService:
                      and (row.source_meta or {}).get("source") == source]
         return ManagerOrderSourceCard(
             order_id=order_id, source=source, external_id=external_id,
-            submission=SourceSubmissionDraft.model_validate((meta.get("enrichment") or {}).get("submission") or {}),
+            submission=SourceSubmissionDraft.model_validate(enrichment.get("submission") or {}),
             title=_text(tender.get("title"), 1000), source_url=_text(tender.get("source_url"), 2048),
-            work_summary=_text((meta.get("enrichment") or {}).get("work_summary"), 10000),
-            equipment_details=_text((meta.get("enrichment") or {}).get("equipment_details"), 10000),
-            objects=cls.reviewed_objects(order), originals=originals,
-            equipment_prefill=(meta.get("enrichment") or {}).get("equipment_prefill"),
-            installation_facts=installation_facts(meta.get("enrichment") or {}),
+            work_summary=_text(enrichment.get("work_summary"), 10000),
+            equipment_details=_text(enrichment.get("equipment_details"), 10000),
+            objects=[SourceObjectDraft.model_validate(obj) for obj in enrichment.get("objects") or []], originals=originals,
+            equipment_prefill=enrichment.get("equipment_prefill"),
+            installation_facts=installation_facts(enrichment),
         )
 
     @classmethod

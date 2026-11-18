@@ -36,6 +36,10 @@ class PrivateStoragePage:
     wrapped: bool
 
 
+class PrivateAttachmentTooLarge(ValueError):
+    """The stored original exceeds the caller's read limit."""
+
+
 class PrivateAttachmentStorage(Protocol):
     provider_name: str
     inventory_id: str
@@ -51,6 +55,8 @@ class PrivateAttachmentStorage(Protocol):
     ) -> StoredPrivateObject: ...
 
     async def read(self, storage_key: str) -> bytes: ...
+
+    async def read_bounded(self, storage_key: str, max_bytes: int) -> bytes: ...
 
     async def exists(self, storage_key: str) -> bool: ...
 
@@ -149,6 +155,9 @@ class VariantScopedPrivateAttachmentStorage:
     async def read(self, storage_key: str) -> bytes:
         return await self.storage.read(storage_key)
 
+    async def read_bounded(self, storage_key: str, max_bytes: int) -> bytes:
+        return await self.storage.read_bounded(storage_key, max_bytes)
+
     async def exists(self, storage_key: str) -> bool:
         return await self.storage.exists(storage_key)
 
@@ -234,6 +243,18 @@ class LocalPrivateAttachmentStorage:
         if not path.is_file():
             raise FileNotFoundError(storage_key)
         return await asyncio.to_thread(path.read_bytes)
+
+    async def read_bounded(self, storage_key: str, max_bytes: int) -> bytes:
+        path = self._path(storage_key)
+
+        def read() -> bytes:
+            with path.open("rb") as stream:
+                content = stream.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise PrivateAttachmentTooLarge("Stored attachment exceeds the read limit")
+            return content
+
+        return await asyncio.to_thread(read)
 
     async def exists(self, storage_key: str) -> bool:
         return await asyncio.to_thread(self._path(storage_key).is_file)
@@ -450,6 +471,23 @@ class S3PrivateAttachmentStorage:
     async def read(self, storage_key: str) -> bytes:
         response = await asyncio.to_thread(self._get_client().get_object, Bucket=self.bucket, Key=storage_key)
         return await asyncio.to_thread(response["Body"].read)
+
+    async def read_bounded(self, storage_key: str, max_bytes: int) -> bytes:
+        def read() -> bytes:
+            try:
+                response = self._get_client().get_object(Bucket=self.bucket, Key=storage_key, Range=f"bytes=0-{max_bytes}")
+                body = response["Body"]
+                try:
+                    content = body.read(max_bytes + 1)
+                finally:
+                    body.close()
+            except Exception as exc:
+                raise OSError("Unable to read stored attachment") from exc
+            if len(content) > max_bytes:
+                raise PrivateAttachmentTooLarge("Stored attachment exceeds the read limit")
+            return content
+
+        return await asyncio.to_thread(read)
 
     async def exists(self, storage_key: str) -> bool:
         try:

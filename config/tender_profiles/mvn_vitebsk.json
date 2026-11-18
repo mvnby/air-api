@@ -1,0 +1,15 @@
+{
+  "service_priorities": {
+    "diagnostics": 100,
+    "repair": 100,
+    "maintenance": 95,
+    "installation": 80,
+    "supply_with_installation": 80,
+    "supply_only": 0,
+    "ventilation": 0
+  },
+  "preferred_locations": ["Витебск", "Витебске"],
+  "travel_locations": ["Витебская область", "Витебской области", "Витебская обл.", "Полоцк", "Новополоцк", "Орша", "Городок", "Шумилино", "Лиозно", "Бешенковичи", "Чашники"],
+  "review_only_locations": {"ventilation": ["Витебск", "Витебске"]},
+  "require_sole_proprietor_eligibility": true
+}

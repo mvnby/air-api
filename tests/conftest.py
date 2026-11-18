@@ -49,6 +49,7 @@ os.environ.update(
         "MAIL_SMTP_USERNAME": "",
         "MAIL_SMTP_PASSWORD": "",
         "DEEPSEEK_TOKEN": "",
+        "OPENAI_API_KEY": "",
         "GOOGLE_VISION_CREDENTIALS_FILE": "",
         "GOOGLE_VISION_PROJECT_ID": "",
         "DASHBOARD_METRIKA_OAUTH_TOKEN": "",

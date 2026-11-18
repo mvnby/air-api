@@ -237,6 +237,9 @@ class BelzakupkiImportService:
             "matches": matches,
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
         }
+        deadline_history = cls._source_deadline_history(existing, snapshot, existing_matches, tender_time)
+        if deadline_history:
+            next_metadata["source_deadline_history"] = deadline_history
         if isinstance(existing.get("enrichment"), dict):
             next_metadata["enrichment"] = existing["enrichment"]
         if isinstance(existing.get("equipment_prefill_history"), dict):
@@ -259,6 +262,47 @@ class BelzakupkiImportService:
             if existing.get(conflict_key):
                 next_metadata[conflict_key] = existing[conflict_key]
         return next_metadata
+
+    @classmethod
+    def _source_deadline_history(cls, existing, snapshot, existing_matches, tender_time):
+        """Retain bounded, timestamped submission dates for newer revisions of a native publication."""
+        prior = existing.get("source_deadline_history")
+        key_fields = ("source", "external_id", "observed_at", "deadline_at")
+        entries = {
+            tuple(item[key] for key in key_fields): item
+            for item in (prior if isinstance(prior, list) else [])
+            if isinstance(item, dict) and all(isinstance(item.get(key), str) for key in key_fields)
+        }
+        new_tender = snapshot["tender"]
+        incoming_time = cls._parse_datetime(snapshot.get("updated_at"))
+        existing_match = existing_matches.get(str(snapshot["match_id"]))
+        candidates = [(existing.get("tender"), tender_time)]
+        if isinstance(existing_match, dict):
+            candidates.append((existing_match.get("tender"), cls._parse_datetime(existing_match.get("updated_at"))))
+        new_deadline = cls._parse_datetime(new_tender.get("deadline_at"))
+        new_canonical = canonical_tender_url(new_tender)
+        for tender, observed_at in candidates:
+            if not isinstance(tender, dict) or not (incoming_time and observed_at and incoming_time > observed_at):
+                continue
+            if (tender.get("source") != new_tender["source"] or tender.get("external_id") != new_tender["external_id"]
+                    or canonical_tender_url(tender) != new_canonical
+                    or tender.get("claimed_canonical_url") or new_tender.get("claimed_canonical_url")
+                    or tender.get("deadline_kind") not in (None, "submission")):
+                continue
+            deadline = cls._parse_datetime(tender.get("deadline_at"))
+            if deadline is None or (deadline == new_deadline
+                                    and new_tender.get("deadline_kind") == "submission"):
+                continue
+            entry = {
+                "source": tender["source"], "external_id": tender["external_id"], "url": tender.get("url"),
+                "canonical_url": canonical_tender_url(tender), "deadline_at": deadline.isoformat(),
+                "observed_at": observed_at.isoformat(),
+            }
+            entries[tuple(entry[key] for key in key_fields)] = entry
+        ordered = sorted(entries.values(), key=lambda entry: (
+            entry["observed_at"], entry["source"], entry["external_id"], entry["deadline_at"],
+        ))
+        return ordered if len(ordered) <= 20 else [ordered[0], *ordered[-19:]]
 
     @classmethod
     def _canonical_fingerprint(cls, url: str) -> str:
