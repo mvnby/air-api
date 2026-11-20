@@ -25,6 +25,7 @@ x-api-app: &api-app
     - ./media:/app/media
     - ./model-cache/u2net:/root/.u2net
     - ./google-oauth:/app/google-oauth
+    - ./document-scanner:/run/mvn-document-scanner:ro
     - ./secrets/client_secret.json:/app/client_secret.json:ro
     - ./secrets/credentials.json:/app/credentials.json:ro
     - ./secrets/g-vision-ocr.json:/app/g-vision-ocr.json:ro
