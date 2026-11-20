@@ -21,6 +21,7 @@ from .customer import (
 )
 from .customer_contact import CustomerContact, CustomerContactHistory
 from .equipment import CustomerEquipment, EquipmentComponent, EquipmentServiceHistory
+from .order_site import OrderSite, OrderSiteEquipment
 from .maintenance_observation import (
     MaintenanceObservation, MaintenanceObservationRevision, MaintenanceObservationPhoto,
 )

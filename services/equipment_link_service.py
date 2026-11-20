@@ -6,10 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from crud.order_sites import OrderSiteDAO
 from models import Customer, CustomerEquipment, EquipmentOrderLink, Order
 from models.tenancy import TenantScope
 from services.equipment_service import EquipmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
+
+
+class SiteEquipmentRoleConflict(ValueError):
+    """The order role is required by an explicit site assignment."""
 
 
 class EquipmentLinkService:
@@ -83,6 +88,7 @@ class EquipmentLinkService:
             session,
             order_id,
             tenant_scope=tenant_scope,
+            for_update=True,
         )
         equipment = await TenantEntityAccessService.get_equipment(
             session,
@@ -129,6 +135,7 @@ class EquipmentLinkService:
             session,
             order_id,
             tenant_scope=tenant_scope,
+            for_update=True,
         ) is None:
             return False
         result = await session.execute(
@@ -147,7 +154,11 @@ class EquipmentLinkService:
         )
         if equipment is None:
             return False
-        if equipment and equipment.source_order_id == order_id:
+        # Site assignment and legacy unlink serialize on the same order row.
+        site_link = await OrderSiteDAO.for_order_equipment(session, order_id, link.equipment_id)
+        if site_link is not None and site_link.role == link.role:
+            raise SiteEquipmentRoleConflict("Оборудование привязано к объекту заказа")
+        if equipment.source_order_id == order_id:
             equipment.source_order_id = None
             session.add(equipment)
         await session.delete(link)

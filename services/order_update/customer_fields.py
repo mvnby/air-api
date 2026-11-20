@@ -6,6 +6,7 @@ from sqlmodel import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from models import MaintenanceContinuation, Customer, CustomerBranch, CustomerContract, OrderStatus
+from models.order_site import OrderSite
 from services.customer_creation_service import CustomerCreationService
 from services.customer_party import customer_type_from_value, signing_mode_for_customer_type
 from services.customer_contract_service import CustomerContractService
@@ -137,6 +138,10 @@ async def _apply_customer_link(context: OrderUpdateContext) -> bool:
         return False
     if order.customer_id == payload.customer_id:
         return False
+    if await context.session.scalar(
+        select(OrderSite.id).where(OrderSite.order_id == order.id).limit(1)
+    ) is not None:
+        raise ValueError("Нельзя сменить клиента заказа, пока к нему привязаны объекты")
 
     new_customer = (
         await context.session.execute(

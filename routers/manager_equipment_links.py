@@ -13,7 +13,7 @@ from schemas import (
     ManagerOrderEquipmentLinkItemResponse,
     ManagerOrderEquipmentLinkListResponse,
 )
-from services.equipment_link_service import EquipmentLinkService
+from services.equipment_link_service import EquipmentLinkService, SiteEquipmentRoleConflict
 from services.tenant_scope_service import TenantScope
 
 
@@ -95,18 +95,22 @@ async def delete_manager_order_equipment_link(
     """
     Delete one equipment/order association and return 204, clearing matching legacy
     source_order_id when necessary. Equipment, warranty snapshots and service history are
-    retained. Missing/inaccessible order/link/equipment returns 404, including after prior
-    deletion.
+    retained. A role required by an explicit order-site assignment returns 409.
+    Missing/inaccessible order/link/equipment returns 404, including after prior deletion.
 
     Access and scope: Manager access is required; the order and its children are restricted
     to the authenticated tenant and selected storefront. See [Manager
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    if not await EquipmentLinkService.unlink(
-        session,
-        order_id=order_id,
-        link_id=link_id,
-        tenant_scope=tenant_scope,
-    ):
+    try:
+        removed = await EquipmentLinkService.unlink(
+            session,
+            order_id=order_id,
+            link_id=link_id,
+            tenant_scope=tenant_scope,
+        )
+    except SiteEquipmentRoleConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not removed:
         raise HTTPException(status_code=404, detail="Equipment link not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

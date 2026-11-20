@@ -26577,7 +26577,7 @@
           "manager-equipment-links"
         ],
         "summary": "Delete Manager Order Equipment Link",
-        "description": "Delete one equipment/order association and return 204, clearing matching legacy\nsource_order_id when necessary. Equipment, warranty snapshots and service history are\nretained. Missing/inaccessible order/link/equipment returns 404, including after prior\ndeletion.\n\nAccess and scope: Manager access is required; the order and its children are restricted\nto the authenticated tenant and selected storefront. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Delete one equipment/order association and return 204, clearing matching legacy\nsource_order_id when necessary. Equipment, warranty snapshots and service history are\nretained. A role required by an explicit order-site assignment returns 409.\nMissing/inaccessible order/link/equipment returns 404, including after prior deletion.\n\nAccess and scope: Manager access is required; the order and its children are restricted\nto the authenticated tenant and selected storefront. See [Manager\nauthentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_order_equipment_link",
         "security": [
           {
@@ -26748,6 +26748,284 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConnectorWriteResult_OrderEquipmentSaveResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/sites": {
+      "get": {
+        "tags": [
+          "manager-order-sites"
+        ],
+        "summary": "Manager List Order Sites",
+        "description": "List saved sites and the legacy primary address of an accessible order.",
+        "operationId": "manager_list_order_sites",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSiteList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-order-sites"
+        ],
+        "summary": "Manager Add Order Site",
+        "description": "Add a site from the order customer's branch or from an order-specific address.",
+        "operationId": "manager_add_order_site",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderSiteAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderSiteItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/sites/{site_id}/equipment": {
+      "get": {
+        "tags": [
+          "manager-order-sites"
+        ],
+        "summary": "Manager List Order Site Equipment",
+        "description": "List equipment explicitly assigned to the site's order and its active components.",
+        "operationId": "manager_list_order_site_equipment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSiteEquipmentList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-order-sites"
+        ],
+        "summary": "Manager Link Order Site Equipment",
+        "description": "Link an existing unit or create it atomically with its site assignment and components.",
+        "operationId": "manager_link_order_site_equipment",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderSiteEquipmentLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderSiteEquipmentLinkResult_"
                 }
               }
             }
@@ -50870,6 +51148,40 @@
           "replayed"
         ],
         "title": "ConnectorWriteResult[OrderEquipmentSaveResult]"
+      },
+      "ConnectorWriteResult_OrderSiteEquipmentLinkResult_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderSiteEquipmentLinkResult"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderSiteEquipmentLinkResult]"
+      },
+      "ConnectorWriteResult_OrderSiteItem_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderSiteItem"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderSiteItem]"
       },
       "ConsumerDocumentTermsPayload": {
         "properties": {
@@ -92420,6 +92732,571 @@
           "line_total"
         ],
         "title": "OrderServiceLineResponse"
+      },
+      "OrderSiteAddPayload": {
+        "properties": {
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OrderSiteAddPayload"
+      },
+      "OrderSiteAddRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OrderSiteAddPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "payload"
+        ],
+        "title": "OrderSiteAddRequest"
+      },
+      "OrderSiteEquipmentComponent": {
+        "properties": {
+          "component_type": {
+            "type": "string",
+            "enum": [
+              "indoor_unit",
+              "outdoor_unit",
+              "drain_pump",
+              "other"
+            ],
+            "title": "Component Type"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "inventory_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Number"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "component_type"
+        ],
+        "title": "OrderSiteEquipmentComponent"
+      },
+      "OrderSiteEquipmentItem": {
+        "properties": {
+          "equipment_id": {
+            "type": "integer",
+            "title": "Equipment Id"
+          },
+          "site_id": {
+            "type": "integer",
+            "title": "Site Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "installation",
+              "maintenance",
+              "repair",
+              "diagnostic",
+              "warranty_case",
+              "other"
+            ],
+            "title": "Role"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/ManagerEquipmentDetailResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "equipment_id",
+          "site_id",
+          "role",
+          "equipment"
+        ],
+        "title": "OrderSiteEquipmentItem"
+      },
+      "OrderSiteEquipmentLinkPayload": {
+        "properties": {
+          "equipment_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Id"
+          },
+          "equipment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderSiteNewEquipment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "installation",
+              "maintenance",
+              "repair",
+              "diagnostic",
+              "warranty_case",
+              "other"
+            ],
+            "title": "Role",
+            "default": "diagnostic"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "OrderSiteEquipmentLinkPayload"
+      },
+      "OrderSiteEquipmentLinkRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OrderSiteEquipmentLinkPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "payload"
+        ],
+        "title": "OrderSiteEquipmentLinkRequest"
+      },
+      "OrderSiteEquipmentLinkResult": {
+        "properties": {
+          "site": {
+            "$ref": "#/components/schemas/OrderSiteItem"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/OrderSiteEquipmentItem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "site",
+          "equipment"
+        ],
+        "title": "OrderSiteEquipmentLinkResult"
+      },
+      "OrderSiteEquipmentList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderSiteEquipmentItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OrderSiteEquipmentList"
+      },
+      "OrderSiteItem": {
+        "properties": {
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_branch_id",
+          "title",
+          "address",
+          "id",
+          "order_id",
+          "version",
+          "manager_url"
+        ],
+        "title": "OrderSiteItem"
+      },
+      "OrderSiteLegacyPrimary": {
+        "properties": {
+          "customer_branch_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Branch Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_branch_id",
+          "title",
+          "address"
+        ],
+        "title": "OrderSiteLegacyPrimary"
+      },
+      "OrderSiteList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderSiteItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "legacy_primary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderSiteLegacyPrimary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "legacy_primary"
+        ],
+        "title": "OrderSiteList"
+      },
+      "OrderSiteNewEquipment": {
+        "properties": {
+          "equipment_type": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Equipment Type",
+            "default": "hvac"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "inventory_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Number"
+          },
+          "location_hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Hint"
+          },
+          "refrigerant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refrigerant Type"
+          },
+          "installed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/OrderSiteEquipmentComponent"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Components"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "OrderSiteNewEquipment"
       },
       "OrderUsageAccepted": {
         "properties": {

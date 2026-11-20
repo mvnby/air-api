@@ -7,6 +7,8 @@ const props = defineProps<{
   open: boolean;
   saving: boolean;
   error?: string;
+  defaultRole?: string;
+  passport?: { identifiesEquipment: boolean };
 }>();
 
 const emit = defineEmits<{
@@ -42,12 +44,13 @@ watch(() => props.open, (open) => {
     model: '',
     serial: '',
     installedAt: '',
-    role: 'other',
+    role: props.defaultRole || 'other',
     notes: '',
   });
 });
 
-const canSubmit = () => Boolean(form.displayName.trim() || form.brand.trim() || form.model.trim() || form.serial.trim());
+const canSubmit = () => Boolean(form.displayName.trim() || form.model.trim() || form.serial.trim()
+  || (props.passport?.identifiesEquipment ?? form.brand.trim()));
 
 const close = () => {
   if (!props.saving) emit('close');
@@ -81,7 +84,7 @@ useDialogA11y({
 
         <form class="space-y-4 p-4" @submit.prevent="canSubmit() && emit('confirm', { ...form })">
           <p class="text-sm text-slate-600 dark:text-slate-300">
-            Для старого или чужого кондиционера достаточно модели либо серийного номера. Каталожный товар не обязателен.
+            Введите известные данные. Если модель и серийный номер неизвестны, опишите оборудование в поле названия.
           </p>
 
           <div class="grid gap-3 sm:grid-cols-2">
@@ -122,6 +125,8 @@ useDialogA11y({
               <textarea v-model="form.notes" class="field-input min-h-20" placeholder="Где установлено, особенности доступа или состояния" />
             </label>
           </div>
+
+          <slot name="passport" />
 
           <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ error }}</p>
 

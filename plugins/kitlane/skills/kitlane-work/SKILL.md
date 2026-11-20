@@ -1,6 +1,6 @@
 ---
 name: kitlane-work
-description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare separate additional-work amendment drafts to saved contracts. Save physical equipment and preserve consumer document revisions. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
+description: Sell equipment with installation from chat using total-budget comparisons, saved sales orders and native quote drafts. Prepare separate additional-work amendment drafts to saved contracts. Manage order sites and their physical equipment. Preserve consumer document revisions. Create service and repair orders, prepare mail drafts, review approved mail, manage requests, tasks and maintenance through connected Kitlane tools.
 ---
 
 Use the connected Kitlane MCP tools for the user's requested action. The backend
@@ -31,6 +31,20 @@ the server adopt known facts from an old document snapshot without retyping;
 it reuses an earlier adoption and never rewrites issued documents. Preserve
 the exact key and payload after a timeout. Return saved equipment and order IDs,
 the version and Manager link; a new conversation can read them from the server.
+
+For an order covering several addresses, start with `list_order_sites` using
+the known order_id. Reuse the existing site for the selected customer branch.
+A legacy primary branch has no saved site ID until it is explicitly linked.
+Use `add_or_link_order_site` with the chosen branch or the confirmed site name
+and full address. After a site is saved, read `list_site_equipment` with its
+site_id. Use `link_order_equipment_to_site` for a confirmed physical unit or a
+new unit described by known facts. Put indoor/outdoor units or a separate
+drain pump that belongs to the same system in `components`. A catalog product
+ID identifies a model. Keep the existing customer and order. Use the site's
+current version when linking equipment. Retry with the same key and payload
+after a timeout. Return the
+saved order, site and equipment IDs and the Manager link. Reads require
+`kitlane:read` and writes also require `kitlane:orders:write`.
 
 For an equipment sale WITH installation, use the sales workflow below. This
 release covers one room and one complete wall split system. Read the user's
