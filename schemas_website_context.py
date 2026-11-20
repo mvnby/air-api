@@ -95,6 +95,34 @@ def validate_interest_text(value: str) -> str:
     return value
 
 
+class WebsiteArrival(BaseModel):
+    """Consented first entry in the current visit, using only coarse categories."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    consent: Literal[True]
+    landing_path: str = Field(min_length=1, max_length=500, strict=True)
+    channel: Literal["organic_search", "paid", "referral", "campaign", "unknown"]
+    source: Literal["google", "yandex", "bing", "duckduckgo", "chatgpt"] | None = None
+
+    @field_validator("consent", mode="before")
+    @classmethod
+    def require_explicit_consent(cls, value: Any) -> bool:
+        if value is not True:
+            raise ValueError("Consent must be explicitly true")
+        return value
+
+    @field_validator("landing_path")
+    @classmethod
+    def valid_landing_path(cls, value: str) -> str:
+        return validate_website_pathname(value)
+
+
+class WebsiteLeadAttribution(WebsiteArrival):
+    page_path: str
+    form_id: WebsiteFormId
+
+
 class WebsiteSubmissionContext(BaseModel):
     """Untrusted page/form references; these do not select or confirm ordered work."""
 
@@ -105,14 +133,15 @@ class WebsiteSubmissionContext(BaseModel):
     service_id: str | None = Field(default=None, min_length=1, max_length=80)
     product_id: int | None = Field(default=None, gt=0)
     interests: WebsiteInterests | None = Field(default=None, exclude_if=lambda value: value is None)
+    attribution: WebsiteArrival | None = Field(default=None, exclude_if=lambda value: value is None)
 
-    @field_validator("interests", mode="wrap")
+    @field_validator("interests", "attribution", mode="wrap")
     @classmethod
-    def optional_interests(cls, value: Any, handler) -> WebsiteInterests | None:
+    def optional_analytics(cls, value: Any, handler) -> WebsiteInterests | WebsiteArrival | None:
         try:
             return handler(value)
         except (ValueError, TypeError):
-            # Optional attention must never reject an otherwise valid request.
+            # Optional analytics must never reject an otherwise valid request.
             return None
 
     @field_validator("page_path")
@@ -150,22 +179,43 @@ def append_submission_context(text: str | None, context: WebsiteSubmissionContex
 
 
 def submission_context_identity(context: Mapping[str, Any]) -> dict[str, Any]:
-    """Only passive attention is excluded from the business request identity."""
-    return {key: value for key, value in context.items() if key != "interests"}
+    """Changes to consented analytics cannot create a new business request."""
+    return {key: value for key, value in context.items() if key not in {"interests", "attribution"}}
 
 
-def website_interests_from_meta(meta: Any) -> WebsiteInterests | None:
-    """Project only validated attention from the already scoped entity metadata."""
+def _context_from_meta(meta: Any) -> dict:
     if not isinstance(meta, dict):
-        return None
+        return {}
     context = meta.get("submission_context")
     if not isinstance(context, dict):
         incoming = meta.get("incoming_intake")
         context = incoming.get("submission_context") if isinstance(incoming, dict) else None
-    raw = context.get("interests") if isinstance(context, dict) else None
+    return context if isinstance(context, dict) else {}
+
+
+def website_interests_from_meta(meta: Any) -> WebsiteInterests | None:
+    """Project only validated attention from the already scoped entity metadata."""
+    raw = _context_from_meta(meta).get("interests")
     if raw is None:
         return None
     try:
         return WebsiteInterests.model_validate(raw)
     except ValidationError:
         return None
+
+
+def website_attribution_from_meta(meta: Any) -> WebsiteLeadAttribution | None:
+    context = _context_from_meta(meta)
+    if not context.get("attribution"):
+        return None
+    try:
+        submission = WebsiteSubmissionContext.model_validate(context)
+        if submission.attribution:
+            return WebsiteLeadAttribution(
+                **submission.attribution.model_dump(),
+                page_path=submission.page_path,
+                form_id=submission.form_id,
+            )
+    except ValidationError:
+        return None
+    return None

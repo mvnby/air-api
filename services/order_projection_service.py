@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from schemas_website_context import website_interests_from_meta
+from schemas_website_context import website_attribution_from_meta, website_interests_from_meta
 
 from models import (
     Customer,
@@ -489,6 +489,7 @@ class OrderProjectionService:
         data["source_enrichment"] = enrichment if isinstance(enrichment, dict) else None
         data["incoming_context"] = meta.get("incoming_intake")
         data["website_interests"] = website_interests_from_meta(meta)
+        data["website_attribution"] = website_attribution_from_meta(meta)
         raw_requested_date = meta.get("requested_date")
         try:
             data["requested_date"] = date.fromisoformat(str(raw_requested_date)[:10]) if raw_requested_date else None

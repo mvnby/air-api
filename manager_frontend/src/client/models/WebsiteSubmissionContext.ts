@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { WebsiteArrival } from './WebsiteArrival';
 import type { WebsiteInterests } from './WebsiteInterests';
 /**
  * Untrusted page/form references; these do not select or confirm ordered work.
@@ -12,5 +13,6 @@ export type WebsiteSubmissionContext = {
     service_id?: (string | null);
     product_id?: (number | null);
     interests?: (WebsiteInterests | null);
+    attribution?: (WebsiteArrival | null);
 };
 

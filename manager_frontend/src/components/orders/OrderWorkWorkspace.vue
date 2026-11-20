@@ -82,7 +82,7 @@ const getFieldError = props.fieldError;
 
     <OrderWorkerAssignmentsPanel v-if="order" :key="`worker-assignments-${order.id}`" :order-id="order.id" :work-stages="order.work_stages" :context-version="workerContextVersion" :disabled="disabled || payBusy" :before-action="beforeAction" @busy="emit('assignment-busy', $event)" />
     <OrderWorkerPayPanel v-if="order" :key="`worker-pay-${order.id}`" :order-id="order.id" :context-version="workerPayContextVersion" :disabled="disabled || assignmentBusy" :before-action="beforeAction" @busy="emit('pay-busy', $event)" @changed="emit('reload', order.id)" />
-    <WebsiteInterests :interests="order?.website_interests" />
+    <WebsiteInterests :interests="order?.website_interests" :attribution="order?.website_attribution" />
     <OrderIncomingContext v-if="order?.incoming_context" :context="order.incoming_context" />
     <OrderSalesInstallationWorkspace
       v-if="workflowType === 'sales_installation'"

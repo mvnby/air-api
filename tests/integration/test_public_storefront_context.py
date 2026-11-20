@@ -8,6 +8,7 @@ from core.config import settings
 from core.public_write_key import public_write_idempotency_key_sha256
 from models import Lead, Order, Product, TenantOffer
 from models.tenancy import Storefront, StorefrontDomain, TenantScope
+from services.raw_lead_inbox_service import RawLeadInboxService
 from services.catalog_revision_service import CatalogRevisionService
 from services.storefront_context_signature_service import (
     StorefrontContextSignatureService,
@@ -141,6 +142,12 @@ async def test_signed_context_routes_public_lead_to_secondary_storefront(
     storefront = await _seed_secondary_storefront(db)
     _configure_signing(monkeypatch)
     payload = _payload()
+    context = {"page_path": "/contacts/", "form_id": "contact"}
+    attribution = {
+        "consent": True, "landing_path": "/services/repair/",
+        "channel": "organic_search", "source": "google",
+    }
+    payload["submission_context"] = {**context, "attribution": attribution}
     body = _json_body(payload)
 
     response = await async_client.post(
@@ -153,6 +160,17 @@ async def test_signed_context_routes_public_lead_to_secondary_storefront(
     lead = await db.get(Lead, response.json()["lead_id"])
     assert lead is not None
     assert (lead.tenant_id, lead.storefront_id) == (1, storefront.id)
+    assert RawLeadInboxService.project(lead, None, None).website_attribution.model_dump() == {
+        **context, **attribution,
+    }
+
+    # A timeout followed by withdrawal replays the first accepted lead.
+    retry = _json_body({**payload, "submission_context": context})
+    replay = await async_client.post(
+        _PATH, content=retry, headers={**_headers(body=retry), "Content-Type": "application/json"},
+    )
+    assert replay.status_code == 200
+    assert replay.json()["lead_id"] == lead.id
 
 
 @pytest.mark.asyncio
