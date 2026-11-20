@@ -5,6 +5,7 @@ import { commercialTermsApi, mergeCommercialDocumentDefaults } from '../../../se
 import type { DocumentRoleType } from '../model/document-types';
 import {
   ManagerDocumentSystemService,
+  ManagerOrderCompletionActsService,
   OpenAPI,
   type CancelablePromise,
   type DocumentLegalEntityItem,
@@ -12,6 +13,7 @@ import {
   type ManagedDocumentItem,
   type ManagerOrderDetailResponse,
   type ManagedDocumentDraftPayload,
+  type PrepareOrderCompletionActPayload,
   type DocumentCustomerReadiness,
   type NativeDocumentTemplateItem,
   type NativeTemplateVersionItem,
@@ -61,6 +63,7 @@ type ManagedWorkspaceInput = {
   waybillSelection?: () => ManagedDocumentDraftPayload['waybill_composition'];
   actScope?: () => Pick<ManagedDocumentDraftPayload,
     'scope_customer_branch_id' | 'scope_title' | 'scope_address' | 'scope_service_line_ids' | 'scope_service_line_quantities'>;
+  completionSiteIds?: () => number[];
   workflowType: () => string | null | undefined;
   proposalId: () => number | null;
   proposalTotalCents: (type: string) => number | null;
@@ -689,6 +692,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
   const customerContextKey = computed(() => JSON.stringify(input.customerContext?.() || null));
   watch([draftPayload, customerContextKey, () => input.orderId()], () => { customerReadiness.value = null; }, { deep: true, flush: 'sync' });
 
+  let pendingCompletionAct: { intent: string; command: PrepareOrderCompletionActPayload } | null = null;
   const createDraft = async () => {
     if (!workspaceActive || draftBlockedReason.value || !selectedLegalEntityId.value) return;
     const generation = workspaceGeneration;
@@ -698,6 +702,7 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
     try {
       const payload = { ...JSON.parse(JSON.stringify(draftPayload.value)) as typeof draftPayload.value,
         legal_entity_id: selectedLegalEntityId.value };
+      const siteIds = payload.document_type === 'act' ? [...(input.completionSiteIds?.() || [])] : [];
       const contextKey = JSON.stringify({ payload, customer: customerContextKey.value });
       let allowIncompleteCustomer = false;
       if (checksCustomerTemplate(payload.document_type)) {
@@ -712,9 +717,56 @@ export const useManagedDocumentWorkspace = (input: ManagedWorkspaceInput) => {
         allowIncompleteCustomer = !readiness.can_issue;
       }
       if (!isCurrent()) return;
-      const created = await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
-        ...payload, allow_incomplete_customer: allowIncompleteCustomer,
-      }), isCurrent);
+      let created: { id: number; doc_type: string };
+      if (siteIds.length) {
+        if (!payload.proposal_id || !payload.act_terms) throw new Error('Выберите согласованное предложение и условия акта');
+        const replacement = documents.value.find((item) => item.id === payload.replaces_document_id);
+        const intent = JSON.stringify({ orderId, payload, siteIds, revision: replacement?.revision });
+        let request = pendingCompletionAct;
+        if (!request || request.intent !== intent) {
+          const source = await ManagerOrderCompletionActsService.getManagerOrderCompletionActSource(orderId, payload.proposal_id);
+          if (!isCurrent() || JSON.stringify(input.completionSiteIds?.()) !== JSON.stringify(siteIds)
+            || contextKey !== JSON.stringify({ payload: draftPayload.value, customer: customerContextKey.value })) return;
+          request = {
+            intent,
+            command: {
+              site_ids: siteIds,
+              proposal_id: source.proposal_id,
+              expected_proposal_version: source.proposal_version,
+              legal_entity_id: payload.legal_entity_id,
+              issue_date: payload.issue_date,
+              issue_city: payload.issue_city,
+              document_role_type: payload.document_role_type,
+              base_document_id: payload.base_document_id,
+              base_customer_contract_id: payload.base_customer_contract_id,
+              act_terms: payload.act_terms,
+              template_id: payload.template_id,
+              scope_service_line_ids: payload.scope_service_line_ids,
+              scope_service_line_quantities: payload.scope_service_line_quantities,
+              replaces_document_id: payload.replaces_document_id,
+              expected_document_revision: replacement?.revision,
+              idempotency_key: crypto.randomUUID(),
+            },
+          };
+          pendingCompletionAct = request;
+        }
+        const command = request.command;
+        try {
+          const prepared = await awaitMutation(
+            ManagerOrderCompletionActsService.prepareManagerOrderCompletionAct(orderId, command), isCurrent);
+          created = { id: prepared.result.document_id, doc_type: 'act' };
+          pendingCompletionAct = null;
+        } catch (error) {
+          if (typeof error === 'object' && error !== null && 'status' in error && error.status === 409) {
+            pendingCompletionAct = null;
+          }
+          throw error;
+        }
+      } else {
+        created = await awaitMutation(ManagerDocumentSystemService.createManagerManagedDocumentDraft(orderId, {
+          ...payload, allow_incomplete_customer: allowIncompleteCustomer,
+        }), isCurrent);
+      }
       if (!isCurrent()) return;
       customerReadiness.value = null;
       replacesDocumentId.value = null;

@@ -13,10 +13,11 @@ def line_rows(
     product_links: Sequence[OrderProductLink],
     service_lines: Sequence[tuple[OrderServiceLink, int]],
     installation_descriptions: Mapping[int, str] | None = None,
+    *, product_quantities: Mapping[int, int] | None = None,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for item in product_links:
-        quantity = int(item.quantity or 0)
+        quantity = int((product_quantities or {}).get(item.id, item.quantity or 0))
         unit_price = Decimal(str(item.price or 0))
         rows.append(
             line_row(

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import MoneyAmount from '../../../components/money/MoneyAmount.vue';
 import type { OrderServiceLineResponse } from '../../../client';
+import type { useOrderActSites } from '../composables/use-order-act-sites';
 import type { useNativeActComposition } from '../composables/use-native-act-composition';
 import { formatMoneyAmount } from '../model/document-formatters';
 
-const props = defineProps<{ scope: ReturnType<typeof useNativeActComposition> }>();
+const props = defineProps<{
+  scope: ReturnType<typeof useNativeActComposition>;
+  orderSites: ReturnType<typeof useOrderActSites>;
+}>();
 const changeSite = () => {
   if (props.scope.selectedBranchId.value !== null) {
     props.scope.onBranchChange();
@@ -25,20 +29,34 @@ const updateQuantity = (line: OrderServiceLineResponse, event: Event) => {
 <template>
   <section class="mt-4 min-w-0 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" data-testid="native-act-composition">
     <h4 class="text-sm font-bold">Объект и выполненные работы</h4>
-    <label v-if="scope.customerBranches.value.length" class="field mt-3">
-      <span>Объект клиента</span>
-      <select v-model="scope.selectedBranchId.value" class="control" data-testid="act-site" @change="changeSite">
-        <option :value="null">Указать объект вручную</option>
-        <option v-for="branch in scope.customerBranches.value" :key="branch.id" :value="branch.id">{{ branch.name || branch.delivery_address }}</option>
-      </select>
-    </label>
-    <p v-if="scope.selectedBranchId.value && scope.customerBranches.value.length" class="mt-1 break-words text-xs text-slate-600 dark:text-slate-300">
-      {{ scope.address.value }}
-    </p>
-    <div v-else class="mt-3 grid min-w-0 gap-3 md:grid-cols-2">
-      <label class="field"><span>Название объекта</span><input v-model="scope.title.value" class="control" maxlength="500" data-testid="act-site-name" placeholder="Например, магазин" /></label>
-      <label class="field"><span>Адрес работ</span><input v-model="scope.address.value" class="control" maxlength="1000" data-testid="act-site-address" placeholder="Улица, дом" /></label>
+    <p v-if="orderSites.loading.value" class="mt-3 text-sm">Загружаем объекты заказа…</p>
+    <div v-else-if="orderSites.error.value" class="mt-3 text-sm">
+      <p role="alert">Не удалось загрузить объекты: {{ orderSites.error.value }}</p>
+      <button type="button" class="mt-1 font-semibold text-brand-700" @click="orderSites.load()">Повторить</button>
     </div>
+    <fieldset v-else-if="orderSites.sites.value.length" class="mt-3" data-testid="act-order-sites">
+      <legend class="text-xs font-semibold text-slate-600 dark:text-slate-300">Объекты в акте</legend>
+      <label v-for="site in orderSites.sites.value" :key="site.id" class="flex gap-2 py-2 text-sm">
+        <input v-model="orderSites.selectedIds.value" :value="site.id" class="mt-1 size-4 shrink-0" type="checkbox" />
+        <span class="min-w-0 break-words">{{ site.title }} · {{ site.address }}</span>
+      </label>
+    </fieldset>
+    <template v-else>
+      <label v-if="scope.customerBranches.value.length" class="field mt-3">
+        <span>Объект клиента</span>
+        <select v-model="scope.selectedBranchId.value" class="control" data-testid="act-site" @change="changeSite">
+          <option :value="null">Указать объект вручную</option>
+          <option v-for="branch in scope.customerBranches.value" :key="branch.id" :value="branch.id">{{ branch.name || branch.delivery_address }}</option>
+        </select>
+      </label>
+      <p v-if="scope.selectedBranchId.value && scope.customerBranches.value.length" class="mt-1 break-words text-xs text-slate-600 dark:text-slate-300">
+        {{ scope.address.value }}
+      </p>
+      <div v-else class="mt-3 grid min-w-0 gap-3 md:grid-cols-2">
+        <label class="field"><span>Название объекта</span><input v-model="scope.title.value" class="control" maxlength="500" data-testid="act-site-name" placeholder="Например, магазин" /></label>
+        <label class="field"><span>Адрес работ</span><input v-model="scope.address.value" class="control" maxlength="1000" data-testid="act-site-address" placeholder="Улица, дом" /></label>
+      </div>
+    </template>
     <ul v-if="scope.lines.value.length" class="mt-3 divide-y divide-slate-200 border-y border-slate-200 dark:divide-slate-700 dark:border-slate-700">
       <li v-for="line in scope.lines.value" :key="line.id" class="grid min-w-0 gap-x-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <label class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
