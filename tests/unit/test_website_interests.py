@@ -187,6 +187,13 @@ async def test_outbox_interest_snapshots_are_immutable(communications_session_fa
 async def test_contact_retry_revoke_keeps_first_metadata_event_and_internal_projections(communications_session_factory):
     async with communications_session_factory() as session:
         payload = request_payload("contact")
+        attribution = {
+            "consent": True, "landing_path": "/services/repair/",
+            "channel": "organic_search", "source": "google",
+        }
+        payload.submission_context = payload.submission_context.model_copy(update={
+            "attribution": WebsiteSubmissionContext.model_validate(context(attribution=attribution)).attribution,
+        })
         response = await WebsiteLeadService.create_contact_lead(session, payload, tenant_scope=SCOPE, idempotency_key="interests-contact-retry-0001")
         no_interests = payload.model_copy(update={"submission_context": WebsiteSubmissionContext.model_validate(context(interests=None))})
         replay = await WebsiteLeadService.create_contact_lead(session, no_interests, tenant_scope=SCOPE, idempotency_key="interests-contact-retry-0001")
@@ -199,6 +206,9 @@ async def test_contact_retry_revoke_keeps_first_metadata_event_and_internal_proj
         assert events[0].payload["submission_context"]["interests"]["consent"] is True
         inbox_item = RawLeadInboxService.project(lead, None, None)
         assert inbox_item.website_interests.items[0].product_id == 999
+        assert inbox_item.website_attribution.model_dump() == {
+            **attribution, "form_id": "contact", "page_path": "/services",
+        }
         assert inbox_item.intake_version == lead.version
         assert inbox_item.intake_state is None
         customer = Customer(tenant_id=1, name="Анна", phone="+375291112233")
@@ -214,7 +224,9 @@ async def test_contact_retry_revoke_keeps_first_metadata_event_and_internal_proj
         assert IncomingOrderContext.model_validate(snapshot).original_text == lead.request_text
         assert website_interests_from_meta(order.technical_meta).items[0].title.startswith("Daikin")
         detail = await OrderProjectionService.get_order_detail_for_manager(session, order.id, tenant_scope=SCOPE)
-        assert ManagerOrderDetailResponse.model_validate(detail).website_interests.items[0].product_id == 999
+        manager_order = ManagerOrderDetailResponse.model_validate(detail)
+        assert manager_order.website_interests.items[0].product_id == 999
+        assert manager_order.website_attribution == inbox_item.website_attribution
         assert LeadsInboxProjection.item(order).website_interests.items[0].product_id == 999
         foreign_scope = TenantScope(tenant_id=2, storefront_id=2)
         assert await OrderProjectionService.get_order_detail_for_manager(session, order.id, tenant_scope=foreign_scope) is None
