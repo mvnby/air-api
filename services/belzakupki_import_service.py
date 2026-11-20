@@ -526,10 +526,6 @@ class BelzakupkiImportService:
         order.technical_meta = technical_meta
         flag_modified(order, "technical_meta")
         session.add(order)
-        if order.status == OrderStatus.NEW_LEAD:
-            from services.communications.incoming_events import IncomingEventService
-
-            await IncomingEventService.enqueue_tender_recommendation(session, order)
         result.updated += 1
 
     @classmethod
