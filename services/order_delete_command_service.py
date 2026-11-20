@@ -17,6 +17,7 @@ from models.order import (
 )
 from models.maintenance_continuation import MaintenanceContinuation
 from models.maintenance_observation import MaintenanceObservation
+from models.order_inspection import OrderInspectionRevision
 from models.incoming_mail import IncomingMail
 from models.service_asset import EquipmentOrderLink
 from services.command_transaction import command_transaction
@@ -28,6 +29,10 @@ from services.tenant_scope_service import TenantScope
 
 class OrderHasMaintenanceObservations(Exception):
     """The source order is immutable provenance and cannot be hard-deleted."""
+
+
+class OrderHasDiagnosticInspections(Exception):
+    """Saved diagnostic provenance must remain attached to its source order."""
 
 
 class OrderDeleteCommandService:
@@ -62,6 +67,11 @@ class OrderDeleteCommandService:
                 (MaintenanceContinuation.source_order_id == order_id) | (MaintenanceContinuation.order_id == order_id)
             ).limit(1)) is not None:
                 raise OrderHasMaintenanceObservations("Нельзя удалить связанное продолжение ТО: сохранены источники дефектных актов.")
+
+            if await session.scalar(sa.select(OrderInspectionRevision.id).where(
+                OrderInspectionRevision.order_id == order_id
+            ).limit(1)) is not None:
+                raise OrderHasDiagnosticInspections("Нельзя удалить заказ с сохранёнными осмотрами оборудования.")
 
             documents = await DocumentService.list_order_documents(
                 session,

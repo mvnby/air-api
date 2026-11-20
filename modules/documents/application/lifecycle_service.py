@@ -63,6 +63,7 @@ from .issuance_artifacts import (
     assign_official_identity,
     render_and_store_issued_artifacts,
 )
+from modules.documents.domain.placeholder_catalog import ORDER_TECHNICAL_ACT_TYPES
 from .open_contract_basis import validate_saved_basis_for_issue
 from .waybill_paper import check_waybill_tax_profile, prepare_stock_files
 from .replacement_guard import lock_replacement_target
@@ -295,6 +296,7 @@ class ManagedDocumentService:
                     selection.scope_service_line_quantities or {}
                 ),
                 "product_line_ids": list(selection.scope_product_line_ids or ()),
+                **(selection.technical_act_scope.identifiers() if selection.technical_act_scope else {}),
             },
             doc_type=str(selection.document_type).strip().lower(),
             business_role=snapshot["meta"].get("business_role"),
@@ -755,7 +757,7 @@ class ManagedDocumentService:
             # Serialize effective changes and revisions in one order before locking
             # document rows. Rendering releases this lock; finalization repeats it.
             await session.execute(select(Order.id).join(OrderDocument, OrderDocument.order_id == Order.id).where(
-                OrderDocument.id == document_id, OrderDocument.doc_type == "contract_amendment",
+                OrderDocument.id == document_id, OrderDocument.doc_type.in_({"contract_amendment"} | ORDER_TECHNICAL_ACT_TYPES),
                 Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id,
             ).with_for_update(of=Order))
         statement = (
@@ -773,7 +775,7 @@ class ManagedDocumentService:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         document = (await session.execute(statement)).scalar_one_or_none()
         if document is not None and for_update and (
-            document.doc_type in {"maintenance_defect_act", "participant_statement", "repair_defect_act"} or
+            document.doc_type in ({"maintenance_defect_act", "participant_statement", "repair_defect_act"} | ORDER_TECHNICAL_ACT_TYPES) or
             (document.status == "draft" and document.doc_type in {"retail_receipt", "warranty_certificate"})
         ):
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)

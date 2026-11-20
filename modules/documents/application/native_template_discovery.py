@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from modules.documents.domain.placeholder_catalog import MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS
+from modules.documents.domain.placeholder_catalog import MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS, ORDER_INSPECTION_ROW_PLACEHOLDERS
 from modules.documents.domain import (
     CONDITIONAL_FLAGS,
     LINE_ROW_PLACEHOLDERS,
@@ -21,6 +21,7 @@ from .template_versions import (
 
 _TABLE_CATALOGS = {
     "observations": MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS,
+    "inspections": ORDER_INSPECTION_ROW_PLACEHOLDERS,
     "lines": LINE_ROW_PLACEHOLDERS,
     "payment_schedule": PAYMENT_SCHEDULE_ROW_PLACEHOLDERS,
 }

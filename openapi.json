@@ -17413,7 +17413,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+              "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|defect_act|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|technical_inspection_act|tn2|ttn1|warranty_certificate)$",
               "title": "Doc Type"
             }
           }
@@ -20374,7 +20374,7 @@
           "manager-orders"
         ],
         "summary": "Delete Manager Order",
-        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Saved maintenance observations prevent deletion with 409 before any cleanup.\nMissing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Saved maintenance observations and diagnostic inspections prevent deletion with 409 before any cleanup.\nMissing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_order",
         "security": [
           {
@@ -27026,6 +27026,238 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConnectorWriteResult_OrderSiteEquipmentLinkResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/sites/{site_id}/equipment/{equipment_id}/inspection": {
+      "get": {
+        "tags": [
+          "manager-order-diagnostics"
+        ],
+        "summary": "Get Order Inspection",
+        "description": "Read the current inspection or one immutable version for scoped equipment.",
+        "operationId": "get_manager_order_inspection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Equipment Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderInspectionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager-order-diagnostics"
+        ],
+        "summary": "Save Order Inspection",
+        "description": "Record a new version with checked facts, recommendations and performed actions kept separately.",
+        "operationId": "save_manager_order_inspection",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Equipment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderInspectionSavePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderInspectionSaved_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/sites/{site_id}/technical-acts": {
+      "post": {
+        "tags": [
+          "manager-order-diagnostics"
+        ],
+        "summary": "Prepare Order Technical Act",
+        "description": "Prepare a native draft for the chosen scope and basis without reserving an official number.",
+        "operationId": "prepare_manager_order_technical_act",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareOrderTechnicalActPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderTechnicalActPrepared_"
                 }
               }
             }
@@ -51149,6 +51381,23 @@
         ],
         "title": "ConnectorWriteResult[OrderEquipmentSaveResult]"
       },
+      "ConnectorWriteResult_OrderInspectionSaved_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderInspectionSaved"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderInspectionSaved]"
+      },
       "ConnectorWriteResult_OrderSiteEquipmentLinkResult_": {
         "properties": {
           "result": {
@@ -51182,6 +51431,23 @@
           "replayed"
         ],
         "title": "ConnectorWriteResult[OrderSiteItem]"
+      },
+      "ConnectorWriteResult_OrderTechnicalActPrepared_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderTechnicalActPrepared"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderTechnicalActPrepared]"
       },
       "ConsumerDocumentTermsPayload": {
         "properties": {
@@ -64861,7 +65127,7 @@
           },
           "document_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|defect_act|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|technical_inspection_act|tn2|ttn1|warranty_certificate)$",
             "title": "Document Type"
           },
           "issue_date": {
@@ -90332,7 +90598,7 @@
           },
           "doc_type": {
             "type": "string",
-            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|tn2|ttn1|warranty_certificate)$",
+            "pattern": "^(act|b2c_customer_equipment_installation_act|b2c_maintenance_repair_act|b2c_route_laying_act|b2c_supply_installation_act|contract|contract_amendment|defect_act|invoice|maintenance_defect_act|offer|participant_statement|repair_defect_act|retail_receipt|technical_inspection_act|tn2|ttn1|warranty_certificate)$",
             "title": "Doc Type"
           },
           "description": {
@@ -91867,6 +92133,328 @@
         ],
         "title": "OrderEquipmentState"
       },
+      "OrderInspectionRevisionItem": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "defect_found",
+              "no_defect_found",
+              "inconclusive",
+              "restored"
+            ],
+            "title": "Status"
+          },
+          "facts": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Facts"
+          },
+          "trial_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Result"
+          },
+          "event_history": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event History"
+          },
+          "recommendations": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendations"
+          },
+          "performed_actions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed Actions"
+          },
+          "inspected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspected At"
+          },
+          "performer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performer"
+          },
+          "revision_id": {
+            "type": "integer",
+            "title": "Revision Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "recorded_by": {
+            "type": "string",
+            "title": "Recorded By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "facts",
+          "revision_id",
+          "version",
+          "recorded_at",
+          "recorded_by"
+        ],
+        "title": "OrderInspectionRevisionItem"
+      },
+      "OrderInspectionSavePayload": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "defect_found",
+              "no_defect_found",
+              "inconclusive",
+              "restored"
+            ],
+            "title": "Status"
+          },
+          "facts": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Facts"
+          },
+          "trial_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Result"
+          },
+          "event_history": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event History"
+          },
+          "recommendations": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendations"
+          },
+          "performed_actions": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed Actions"
+          },
+          "inspected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspected At"
+          },
+          "performer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performer"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "status",
+          "facts",
+          "expected_version"
+        ],
+        "title": "OrderInspectionSavePayload"
+      },
+      "OrderInspectionSaved": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order Id"
+          },
+          "site_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Site Id"
+          },
+          "equipment_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Equipment Id"
+          },
+          "revision_id": {
+            "type": "integer",
+            "title": "Revision Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "site_id",
+          "equipment_id",
+          "revision_id",
+          "version"
+        ],
+        "title": "OrderInspectionSaved"
+      },
+      "OrderInspectionState": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order Id"
+          },
+          "site_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Site Id"
+          },
+          "equipment_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Equipment Id"
+          },
+          "current_version": {
+            "type": "integer",
+            "title": "Current Version"
+          },
+          "inspection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderInspectionRevisionItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "site_id",
+          "equipment_id",
+          "current_version"
+        ],
+        "title": "OrderInspectionState"
+      },
       "OrderMultiSplitConfigurationResponse": {
         "properties": {
           "rooms": {
@@ -93297,6 +93885,61 @@
         "additionalProperties": false,
         "type": "object",
         "title": "OrderSiteNewEquipment"
+      },
+      "OrderTechnicalActPrepared": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "site_id": {
+            "type": "integer",
+            "title": "Site Id"
+          },
+          "equipment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Equipment Ids"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "technical_inspection_act",
+              "defect_act"
+            ],
+            "title": "Document Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "site_id",
+          "equipment_ids",
+          "document_id",
+          "document_type",
+          "status",
+          "revision",
+          "manager_url"
+        ],
+        "title": "OrderTechnicalActPrepared"
       },
       "OrderUsageAccepted": {
         "properties": {
@@ -95647,6 +96290,108 @@
           "lines"
         ],
         "title": "PrepareMaintenanceOffer"
+      },
+      "PrepareOrderTechnicalActPayload": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "expected_site_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Site Version"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "technical_inspection_act",
+              "defect_act"
+            ],
+            "title": "Document Type"
+          },
+          "inspections": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalActInspection"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Inspections"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Legal Entity Id"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Issue Date"
+          },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Customer Contract Id"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "replaces_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Document Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_site_version",
+          "document_type",
+          "inspections",
+          "legal_entity_id",
+          "issue_date"
+        ],
+        "title": "PrepareOrderTechnicalActPayload"
       },
       "ProductAccessoriesUpdate": {
         "properties": {
@@ -105796,6 +106541,27 @@
           "slug"
         ],
         "title": "TagResponse"
+      },
+      "TechnicalActInspection": {
+        "properties": {
+          "equipment_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Equipment Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "equipment_id",
+          "expected_version"
+        ],
+        "title": "TechnicalActInspection"
       },
       "TelegramChallengeResponse": {
         "properties": {

@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../../utils/api-errors';
 import {
   BUSINESS_NATIVE_DOCUMENT_TYPES,
   CONSUMER_NATIVE_DOCUMENT_TYPES,
+  ORDER_TECHNICAL_DOCUMENT_TYPES,
   documentTypeName,
 } from '../model/native-document-options';
 import { REPAIR_DEFECT_DOCUMENT } from '../model/repair-defect';
@@ -60,7 +61,7 @@ const supportsDocumentRoleType = computed(() => ['offer', 'invoice', 'contract',
 const documentTypeGroups = [
   { label: 'Для бизнеса', items: BUSINESS_NATIVE_DOCUMENT_TYPES },
   { label: 'Для частных клиентов', items: CONSUMER_NATIVE_DOCUMENT_TYPES },
-  { label: 'Ремонт', items: [REPAIR_DEFECT_DOCUMENT] },
+  { label: 'Диагностика и ремонт', items: [...ORDER_TECHNICAL_DOCUMENT_TYPES, REPAIR_DEFECT_DOCUMENT] },
 ];
 const documentTypeIcon = (type: string) => ({
   offer: 'description',

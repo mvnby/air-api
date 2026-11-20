@@ -98,6 +98,7 @@ const getFieldError = props.fieldError;
       class="mt-4"
       :order-id="order.id"
       :customer-id="customer.id"
+      :diagnostic-order="workflowType === 'service_work' || workflowType === 'repair' ? order : undefined"
       :disabled="disabled || order.status === 'closed'"
       :before-action="beforeAction"
       @equipment-changed="equipmentPanelRef?.refreshIfLoaded(); emit('reload', order.id)"

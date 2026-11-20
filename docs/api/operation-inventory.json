@@ -10,6 +10,7 @@
   ],
   "review_stages": {
     "35": "Scoped order sites and equipment: stable customer/branch ownership, bounded lists, durable command replay, exact order storefront and optimistic site versions. Reviewed 2026-11-20 for issue 1278",
+    "36": "Diagnostic inspection revisions and native technical act drafts: verified order site/equipment scope, exact inspection versions, immutable document snapshots and explicit contract basis. Reviewed 2026-11-20 for issue 1278",
     "34": "Addressed template audits: live company owner/admin, issuer/customer scope, exact immutable source/context/legal evidence hashes, retained decisions, guarded fictional DOCX/PDF previews and separate Manager activation; reviewed 2026-11-10",
     "32": "Versioned physical order equipment: scoped bounded reads, customer/object selection, partial identity saves, durable retries, legacy snapshot adoption through audit provenance and unchanged issued files; reviewed 2026-11-10 for issue 1249",
     "33": "Native additional-work amendments: explicit frozen contract basis, current effective totals, tenant/storefront and revision fence; reviewed 2026-11-10",
@@ -1021,6 +1022,11 @@
       ["GET /api/manager/orders/{order_id}/sites/{site_id}/equipment", "manager_list_order_site_equipment", false, 35],
       ["POST /api/manager/orders/{order_id}/sites", "manager_add_order_site", false, 35],
       ["POST /api/manager/orders/{order_id}/sites/{site_id}/equipment", "manager_link_order_site_equipment", false, 35]
+    ],
+    "routers/manager_order_diagnostics.py": [
+      ["GET /api/manager/orders/{order_id}/sites/{site_id}/equipment/{equipment_id}/inspection", "get_manager_order_inspection", false, 36],
+      ["POST /api/manager/orders/{order_id}/sites/{site_id}/technical-acts", "prepare_manager_order_technical_act", false, 36],
+      ["PUT /api/manager/orders/{order_id}/sites/{site_id}/equipment/{equipment_id}/inspection", "save_manager_order_inspection", false, 36]
     ]
   }
 }

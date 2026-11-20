@@ -2,7 +2,13 @@ import { REPAIR_DEFECT_DOCUMENT } from './repair-defect';
 import type { ManagedDocumentItem } from '../../../client';
 
 const warrantyCertificate = { value: 'warranty_certificate', label: 'Гарантийный талон' } as const;
-export const hasInitialDocumentForm = (type: string) => ['contract_amendment', 'participant_statement', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type);
+export const ORDER_TECHNICAL_DOCUMENT_TYPES = [
+  { value: 'technical_inspection_act', label: 'Акт технического обследования' },
+  { value: 'defect_act', label: 'Дефектный акт' },
+] as const;
+export const hasInitialDocumentForm = (type: string) =>
+  ['contract_amendment', 'participant_statement', 'repair_defect_act', 'retail_receipt', 'warranty_certificate'].includes(type)
+  || ORDER_TECHNICAL_DOCUMENT_TYPES.some(item => item.value === type);
 
 const amendment = { value: 'contract_amendment', label: 'Дополнительное соглашение' } as const;
 
@@ -32,6 +38,7 @@ export const NATIVE_DOCUMENT_TYPES = [
   ...BUSINESS_NATIVE_DOCUMENT_TYPES,
   ...CONSUMER_NATIVE_DOCUMENT_TYPES.filter(item => item.value !== warrantyCertificate.value && item.value !== amendment.value),
   REPAIR_DEFECT_DOCUMENT,
+  ...ORDER_TECHNICAL_DOCUMENT_TYPES,
 ] as const;
 
 export const NUMBER_POLICY_TYPES = [

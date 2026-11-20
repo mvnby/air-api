@@ -4,6 +4,7 @@ import { Link2, Plus, X } from 'lucide-vue-next';
 import {
   ManagerOrderSitesService,
   type ManagerEquipmentItemResponse,
+  type ManagerOrderDetailResponse,
   type OrderSiteEquipmentItem,
   type OrderSiteEquipmentLinkRequest,
   type OrderSiteItem,
@@ -13,11 +14,13 @@ import EquipmentLinkDialog from '../equipment/EquipmentLinkDialog.vue';
 import EquipmentManualDialog from '../equipment/EquipmentManualDialog.vue';
 import { listAllCustomerEquipment } from '../equipment/loadAllCustomerEquipment';
 import { equipmentSubtitle, equipmentTitle } from '../equipment/registry';
+import OrderSiteDiagnosticsPanel from './OrderSiteDiagnosticsPanel.vue';
 import { loadOrderSitePages } from './order-site-pages';
 
 const props = defineProps<{
   site: OrderSiteItem;
   customerId: number;
+  diagnosticOrder?: ManagerOrderDetailResponse;
   disabled: boolean;
   beforeAction: () => Promise<boolean>;
 }>();
@@ -62,6 +65,7 @@ const saveError = ref('');
 const candidateError = ref('');
 const action = ref<'link' | 'manual' | null>(null);
 const saving = ref(false);
+const diagnosticsBusy = ref(false);
 const candidates = ref<ManagerEquipmentItemResponse[]>([]);
 const candidateLoading = ref(false);
 const writtenIds = computed(() => items.value.map(item => item.equipment_id));
@@ -132,7 +136,7 @@ const removeComponent = (key: number) => {
   components.value = components.value.filter(component => component.key !== key);
 };
 const save = async (payload: Omit<LinkPayload, 'expected_version'>) => {
-  if (saving.value || props.disabled) return;
+  if (saving.value || diagnosticsBusy.value || props.disabled) return;
   const command = { ...payload, expected_version: props.site.version };
   const fingerprint = JSON.stringify(command);
   if (intent?.fingerprint !== fingerprint) {
@@ -199,6 +203,11 @@ const createManual = (payload: {
   },
 });
 
+const refreshDiagnosticsScope = () => {
+  emit('stale');
+  void loadEquipment();
+};
+
 onMounted(loadEquipment);
 </script>
 
@@ -210,8 +219,8 @@ onMounted(loadEquipment);
         <p v-if="site.title && site.address" class="text-xs text-slate-500 dark:text-slate-400">{{ site.address }}</p>
       </div>
       <div v-if="!disabled" class="flex flex-wrap gap-2">
-        <button type="button" class="btn-mini-outline" :disabled="loading || saving" @click="openLink"><Link2 class="h-4 w-4" /> Привязать оборудование</button>
-        <button type="button" class="btn-mini-outline" :disabled="loading || saving" @click="openManual"><Plus class="h-4 w-4" /> Создать оборудование</button>
+        <button type="button" class="btn-mini-outline" :disabled="loading || saving || diagnosticsBusy" @click="openLink"><Link2 class="h-4 w-4" /> Привязать оборудование</button>
+        <button type="button" class="btn-mini-outline" :disabled="loading || saving || diagnosticsBusy" @click="openManual"><Plus class="h-4 w-4" /> Создать оборудование</button>
       </div>
     </div>
     <p v-if="loading" role="status" class="text-sm text-slate-500">Загружаем оборудование…</p>
@@ -235,6 +244,17 @@ onMounted(loadEquipment);
         </ul>
       </li>
     </ul>
+
+    <OrderSiteDiagnosticsPanel
+      v-if="diagnosticOrder && items.length"
+      :order="diagnosticOrder"
+      :site="site"
+      :equipment="items"
+      :disabled="disabled || saving"
+      :before-action="beforeAction"
+      @busy="diagnosticsBusy = $event; emit('busy', $event)"
+      @stale="refreshDiagnosticsScope"
+    />
 
     <EquipmentLinkDialog
       :open="action === 'link'"
