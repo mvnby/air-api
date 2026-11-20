@@ -217,11 +217,8 @@ Use a PDF or DOCX when the deployment lacks `antiword`. Upload records the evide
 and the supplied status. It makes no issuance or delivery transition. Original
 files use private storage and can be downloaded by version. PDF preview returns
 a page image and requires the same access as download. In production, file uploads
-require a clean ClamAV verdict before format parsing and storage. Configure
-`EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET` with the absolute in-container Unix socket.
-Files are rejected when the scanner detects a threat. An unavailable scanner
-returns 503 before any file is stored. Provision signature updates and memory
-capacity on each active node before enabling production file uploads.
+require a clean ClamAV verdict before format parsing and storage. See the
+[scanner rollout procedure](deployment.md#external-order-document-scanner).
 
 Use `file_role`, `expected_version` and `Idempotency-Key` on the existing file
 attachment route to add an original version or a separate signed PDF. A stale

@@ -27,6 +27,10 @@ def test_external_upload_discovery_uses_official_input_and_opt_in_scope(name):
     assert tool.meta["openai/fileParams"] == ["file"]
     assert tool.meta["securitySchemes"][0]["scopes"] == ["kitlane:read", ORDER_DOCS_UPLOAD_SCOPE]
     assert not tool.annotations.readOnlyHint and tool.annotations.idempotentHint
+    file_parameter = tool.inputSchema["properties"]["file"]
+    assert file_parameter["$ref"] == "#/$defs/OpenAIFile"
+    assert "anyOf" not in file_parameter
+    assert "file" not in tool.inputSchema["required"]
     file_schema = tool.inputSchema["$defs"]["OpenAIFile"]
     assert set(file_schema["required"]) == {"file_id", "download_url"}
     assert set(file_schema["properties"]) == {"file_id", "download_url", "file_name", "mime_type"}

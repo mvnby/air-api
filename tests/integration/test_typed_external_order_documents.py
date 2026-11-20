@@ -106,13 +106,17 @@ async def test_private_versions_replay_and_explicit_contract_basis(db, tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_closed_order_can_receive_signed_pdf_without_mutating_native_issue(db, tmp_path):
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_closed_order_can_receive_signed_pdf_without_mutating_native_issue(db, tmp_path, legacy):
     order, issuer, selected, _alternative = await _seed_order(db)
     _user, actor = await _staff(db)
     issued = OrderDocument(
-        tenant_id=1, order_id=order.id, proposal_id=selected.id, doc_type="act", number="ACT-01",
-        date=datetime(2026, 11, 20), status="issued", internal_reference="issued-act-ref",
-        legal_entity_id=issuer.id, render_snapshot={"values": {"totals.amount": "320.00"}},
+        tenant_id=None if legacy else 1,
+        order_id=order.id, proposal_id=selected.id, doc_type="act", number="ACT-01",
+        date=datetime(2026, 11, 20), status=None if legacy else "issued",
+        internal_reference=None if legacy else "issued-act-ref",
+        legal_entity_id=None if legacy else issuer.id,
+        render_snapshot={"values": {"totals.amount": "320.00"}},
     )
     order.status = OrderStatus.CLOSED
     db.add_all([issued, order])
@@ -128,11 +132,18 @@ async def test_closed_order_can_receive_signed_pdf_without_mutating_native_issue
                              idempotency_key=str(uuid4()), source=file, storage=storage)
     attach = dict(actor=actor, document_id=issued.id, file_role="signed_copy", expected_version=0,
                   idempotency_key=str(uuid4()), source=file, storage=storage)
+    if legacy:
+        foreign_actor = CommandActor(actor.staff_user_id, actor.username, TenantScope(2, 2))
+        with pytest.raises(LookupError):
+            await SERVICE.attach(db, **{**attach, "actor": foreign_actor})
+        await db.refresh(issued)
+        assert issued.tenant_id is None
     saved = await SERVICE.attach(db, **attach)
     assert saved.value.file_version == 1
     assert (await SERVICE.attach(db, **attach)).replayed
     await db.refresh(issued)
-    assert issued.status == "issued"
+    assert issued.tenant_id == order.tenant_id
+    assert issued.status == (None if legacy else "issued")
     assert issued.render_snapshot == {"values": {"totals.amount": "320.00"}}
     assert issued.google_file_id is None and issued.origin is None
     assert await SERVICE.read_file(db, tenant_scope=SCOPE, document_id=issued.id, storage=storage) is None
@@ -263,15 +274,18 @@ async def test_typed_word_act_preserves_scope_and_rejects_equipment_from_another
 
 
 @pytest.mark.asyncio
-async def test_signed_external_act_cannot_duplicate_native_site_coverage(db):
+@pytest.mark.parametrize("existing_act", ["legacy", "native_unscoped", "native_scoped"])
+async def test_signed_external_act_cannot_duplicate_effective_coverage(db, existing_act):
     from modules.documents.application.order_completion_coverage import COVERAGE_KEY
 
     order, issuer, selected, _alternative = await _seed_order(db)
     _user, actor = await _staff(db)
     db.add(OrderDocument(
         tenant_id=1, order_id=order.id, proposal_id=selected.id, doc_type="act", number="NATIVE-ACT-1",
-        date=datetime(2026, 11, 20), status="issued", internal_reference="scoped-act-ref",
-        legal_entity_id=issuer.id, render_snapshot={"meta": {COVERAGE_KEY: {"schema_version": 1}}},
+        date=datetime(2026, 11, 20), status=None if existing_act == "legacy" else "issued",
+        internal_reference=None if existing_act == "legacy" else "act-ref",
+        legal_entity_id=issuer.id,
+        render_snapshot={"meta": {COVERAGE_KEY: {"schema_version": 1}}} if existing_act == "native_scoped" else None,
     ))
     await db.commit()
 
@@ -287,3 +301,38 @@ async def test_signed_external_act_cannot_duplicate_native_site_coverage(db):
             idempotency_key=str(uuid4()),
         )
     assert await db.scalar(select(func.count()).select_from(OrderDocument)) == 1
+
+
+@pytest.mark.asyncio
+async def test_signed_external_act_blocks_second_closure_but_keeps_evidence_and_replays(db, tmp_path):
+    from modules.documents.application.errors import ManagedDocumentConflictError
+    from modules.documents.application.order_completion_coverage import ensure_legacy_act_write_allowed
+
+    order, _issuer, _selected, _alternative = await _seed_order(db)
+    _user, actor = await _staff(db)
+    order_id, original_total = order.id, order.total_amount
+    storage = LocalPrivateAttachmentStorage(tmp_path / "evidence")
+    received = ExternalOrderDocumentPayload(document_type="act", number="EXT-ACT-1", document_date=date(2026, 11, 20))
+    command = dict(
+        actor=actor, order_id=order_id, storage=storage,
+        source=ExternalDocumentFileSource.from_bytes(_pdf("External completion"), "акт.pdf", "application/pdf"),
+    )
+
+    await SERVICE.create(db, **command, payload=received, idempotency_key=str(uuid4()))
+    await ensure_legacy_act_write_allowed(db, order_id)
+    signed = received.model_copy(update={"external_status": "signed"})
+    signed_key = str(uuid4())
+    first = await SERVICE.create(db, **command, payload=signed, idempotency_key=signed_key)
+    replay = await SERVICE.create(db, **command, payload=signed, idempotency_key=signed_key)
+    assert replay.replayed and first.value == replay.value
+
+    with pytest.raises(ExternalDocumentConflictError, match="уже оформлен акт"):
+        await SERVICE.create(db, **command, payload=signed, idempotency_key=str(uuid4()))
+    with pytest.raises(ManagedDocumentConflictError, match="подписанный внешний акт"):
+        await ensure_legacy_act_write_allowed(db, order_id)
+    await SERVICE.create(db, **command, payload=received, idempotency_key=str(uuid4()))
+    assert await db.scalar(select(func.count()).select_from(OrderDocument).where(
+        OrderDocument.order_id == order_id, OrderDocument.external_status == "signed",
+    )) == 1
+    await db.refresh(order)
+    assert order.total_amount == original_total

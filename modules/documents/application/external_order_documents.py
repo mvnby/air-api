@@ -198,10 +198,10 @@ class ExternalOrderDocumentService:
             if order.status == OrderStatus.CLOSED:
                 raise ExternalDocumentConflictError("К завершённому заказу можно приложить подписанный экземпляр существующего документа.")
             if payload.document_type == "act" and payload.external_status == "signed":
-                from modules.documents.application.order_completion_coverage import ensure_legacy_act_write_allowed
+                from modules.documents.application.order_completion_coverage import ensure_signed_external_act_write_allowed
 
                 try:
-                    await ensure_legacy_act_write_allowed(session, order_id)
+                    await ensure_signed_external_act_write_allowed(session, order_id)
                 except ManagedDocumentConflictError as exc:
                     raise ExternalDocumentConflictError(str(exc)) from exc
             await _check_references(session, order, payload, scope)
@@ -247,8 +247,8 @@ class ExternalOrderDocumentService:
         async def operation():
             order = await cls.get_order(session, scope, order_id, lock=True)
             document = await cls.get_document(session, scope, document_id, lock=True)
-            if document.tenant_id != scope.tenant_id:
-                raise ExternalDocumentConflictError("Исторический документ нельзя менять.")
+            if document.order_id != order.id:
+                raise LookupError("Документ не найден.")
             if file_role == "original" and (
                 order.status == OrderStatus.CLOSED or document.origin != EXTERNAL_DOCUMENT_ORIGIN
                 or document.external_status == "signed"
@@ -264,6 +264,12 @@ class ExternalOrderDocumentService:
                 raise ExternalDocumentVersionConflictError("Версия файла изменилась. Обновите документ и повторите операцию.")
             if latest >= EXTERNAL_FILE_MAX_VERSIONS:
                 raise ExternalDocumentConflictError("Достигнут предел версий файла документа.")
+            # A legacy document inherits ownership from its locked, scoped order.
+            # Bind only this row as part of the signed-copy transaction so the
+            # file can use the same tenant foreign key as native documents.
+            if document.tenant_id is None:
+                document.tenant_id = order.tenant_id
+                await session.flush()
             version = latest + 1
             await _store_file(session, actor=actor, document=document, version=version,
                               role=file_role, source=source, storage=storage)

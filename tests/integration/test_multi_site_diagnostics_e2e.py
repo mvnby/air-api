@@ -25,6 +25,7 @@ from modules.documents.application.native_template_discovery import discover_nat
 from modules.documents.application.template_versions import NativeTemplateVersionService
 from modules.documents.infrastructure.artifact_storage import PrivateDocumentArtifactStorage
 from modules.documents.infrastructure.template_source_storage import PrivateTemplateSourceStorage
+from services.connector_file_service import ConnectorFileService, ConnectorFileUnavailable
 from services.private_attachment_storage_service import LocalPrivateAttachmentStorage
 from tests.integration.test_connector_mcp_maintenance import call, client_for, grant, success
 from tests.integration.test_managed_document_lifecycle import FakePdfConverter
@@ -146,14 +147,31 @@ def response_json(response):
 
 
 @pytest.mark.asyncio
-async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
+async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace, monkeypatch):
     db, manager, private = acceptance_workspace
     order, proposal, line, issuer, (branch_a, branch_b), known_unit, headers = await seed_order(db)
     order_path = f"/api/manager/orders/{order.id}"
     docs_path = f"{order_path}/documents"
     mcp_order = {"order_id": order.id}
-    token, *_ = await grant(db, scopes="kitlane:read kitlane:orders:write kitlane:contracts:drafts:write")
+    token, *_ = await grant(
+        db, scopes="kitlane:read kitlane:orders:write kitlane:contracts:drafts:write kitlane:documents:uploads:write",
+    )
     originals = {}
+    delivery_files = {}
+    delivery_requests = []
+
+    async def download_content(file, *, limit, accept):
+        delivery_requests.append(file.file_id)
+        if file.file_id not in delivery_files:
+            raise ConnectorFileUnavailable("Test delivery unavailable")
+        content, mime_type = delivery_files[file.file_id]
+        assert accept == "*/*" and len(content) <= limit
+        return content, mime_type
+
+    monkeypatch.setattr(ConnectorFileService, "_download_content", staticmethod(download_content))
+
+    def file_params(file_id, **metadata):
+        return {"file_id": file_id, "download_url": f"https://delivery.example/{file_id}?token=synthetic", **metadata}
 
     async def manager_post(path, payload):
         response = await manager.post(path, headers=headers, json=payload)
@@ -193,16 +211,21 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
     ]})
     assert (await manager_get(f"{order_path}/sites"))["legacy_primary"] is None
 
-    contract_bytes = pdf_bytes("Synthetic service agreement TEST-1278")
-    contract_request = {"number": "TEST-1278", "contract_date": "2026-11-01T00:00:00", "external_status": "signed"}
-    contract = response_json(await manager.post(
-        f"{docs_path}/external-contract", data=contract_request, headers={**headers, "Idempotency-Key": str(uuid4())},
-        files={"file": ("Тестовый договор.pdf", contract_bytes, "application/pdf")},
-    ))
-    originals[(contract["id"], 1)] = contract_bytes
-    assert (contract["origin"], contract["external_status"], contract["status"]) == ("external_upload", "signed", None)
-
     async with client_for(db, token) as mcp:
+        contract_number = "TEST-1278"
+        contract_bytes = pdf_bytes("Synthetic service agreement TEST-1278")
+        delivery_files["file-contract"] = (contract_bytes, "application/pdf")
+        contract_result = success(await call(mcp, "register_external_order_contract", {
+            **mcp_order, "idempotency_key": str(uuid4()), "file": file_params("file-contract"),
+            "payload": {"number": contract_number, "document_date": "2026-11-01", "external_status": "signed"},
+        }))["result"]
+        contract_id = contract_result["document_id"]
+        assert (contract_result["document_type"], contract_result["origin"], contract_result["external_status"]) == (
+            "contract", "external_upload", "signed",
+        )
+        assert contract_result["file_version"] == 1
+        originals[(contract_id, 1)] = contract_bytes
+
         site_list = success(await call(mcp, "list_order_sites", mcp_order))
         assert {site["id"] for site in site_list["items"]} == {a["id"], b["id"], c["id"]}
         assert all(f"orderSiteId={site['id']}" in site["manager_url"] for site in site_list["items"])
@@ -237,7 +260,7 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
         async def prepare_technical(site, units, kind):
             payload = {
                 "idempotency_key": str(uuid4()), "expected_site_version": site["version"], "document_type": kind,
-                "issue_date": ISSUE_DATE, "legal_entity_id": issuer.id, "base_document_id": contract["id"],
+                "issue_date": ISSUE_DATE, "legal_entity_id": issuer.id, "base_document_id": contract_id,
                 "inspections": [{"equipment_id": unit_id, "expected_version": 1} for unit_id in units],
             }
             if kind == "defect_act":
@@ -247,7 +270,7 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
             result = reply["result"]
             assert result["status"] == "draft" and f"documentId={result['document_id']}" in result["manager_url"]
             row = await db.get(OrderDocument, result["document_id"])
-            assert row.base_document_id == contract["id"] and row.scope_meta["site_ids"] == [site["id"]]
+            assert row.base_document_id == contract_id and row.scope_meta["site_ids"] == [site["id"]]
             assert row.scope_meta["equipment_ids"] == units and "totals.amount" not in row.render_snapshot["values"]
             return row
 
@@ -269,7 +292,7 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
         completion_source = await manager_get(f"{order_path}/completion-acts/source", proposal_id=proposal.id)
         completion_payload = {
             "idempotency_key": str(uuid4()), "expected_proposal_version": completion_source["proposal_version"],
-            "proposal_id": proposal.id, "site_ids": [a["id"], b["id"], c["id"]], "base_document_id": contract["id"],
+            "proposal_id": proposal.id, "site_ids": [a["id"], b["id"], c["id"]], "base_document_id": contract_id,
             "issue_date": ISSUE_DATE, "issue_city": "Витебск", "legal_entity_id": issuer.id,
             "document_role_type": "executor_customer", "act_terms": {"claims_status": "none"},
         }
@@ -288,57 +311,67 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
         assert commercial_rows[0]["line.title"] == SERVICE_TITLE
         assert commercial_rows[0]["line.quantity"] == "1" and commercial_rows[0]["line.amount"] == str(AGREED_PRICE)
         assert full_act.scope_meta["site_ids"] == completion_payload["site_ids"] and full_act.status == "issued"
-        assert full_act.base_document_id == contract["id"] and full_act.proposal_id == proposal.id
+        assert full_act.base_document_id == contract_id and full_act.proposal_id == proposal.id
         artifact = next(file for file in issued.artifacts if file.kind == "rendered_docx")
         content = await artifacts.read(ManagedDocumentService.stored_artifact(artifact))
         texts = [paragraph.text for paragraph in Document(BytesIO(content)).paragraphs]
         assert any(all(site["address"] in text for site in (a, b, c)) for text in texts)
-        assert any(contract["number"] in text for text in texts)
+        assert any(contract_number in text for text in texts)
         frozen = deepcopy(full_act.render_snapshot)
 
         word = Document()
         word.add_paragraph("Недостаток хладагента. Рекомендован отдельный поиск утечки.")
         word_evidence = docx_bytes(word)
+        evidence_file = file_params("file-defect", file_name="Тестовый дефектный акт.docx", mime_type=DOCX_MIME)
         evidence_args = {
-            "document_type": "defect_act", "number": "TEST-DEF-A", "document_date": ISSUE_DATE,
-            "site_id": str(a["id"]), "equipment_ids": [str(unit_a)], "base_document_id": str(contract["id"]),
-            "proposal_id": str(proposal.id),
+            **mcp_order, "idempotency_key": str(uuid4()), "file": evidence_file,
+            "payload": {
+                "document_type": "defect_act", "number": "TEST-DEF-A", "document_date": ISSUE_DATE,
+                "site_id": a["id"], "equipment_ids": [unit_a], "base_document_id": contract_id,
+                "proposal_id": proposal.id,
+            },
         }
-        evidence_headers = {**headers, "Idempotency-Key": str(uuid4())}
-
-        async def upload_defect():
-            return response_json(await manager.post(
-                f"{docs_path}/upload", data=evidence_args, headers=evidence_headers,
-                files={"file": ("Тестовый дефектный акт.docx", word_evidence, DOCX_MIME)},
-            ))
-
-        external_defect = await upload_defect()
-        assert (await upload_defect())["id"] == external_defect["id"]
-        originals[(external_defect["id"], 1)] = word_evidence
-        assert external_defect["scope_meta"]["equipment_ids"] == [unit_a]
+        unavailable = await call(mcp, "upload_order_document", evidence_args)
+        assert unavailable["isError"] and unavailable["structuredContent"]["error"]["code"] == "retryable"
+        assert "action=uploadExternalDocument" in unavailable["structuredContent"]["manager_url"]
+        assert "document_id" not in unavailable["structuredContent"]
+        delivery_files["file-defect"] = (word_evidence, DOCX_MIME)
+        evidence_response = success(await call(mcp, "upload_order_document", evidence_args))
+        evidence_id = evidence_response["result"]["document_id"]
+        assert evidence_response["result"]["file_version"] == 1
+        evidence_file["download_url"] = "https://delivery.example/file-defect?token=refreshed"
+        replayed = success(await call(mcp, "upload_order_document", evidence_args))
+        assert replayed == {**evidence_response, "replayed": True}
+        originals[(evidence_id, 1)] = word_evidence
 
         await db.refresh(order)
         assert order.customer_branch_id == branch_a.id and order.total_amount == AGREED_PRICE
         order.status = OrderStatus.CLOSED
         await db.commit()
         signed_act = pdf_bytes("Synthetic signed completion record TEST-1278")
-        copied = response_json(await manager.post(
-            f"/api/manager/docs/{completion_id}/file",
-            data={"file_role": "signed_copy", "expected_version": "0"},
-            headers={**headers, "Idempotency-Key": str(uuid4())},
-            files={"file": ("Тестовый подписанный акт.pdf", signed_act, "application/pdf")},
-        ))
+        delivery_files["file-signed-act"] = (signed_act, "application/pdf")
+        copy_args = {
+            **mcp_order, "idempotency_key": str(uuid4()), "document_id": completion_id, "file_role": "signed_copy",
+            "expected_version": 0, "file": file_params("file-signed-act", file_name="Тестовый подписанный акт.pdf"),
+        }
+        copied = success(await call(mcp, "attach_order_document_file", copy_args))["result"]
+        assert copied["file_version"] == 1 and copied["document_id"] == completion_id
+        stale = await call(mcp, "attach_order_document_file", {**copy_args, "idempotency_key": str(uuid4())})
+        assert stale["isError"] and stale["structuredContent"]["error"]["code"] == "version_conflict"
+        assert delivery_requests == ["file-contract", "file-defect", "file-defect", "file-signed-act"]
         originals[(completion_id, 1)] = signed_act
-        assert copied["external_files"][0]["role"] == "signed_copy"
         await db.refresh(full_act)
         assert full_act.render_snapshot == frozen and full_act.status == "issued"
 
-        expected = {contract["id"], draft_a.id, draft_b.id, draft_c.id, completion_id, external_defect["id"]}
+        expected = {contract_id, draft_a.id, draft_b.id, draft_c.id, completion_id, evidence_id}
         all_docs = (await manager_get(docs_path, include_native=True))["items"]
         assert {row["id"] for row in all_docs} == expected
         assert [row["id"] for row in all_docs if row["doc_type"] == "act"] == [completion_id]
         by_id = {row["id"]: row for row in all_docs}
-        unauthenticated = await manager.get(f"/api/manager/docs/{contract['id']}/download", params={"file_version": 1})
+        assert by_id[contract_id]["status"] is None and by_id[contract_id]["external_status"] == "signed"
+        assert by_id[evidence_id]["scope_meta"]["equipment_ids"] == [unit_a]
+        assert by_id[completion_id]["external_files"][0]["role"] == "signed_copy"
+        unauthenticated = await manager.get(f"/api/manager/docs/{contract_id}/download", params={"file_version": 1})
         assert unauthenticated.status_code in (401, 403)
         for (doc_id, version), expected_bytes in originals.items():
             assert by_id[doc_id]["external_files"][0]["checksum_sha256"] == sha256(expected_bytes).hexdigest()
@@ -347,7 +380,7 @@ async def test_multi_site_service_diagnostics_end_to_end(acceptance_workspace):
             assert download.headers["cache-control"] == "private, no-store"
 
         for site, ids in (
-            (a, {draft_a.id, completion_id, external_defect["id"]}),
+            (a, {draft_a.id, completion_id, evidence_id}),
             (b, {draft_b.id, completion_id}),
             (c, {draft_c.id, completion_id}),
         ):

@@ -4,6 +4,7 @@ from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from modules.documents.application.external_order_documents import (
     ExternalDocumentFileRole,
@@ -60,26 +61,28 @@ class OrderExternalDocumentSaved(BaseModel):
     manager_url: str
 
 
-class UploadOrderDocumentInput(OrderIdInput, WriteInput):
+class OrderDocumentFileInput(OrderIdInput, WriteInput):
+    # fileParams permits an omitted field, but the advertised value must resolve to a file object.
+    file: OpenAIFile | SkipJsonSchema[None] = Field(default_factory=lambda: None)
+
+
+class UploadOrderDocumentInput(OrderDocumentFileInput):
     payload: ExternalOrderDocumentPayload
-    file: OpenAIFile | None = None
 
 
 class RegisterExternalOrderContractPayload(ExternalOrderDocumentPayload):
     document_type: Literal["contract"] = "contract"
 
 
-class RegisterExternalOrderContractInput(OrderIdInput, WriteInput):
+class RegisterExternalOrderContractInput(OrderDocumentFileInput):
     payload: RegisterExternalOrderContractPayload
-    file: OpenAIFile | None = None
     metadata_only: bool = False
 
 
-class AttachOrderDocumentFileInput(OrderIdInput, WriteInput):
+class AttachOrderDocumentFileInput(OrderDocumentFileInput):
     document_id: int = Field(gt=0)
     file_role: ExternalDocumentFileRole
     expected_version: int = Field(ge=0)
-    file: OpenAIFile | None = None
 
 
 class PrepareOrderInspectionActInput(PrepareOrderTechnicalActPayload, OrderIdInput):
