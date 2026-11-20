@@ -89,6 +89,8 @@ DEFAULT_NUMBER_POLICIES: dict[str, EffectiveDocumentNumberPolicy] = {
     "offer": EffectiveDocumentNumberPolicy("offer", "КП-"),
     "maintenance_defect_act": EffectiveDocumentNumberPolicy("maintenance_defect_act", "ДА-"),
     "repair_defect_act": EffectiveDocumentNumberPolicy("repair_defect_act", "ДАР-"),
+    "technical_inspection_act": EffectiveDocumentNumberPolicy("technical_inspection_act", "АТО-"),
+    "defect_act": EffectiveDocumentNumberPolicy("defect_act", "ДАД-"),
     "retail_receipt": EffectiveDocumentNumberPolicy("retail_receipt", "ТЧ-"),
     "warranty_certificate": EffectiveDocumentNumberPolicy("warranty_certificate", "ГТ-"),
     "participant_statement": EffectiveDocumentNumberPolicy("participant_statement", "ЗУ-"),

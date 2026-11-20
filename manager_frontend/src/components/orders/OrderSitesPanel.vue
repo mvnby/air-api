@@ -5,6 +5,7 @@ import {
   ManagerOrderSitesService,
   ManagerService,
   type ManagerCustomerBranchItemResponse,
+  type ManagerOrderDetailResponse,
   type OrderSiteAddRequest,
   type OrderSiteItem,
   type OrderSiteList,
@@ -16,6 +17,7 @@ import { loadOrderSitePages } from './order-site-pages';
 const props = defineProps<{
   orderId: number;
   customerId: number;
+  diagnosticOrder?: ManagerOrderDetailResponse;
   disabled: boolean;
   beforeAction: () => Promise<boolean>;
 }>();
@@ -230,6 +232,7 @@ onMounted(() => {
           :key="selectedSite.id"
           :site="selectedSite"
           :customer-id="customerId"
+          :diagnostic-order="diagnosticOrder"
           :disabled="disabled || saving || loading"
           :before-action="beforeAction"
           @busy="equipmentBusy = $event"

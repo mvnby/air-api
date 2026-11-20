@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import CustomerContract, DocumentLegalEntity, Order, OrderDocument, OrderStatus
 from models.tenancy import TenantScope
+from modules.documents.domain.placeholder_catalog import ORDER_TECHNICAL_ACT_TYPES
 
 from .errors import ManagedDocumentConflictError
 
@@ -49,7 +50,7 @@ async def resolve_native_basis(
     base_document_id: int | None, base_customer_contract_id: int | None,
     lock: bool = False,
 ) -> tuple[OrderDocument | None, CustomerContract | None]:
-    if document_type not in {"act", "tn2", "ttn1", "invoice"}:
+    if document_type not in ({"act", "tn2", "ttn1", "invoice"} | ORDER_TECHNICAL_ACT_TYPES):
         return None, None
     if not base_document_id:
         contract_id = base_customer_contract_id or order.customer_contract_id

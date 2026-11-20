@@ -35,10 +35,11 @@ type BasisInput = {
   legalEntities: Ref<DocumentLegalEntityItem[]>;
   baseDocumentId: Ref<number | null>;
   baseCustomerContractId: Ref<number | null>;
+  requireExplicitSelection?: boolean;
 };
 
 export function useNativeDocumentBasis(input: BasisInput) {
-  const required = computed(() => ['act', 'tn2', 'ttn1'].includes(input.documentType.value));
+  const required = computed(() => ['act', 'tn2', 'ttn1', 'technical_inspection_act', 'defect_act'].includes(input.documentType.value));
   const supported = computed(() => required.value || input.documentType.value === 'invoice');
   const contracts = ref<RegisteredContract[]>([]);
   const loading = ref(false);
@@ -125,6 +126,7 @@ export function useNativeDocumentBasis(input: BasisInput) {
     if (!supported.value) return undefined;
     const items = options.value;
     if (chosen.value) return items.find((item) => item.value === chosen.value);
+    if (input.requireExplicitSelection) return undefined;
     const previous = items.find((item) => item.value === registered.value)
       || items.find((item) => item.contract && item.contract.id === input.order().customer_contract_id);
     if (previous) return previous;

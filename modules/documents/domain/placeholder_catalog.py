@@ -429,9 +429,13 @@ PAYMENT_SCHEDULE_ROW_PLACEHOLDERS: tuple[PlaceholderDescriptor, ...] = (
     PlaceholderDescriptor("payment.note", "Примечание", "График оплаты"),
 )
 
+ORDER_TECHNICAL_ACT_TYPES = frozenset({"technical_inspection_act", "defect_act"})
+
+
 SUPPORTED_NATIVE_DOCUMENT_TYPES = (
     frozenset({"contract_amendment", "offer", "invoice", "contract", "act", "tn2", "ttn1", "maintenance_defect_act", "participant_statement", "repair_defect_act", "retail_receipt", "warranty_certificate"})
     | B2C_NATIVE_DOCUMENT_TYPES
+    | ORDER_TECHNICAL_ACT_TYPES
 )
 
 
@@ -440,4 +444,20 @@ MAINTENANCE_OBSERVATION_ROW_PLACEHOLDERS = tuple(
     for field, label in (("equipment", "Блок / место проблемы"), ("provenance", "Дата, автор и версия"),
                          ("facts", "Подтверждённые факты"), ("recommendation", "Рекомендация"),
                          ("sources", "Источники"), ("photos", "Приватные фото"))
+)
+
+
+ORDER_INSPECTION_ROW_PLACEHOLDERS = tuple(
+    PlaceholderDescriptor(f"inspection.{field}", label, "Осмотр оборудования")
+    for field, label in (
+        ("equipment", "Оборудование"),
+        ("status", "Состояние"),
+        ("facts", "Подтверждённые факты"),
+        ("trial_result", "Пробный запуск"),
+        ("event_history", "События из истории"),
+        ("recommendations", "Рекомендуемые действия"),
+        ("performed_actions", "Фактически выполненные действия"),
+        ("inspected_at", "Дата и время осмотра"),
+        ("performer", "Кто проводил осмотр"),
+    )
 )

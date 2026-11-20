@@ -38,6 +38,7 @@ from modules.documents.domain import (
     TransportTerms,
     WAYBILL_DOCUMENT_TYPES,
 )
+from modules.documents.domain.placeholder_catalog import ORDER_TECHNICAL_ACT_TYPES
 from modules.documents.domain.repair_defect import RepairDefect
 from modules.documents.domain.participant_statement import ParticipantStatement
 from .business_context import (
@@ -63,6 +64,7 @@ from .logistics_rows import build_logistics_rows, waybill_composition_source
 from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
 from .draft_parameters import json_terms
+from .order_technical_act_snapshot import OrderTechnicalActScope, extend_technical_act_snapshot
 from modules.documents.domain.contract_amendment import ContractAmendmentTerms
 
 
@@ -98,6 +100,7 @@ class DocumentContextSelection:
     maintenance_preparation_id: int | None = None
     participant_statement: ParticipantStatement | None = None
     repair_defect: RepairDefect | None = None
+    technical_act_scope: OrderTechnicalActScope | None = None
     amendment_terms: ContractAmendmentTerms | None = None
     amendment_basis_revision: str | None = None
     receipt_note: str | None = None
@@ -163,6 +166,8 @@ class DocumentContextBuilder:
             raise DocumentContextError(
                 "Транспортные реквизиты доступны только для ТН-2 и ТТН-1"
             )
+        if (document_type in ORDER_TECHNICAL_ACT_TYPES) != (selection.technical_act_scope is not None):
+            raise DocumentContextError("Подготовьте технический акт из сохранённых осмотров одного объекта")
         if document_type == "maintenance_defect_act" and selection.maintenance_preparation_id is None:
             raise DocumentContextError("Подготовьте дефектный акт через выбранные замечания ТО")
         if (document_type == "repair_defect_act") != (selection.repair_defect is not None):
@@ -214,6 +219,8 @@ class DocumentContextBuilder:
             service_quantities=selection.scope_service_line_quantities or {},
             product_ids=selection.scope_product_line_ids,
         )
+        if selection.technical_act_scope is not None:
+            product_links, service_lines = [], []
         try:
             base_document, base_contract = await resolve_native_basis(
                 session, order=order, document_type=document_type,
@@ -224,7 +231,7 @@ class DocumentContextBuilder:
         except ManagedDocumentConflictError as exc:
             raise DocumentContextError(str(exc)) from exc
         if (
-            document_type in cls.CLOSING_TYPES
+            document_type in (cls.CLOSING_TYPES | ORDER_TECHNICAL_ACT_TYPES)
             and base_document is None
             and base_contract is None
         ):
@@ -559,6 +566,8 @@ class DocumentContextBuilder:
             except ValueError as exc:
                 raise DocumentContextError(str(exc)) from exc
             snapshot["table_rows"] = {}
+        if selection.technical_act_scope is not None:
+            return extend_technical_act_snapshot(snapshot, selection.technical_act_scope)
         if document_type == "maintenance_defect_act":
             from .maintenance_act_snapshot import extend_maintenance_snapshot
             return await extend_maintenance_snapshot(session, selection=selection, scope=tenant_scope, snapshot=snapshot)
