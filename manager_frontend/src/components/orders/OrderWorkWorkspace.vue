@@ -8,6 +8,7 @@ import type { ProductLine } from './order-editor-types';
 import type { OrderWorkspaceTarget, OrderWorkspaceViewModel } from './order-workspace';
 import type { ServiceAttachmentEquipmentOption } from '../service-attachments/types';
 import OrderEquipmentPanel from '../equipment/OrderEquipmentPanel.vue';
+import OrderSitesPanel from './OrderSitesPanel.vue';
 import OrderAttachmentsPanel from '../service-attachments/OrderAttachmentsPanel.vue';
 import EmailContractReviewLauncher from '../leads/EmailContractReviewLauncher.vue';
 import MaintenanceObservationsPanel from '../maintenance-observations/MaintenanceObservationsPanel.vue';
@@ -90,6 +91,16 @@ const getFieldError = props.fieldError;
       :lanes="orderWorkspace.lanes"
       :active-target="activeWorkspaceTarget"
       @open="emit('open', $event)"
+    />
+    <OrderSitesPanel
+      v-if="order && customer?.id"
+      :key="`order-sites-${order.id}-${customer.id}`"
+      class="mt-4"
+      :order-id="order.id"
+      :customer-id="customer.id"
+      :disabled="disabled || order.status === 'closed'"
+      :before-action="beforeAction"
+      @equipment-changed="equipmentPanelRef?.refreshIfLoaded(); emit('reload', order.id)"
     />
     <OrderEquipmentPanel
       v-if="order"

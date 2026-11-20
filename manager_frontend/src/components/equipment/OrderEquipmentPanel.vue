@@ -335,7 +335,10 @@ watch(() => [props.customerId, props.customerBranchId], () => {
   }
 });
 
-defineExpose({ expand, collapse, ensureLoaded: loadLinks });
+const refreshIfLoaded = () => {
+  if (loaded.value || loading.value) return loadLinks(true);
+};
+defineExpose({ expand, collapse, ensureLoaded: loadLinks, refreshIfLoaded });
 </script>
 
 <template>

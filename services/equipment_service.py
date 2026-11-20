@@ -28,7 +28,7 @@ class EquipmentService:
     FALSE_VALUES = {"0", "false", "no", "n", "нет", "н", "ложь"}
     REPAIR_HISTORY_AUTO_SYNC_STATUSES = frozenset({"completed", "not_repairable"})
     EQUIPMENT_SOURCES = frozenset({"sold_by_us", "installed_by_us", "customer_owned", "unknown"})
-    COMPONENT_TYPES = frozenset({"system", "indoor_unit", "outdoor_unit", "remote", "wifi_module", "other"})
+    COMPONENT_TYPES = frozenset({"system", "indoor_unit", "outdoor_unit", "remote", "wifi_module", "drain_pump", "other"})
     ORDER_LINK_ROLES = frozenset({"sale", "installation", "maintenance", "repair", "diagnostic", "warranty_case", "other"})
     MAINTENANCE_PROVIDERS = frozenset({"mvn", "authorized", "external"})
 
@@ -500,7 +500,10 @@ class EquipmentService:
             and equipment.customer_branch_id is not None
             and int(order.customer_branch_id) != int(equipment.customer_branch_id)
         ):
-            raise ValueError("Order branch does not match equipment branch")
+            from crud.order_sites import OrderSiteDAO
+
+            if not await OrderSiteDAO.for_order_equipment(session, order_id, equipment.id):
+                raise ValueError("Order branch does not match equipment branch")
         return order
 
     @staticmethod

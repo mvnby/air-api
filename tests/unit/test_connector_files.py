@@ -18,7 +18,7 @@ def file(**changes):
 
 
 def test_file_params_discovery_and_bounded_tools():
-    assert len(TOOLS) == 70
+    assert len(TOOLS) == 74
     assert {
         "list_tender_inbox", "get_tender_source_preview",
         "read_tender_document_text", "analyze_tender_documents",

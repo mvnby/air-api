@@ -11,6 +11,8 @@ const props = defineProps<{
   loading: boolean;
   saving: boolean;
   error?: string;
+  defaultRole?: string;
+  helpText?: string;
 }>();
 
 const emit = defineEmits<{
@@ -35,7 +37,7 @@ const titleFor = (item: ManagerEquipmentItemResponse) => (
 watch(() => props.open, (open) => {
   if (!open) return;
   equipmentId.value = null;
-  role.value = 'other';
+  role.value = props.defaultRole || 'other';
 });
 
 const confirm = () => {
@@ -75,7 +77,7 @@ useDialogA11y({
 
         <form class="space-y-4 p-4" @submit.prevent="confirm">
           <p class="text-sm text-slate-600 dark:text-slate-300">
-            В списке только оборудование этого клиента. Уже привязанные позиции скрыты.
+            {{ helpText || 'В списке только оборудование этого клиента. Уже привязанные позиции скрыты.' }}
           </p>
 
           <div v-if="loading" class="flex items-center gap-2 py-6 text-sm text-slate-500">

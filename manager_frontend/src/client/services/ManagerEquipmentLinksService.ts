@@ -72,8 +72,8 @@ export class ManagerEquipmentLinksService {
      * Delete Manager Order Equipment Link
      * Delete one equipment/order association and return 204, clearing matching legacy
      * source_order_id when necessary. Equipment, warranty snapshots and service history are
-     * retained. Missing/inaccessible order/link/equipment returns 404, including after prior
-     * deletion.
+     * retained. A role required by an explicit order-site assignment returns 409.
+     * Missing/inaccessible order/link/equipment returns 404, including after prior deletion.
      *
      * Access and scope: Manager access is required; the order and its children are restricted
      * to the authenticated tenant and selected storefront. See [Manager
