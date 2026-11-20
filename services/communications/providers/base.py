@@ -14,6 +14,15 @@ class ProviderDeliveryDisposition(str, Enum):
 
 
 @dataclass(frozen=True)
+class TelegramMessageOptions:
+    buttons: tuple[tuple[str, str], ...]
+    silent: bool = False
+    tender_topic: bool = False
+    edit_message_id: int | None = None
+    alert_text: str | None = None
+
+
+@dataclass(frozen=True)
 class ProviderDeliveryResult:
     disposition: ProviderDeliveryDisposition
     provider_message_id: str | None = None
@@ -107,6 +116,7 @@ class CommunicationDeliveryProvider(Protocol):
         destination: str,
         text: str,
         delivery_id: str,
+        options: TelegramMessageOptions | None = None,
     ) -> ProviderDeliveryResult: ...
 
     async def close(self) -> None: ...

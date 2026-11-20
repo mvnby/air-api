@@ -699,9 +699,16 @@ class BelzakupkiImportService:
         cursor = await cls._cursor_for_scope(tenant_scope=tenant_scope)
         page = await cls._fetch_page(cursor=cursor)
         async with async_session_maker() as session:
-            return await cls.import_page(
+            result = await cls.import_page(
                 session,
                 tenant_scope=tenant_scope,
                 page=page,
                 cursor_before=cursor,
             )
+        from services.communications.tender_document_updates import refresh_tender_cards
+
+        try:
+            await refresh_tender_cards(tenant_scope=tenant_scope)
+        except Exception as exc:
+            logger.warning("Tender card refresh deferred error_type=%s", type(exc).__name__)
+        return result
