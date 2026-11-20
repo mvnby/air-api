@@ -46,10 +46,22 @@ query strings, referrers, stable visitor IDs, cross-site tracking or per-page
 server beacons. Disabling collection clears this tab's attention. Denied,
 expired or revoked consent omits interests from subsequent submissions and retries.
 
-Only passive interests are excluded from the business-request fingerprint;
-source context, customer fields, cart and attachments remain significant.
-Client retry storage never contains interests. A retry with changed, missing or
-revoked attention reuses its original business key: the first committed lead/order
+With consent that covers the source of the visit, `submission_context.attribution`
+may carry `{consent: true, landing_path, channel, source?}`. The landing path uses
+the same pathname rules as the submission page. The channel is one of
+`organic_search`, `paid`, `referral`, `campaign` or `unknown`. Recognized sources
+are `google`, `yandex`, `bing`, `duckduckgo` and `chatgpt`. The browser classifies
+the entry locally and sends only these categories and the pathname, without
+the referrer URL, ad identifiers, UTM values or search terms. Data from
+before consent is unavailable. Missing or invalid optional attribution does
+not prevent submission. Manager shows the entry path and source alongside the
+existing submission page and form. The original details also follow a
+contact lead when it becomes an order.
+
+Passive interests and attribution are excluded from the business-request fingerprint.
+The submission page, form, customer fields, cart and attachments remain significant.
+Client retry storage never contains these optional fields. A retry with changed, missing or
+revoked analytics reuses its original business key. The first committed lead/order
 metadata and communication snapshot stay unchanged and no extra event is created.
 Immutable delivery snapshots continue to include captured interests in integrity
 checks; absent/null additive interests are omitted for older snapshots.

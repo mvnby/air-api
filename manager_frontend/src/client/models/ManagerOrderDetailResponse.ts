@@ -17,6 +17,7 @@ import type { OrderWorkStageResponse } from './OrderWorkStageResponse';
 import type { PaymentCurrency } from './PaymentCurrency';
 import type { PaymentResponse } from './PaymentResponse';
 import type { WebsiteInterests } from './WebsiteInterests';
+import type { WebsiteLeadAttribution } from './WebsiteLeadAttribution';
 export type ManagerOrderDetailResponse = {
     id: number;
     responsible_person?: (ManagerOrderResponsiblePerson | null);
@@ -78,6 +79,7 @@ export type ManagerOrderDetailResponse = {
     total_payments?: number;
     balance_due?: number;
     website_interests?: (WebsiteInterests | null);
+    website_attribution?: (WebsiteLeadAttribution | null);
     maintenance_source_order_id?: (number | null);
     incoming_context?: (IncomingOrderContext | null);
     source_enrichment?: (ManagerOrderSourceEnrichment | null);

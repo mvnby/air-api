@@ -35,7 +35,7 @@ const historyLabels: Record<string, string> = { no_answer: 'Нет ответа'
         <CommercialTermsPanel v-if="item.source === 'email' || item.source === 'belzakupki'" :order-id="item.id" :email-source="item.source === 'email'" />
       </div>
     </div>
-    <WebsiteInterests :interests="item.website_interests" />
+    <WebsiteInterests :interests="item.website_interests" :attribution="item.website_attribution" />
     <EmailLeadOrderLink v-if="item.entity_kind !== 'lead' && item.source === 'email' && (item.status === 'new_lead' || item.linked_order_id)" :source-order-id="item.id" :linked-order-id="item.linked_order_id" @changed="emit('link-changed')" />
     <p v-if="item.source === 'email' && !item.linked_order_id" class="context-note">Если это продолжение переписки по существующему заказу, привяжите письмо к нему.</p>
     <div class="detail-actions">

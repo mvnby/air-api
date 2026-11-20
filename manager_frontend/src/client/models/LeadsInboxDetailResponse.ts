@@ -8,8 +8,10 @@ import type { LeadsInboxHistoryResponse } from './LeadsInboxHistoryResponse';
 import type { LeadsInboxTenderResponse } from './LeadsInboxTenderResponse';
 import type { TenderWorkflowResponse } from './TenderWorkflowResponse';
 import type { WebsiteInterests } from './WebsiteInterests';
+import type { WebsiteLeadAttribution } from './WebsiteLeadAttribution';
 export type LeadsInboxDetailResponse = {
     website_interests?: (WebsiteInterests | null);
+    website_attribution?: (WebsiteLeadAttribution | null);
     id: number;
     entity_kind?: 'order' | 'lead';
     related_requests?: Array<InboxRelatedRequest>;

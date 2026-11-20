@@ -54,6 +54,23 @@ def test_context_absence_preserves_legacy_fingerprint_and_context_is_significant
     assert PublicWriteFingerprintService.for_payload(payload) != old_hash
 
 
+def test_first_entry_projects_on_lead_and_qualified_order_without_rotating_retry_key():
+    from schemas_website_context import submission_context_meta, website_attribution_from_meta
+
+    context = {"page_path": "/contacts/", "form_id": "contact"}
+    arrival = {"consent": True, "landing_path": "/services/repair/", "channel": "organic_search", "source": "google"}
+    payload = {"name": "Иван", "phone": "+375291112233", "submission_context": context}
+    original = PublicContactLeadPayload.model_validate(payload)
+    enriched = PublicContactLeadPayload.model_validate({**payload, "submission_context": {**context, "attribution": arrival}})
+    assert PublicWriteFingerprintService.for_payload(original) == PublicWriteFingerprintService.for_payload(enriched)
+    meta = submission_context_meta(enriched.submission_context)
+    for record in (meta, {"incoming_intake": meta}):
+        assert website_attribution_from_meta(record).model_dump() == {**arrival, **context}
+    for invalid in ({"consent": 1}, {"landing_path": "/repair?phone=123"}, {"source": "https://example.com"}, {"referrer": "https://example.com"}):
+        rejected = WebsiteSubmissionContext.model_validate({**context, "attribution": {**arrival, **invalid}})
+        assert rejected.attribution is None
+
+
 @pytest.mark.asyncio
 async def test_installation_multipart_context_json_parses_without_losing_description():
     context = {"page_path": "/services/installation", "form_id": "installation_estimate", "service_id": "installation"}

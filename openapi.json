@@ -61471,6 +61471,16 @@
               }
             ]
           },
+          "website_attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteLeadAttribution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -62086,6 +62096,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "website_attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteLeadAttribution"
               },
               {
                 "type": "null"
@@ -78213,6 +78233,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "website_attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteLeadAttribution"
               },
               {
                 "type": "null"
@@ -107010,6 +107040,59 @@
         ],
         "title": "WebRebuildTriggerResponse"
       },
+      "WebsiteArrival": {
+        "properties": {
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          },
+          "landing_path": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Landing Path"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "organic_search",
+              "paid",
+              "referral",
+              "campaign",
+              "unknown"
+            ],
+            "title": "Channel"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "google",
+                  "yandex",
+                  "bing",
+                  "duckduckgo",
+                  "chatgpt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consent",
+          "landing_path",
+          "channel"
+        ],
+        "title": "WebsiteArrival",
+        "description": "Consented first entry in the current visit, using only coarse categories."
+      },
       "WebsiteInterestItem": {
         "properties": {
           "kind": {
@@ -107112,6 +107195,77 @@
         "title": "WebsiteInterests",
         "description": "Optional consented attention, separate from the customer's requested work."
       },
+      "WebsiteLeadAttribution": {
+        "properties": {
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "title": "Consent"
+          },
+          "landing_path": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Landing Path"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "organic_search",
+              "paid",
+              "referral",
+              "campaign",
+              "unknown"
+            ],
+            "title": "Channel"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "google",
+                  "yandex",
+                  "bing",
+                  "duckduckgo",
+                  "chatgpt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "page_path": {
+            "type": "string",
+            "title": "Page Path"
+          },
+          "form_id": {
+            "type": "string",
+            "enum": [
+              "contact",
+              "checkout",
+              "installation_calculator",
+              "installation_estimate",
+              "repair_diagnostic",
+              "product_availability",
+              "multi_split"
+            ],
+            "title": "Form Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consent",
+          "landing_path",
+          "channel",
+          "page_path",
+          "form_id"
+        ],
+        "title": "WebsiteLeadAttribution"
+      },
       "WebsiteSubmissionContext": {
         "properties": {
           "page_path": {
@@ -107162,6 +107316,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/WebsiteInterests"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebsiteArrival"
               },
               {
                 "type": "null"

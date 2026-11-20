@@ -245,7 +245,7 @@ class RepairDiagnosticLeadPayload(BaseModel):
                 raise ValueError("Invalid symptom_details.error_code value")
             self.symptom_details[key] = value
         encoded = self.model_dump_json(
-            exclude={"submission_context": {"interests"}}, exclude_none=False,
+            exclude={"submission_context": {"interests", "attribution"}}, exclude_none=False,
         ).encode("utf-8")
         if len(encoded) > MAX_REPAIR_PAYLOAD_JSON_BYTES:
             raise ValueError("Repair diagnostic payload is too large")
