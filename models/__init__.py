@@ -78,6 +78,7 @@ from .document import (
     DocumentTemplateVersion,
     DocumentTemplateFacsimilePlacement,
 )
+from .order_document_external_file import OrderDocumentExternalFile
 from .document_external_edit import DocumentExternalEditSession
 from .document_template_audit import DocumentTemplateAudit, DocumentTemplateAuditProposal
 from .communication import CommunicationDelivery, CommunicationDeliveryAttempt
@@ -224,6 +225,7 @@ __all__ = [
     "CustomerType",
     "DocumentRoleType",
     "DocumentArtifact",
+    "OrderDocumentExternalFile",
     "DocumentFacsimileAsset",
     "DocumentLegalEntity",
     "DocumentConditionPreset",

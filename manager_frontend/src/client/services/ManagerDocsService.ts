@@ -20,24 +20,41 @@ export class ManagerDocsService {
     /**
      * Get Manager Order Documents
      * List legacy-compatible document metadata for an order in the current Manager
-     * tenant/storefront, including basis and scoped line metadata. Missing order returns 404.
-     * Native artifacts/lifecycle use document-system endpoints; is_downloadable here reflects
-     * the legacy file reference.
+     * tenant/storefront, including basis, scope snapshots and private external file history.
+     * Filter by semantic type, site or equipment and optionally include native documents.
+     * Missing order returns 404. Native artifacts/lifecycle use document-system endpoints.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
+     * @param includeNative
+     * @param documentType
+     * @param siteId
+     * @param equipmentId
+     * @param limit
      * @returns ManagerOrderDocumentListResponse Successful Response
      * @throws ApiError
      */
     public static getManagerOrderDocuments(
         orderId: number,
+        includeNative: boolean = false,
+        documentType?: (string | null),
+        siteId?: (number | null),
+        equipmentId?: (number | null),
+        limit?: (number | null),
     ): CancelablePromise<ManagerOrderDocumentListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/orders/{order_id}/documents',
             path: {
                 'order_id': orderId,
+            },
+            query: {
+                'include_native': includeNative,
+                'document_type': documentType,
+                'site_id': siteId,
+                'equipment_id': equipmentId,
+                'limit': limit,
             },
             errors: {
                 422: `Validation Error`,
@@ -46,27 +63,33 @@ export class ManagerDocsService {
     }
     /**
      * Upload Manager Order Document
-     * Upload a legacy order document to its configured file provider for an accessible order
-     * in the current tenant/storefront. Closed orders return 409 order_documents_locked.
-     * Creates a document record/provider file; no caller idempotency receipt is provided, so
-     * reconcile after an uncertain upload result.
+     * Upload a DOC, DOCX or PDF to an accessible order in the current tenant/storefront.
+     * Provide document_type, number, document_date and Idempotency-Key for typed private
+     * evidence with immutable versions. An optional site/equipment must belong to the order.
+     * Typed and legacy uploads return 409 on closed orders. The existing file-only request
+     * retains legacy provider behavior and should be reconciled before retrying.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param formData
+     * @param idempotencyKey
      * @returns ManagerOrderDocumentItem Successful Response
      * @throws ApiError
      */
     public static uploadManagerOrderDocument(
         orderId: number,
         formData: Body_upload_manager_order_document,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentItem> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/orders/{order_id}/documents/upload',
             path: {
                 'order_id': orderId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             formData: formData,
             mediaType: 'multipart/form-data',
@@ -77,27 +100,33 @@ export class ManagerDocsService {
     }
     /**
      * Register Manager External Contract
-     * Register an external contract’s number/date and optional file or HTTP(S) URL for an
-     * accessible order in the current tenant/storefront. Closed orders return 409; invalid
-     * contract details/URL return 400. This records external evidence rather than generating a
-     * native official contract; repeated POST can create another record.
+     * Register an external contract’s number/date and optional original for a scoped order.
+     * Supply Idempotency-Key and optionally external_status to record typed private evidence.
+     * Typed registration accepts DOC, DOCX and PDF and never fetches a URL or replaces the
+     * order’s selected framework agreement. Legacy optional reference URLs/files remain
+     * compatible. Closed orders return 409.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param orderId
      * @param formData
+     * @param idempotencyKey
      * @returns ManagerOrderDocumentItem Successful Response
      * @throws ApiError
      */
     public static registerManagerExternalContract(
         orderId: number,
         formData: Body_register_manager_external_contract,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentItem> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/orders/{order_id}/documents/external-contract',
             path: {
                 'order_id': orderId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             formData: formData,
             mediaType: 'multipart/form-data',
@@ -108,27 +137,32 @@ export class ManagerDocsService {
     }
     /**
      * Attach Manager Doc File
-     * Replace/upload the provider file associated with an accessible legacy document in the
-     * current tenant/storefront. Closed orders return 409, invalid file/document configuration
-     * 400 and missing document 404. Previous provider file cleanup is attempted after
-     * replacement; this is not a native immutable artifact edit.
+     * Append a private file to an accessible document using file_role, expected_version and
+     * Idempotency-Key. Signed PDF copies may be attached to eligible closed/issued documents
+     * without changing the issued record. A stale version returns 409. A file-only request
+     * retains legacy provider behavior for mutable legacy documents.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docId
      * @param formData
+     * @param idempotencyKey
      * @returns ManagerOrderDocumentItem Successful Response
      * @throws ApiError
      */
     public static attachManagerDocFile(
         docId: number,
         formData: Body_attach_manager_doc_file,
+        idempotencyKey?: (string | null),
     ): CancelablePromise<ManagerOrderDocumentItem> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/manager/docs/{doc_id}/file',
             path: {
                 'doc_id': docId,
+            },
+            headers: {
+                'Idempotency-Key': idempotencyKey,
             },
             formData: formData,
             mediaType: 'multipart/form-data',
@@ -139,26 +173,36 @@ export class ManagerDocsService {
     }
     /**
      * Get Manager Doc Download
-     * Download the provider-backed legacy document file for the current tenant/storefront. The
-     * service exports Google content or reads uploaded evidence according to file type.
-     * Missing document/content returns 404; unsupported/unavailable export or native-managed
-     * routing misuse returns 400. Native artifacts have their own authenticated download
-     * endpoint.
+     * Download a document’s stored original, explicitly selected private file_version, or
+     * legacy provider file under current tenant/storefront access. For a private PDF,
+     * preview=true returns the requested preview_page as a raster PNG without exposing
+     * the original PDF in an inline response. Missing document or file returns 404.
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager
      * access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
      * @param docId
+     * @param fileVersion
+     * @param preview
+     * @param previewPage
      * @returns any Successful Response
      * @throws ApiError
      */
     public static getManagerDocDownload(
         docId: number,
+        fileVersion?: (number | null),
+        preview: boolean = false,
+        previewPage: number = 1,
     ): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/manager/docs/{doc_id}/download',
             path: {
                 'doc_id': docId,
+            },
+            query: {
+                'file_version': fileVersion,
+                'preview': preview,
+                'preview_page': previewPage,
             },
             errors: {
                 422: `Validation Error`,

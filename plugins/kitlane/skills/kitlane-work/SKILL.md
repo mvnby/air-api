@@ -7,6 +7,37 @@ Use the connected Kitlane MCP tools for the user's requested action. The backend
 determines the authenticated person, company, workspace and permissions; never
 ask for an actor or tenant ID as a tool argument.
 
+For service or repair diagnostics, read `list_order_sites`, select the exact
+site_id, and read `list_site_equipment`. Use `get_order_inspection` for the
+current equipment inspection version. Save current observations, a trial run,
+earlier reported events, future recommendations and performed actions in their
+separate fields with `save_order_inspection`. Version 0 means a first inspection.
+Only record measurements and actual work confirmed by the user.
+
+Choose one confirmed contract basis and the current inspection revisions.
+Use `prepare_order_technical_act` for an inspection, including equipment with
+no identified defect, and `prepare_order_defect_act` for a documented defect.
+Each draft covers equipment at one selected site of the same order. Return
+the saved document ID and Manager link for review.
+
+For the common completion act, use `get_order_completion_act_source` on the
+selected active proposal. Pass that version, the confirmed contract basis and
+the actual site IDs to `prepare_order_completion_act`. For partial delivery
+specify the actual proposal lines and covered quantities. Keep individual
+technical acts separate from the commercial amount.
+
+Use `list_order_documents` to read scoped document IDs, statuses, versions
+and contract references. For an external agreement use
+`register_external_order_contract` with its actual number and date and a
+user-selected ChatGPT file. Use `upload_order_document` for a typed external
+document, and `attach_order_document_file` for an allowed version or signed
+PDF copy on a known document. Read the current file_version first. The original
+file must come through the top-level ChatGPT fileParams object. If delivery
+fails, show the returned private upload link and report that the attachment is
+pending. A metadata-only registration is a separate explicit instruction
+and returns file_version 0. The upload grant is
+`kitlane:documents:uploads:write`; reconnect and select it if needed.
+
 For a specific physical unit, read `get_order_equipment` on the known order
 before requesting its nameplate data again. Reuse its `equipment_id`, including
 equipment sold by us. A catalog product identifies a model, not a physical unit;

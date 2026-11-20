@@ -191,6 +191,40 @@ Metadata-only registration needs no template or Google connection; source files
 use the existing Google Drive upload storage and download in their original
 format. Closed-order history and tenant access rules still apply.
 
+### Multi-site service orders
+
+In Manager, open the order’s Works tab and add the order sites. Select an
+existing customer branch or enter the address for this order. Assign existing
+equipment or record a new unit with the confirmed passport fields. Save the
+inspection for each unit, then select the inspected equipment for one site's
+technical or defect act. When ready to close the work, select the original
+contract, the confirmed proposal, and the sites in the standard act editor.
+Site details remain frozen in saved document snapshots.
+
+### Typed external evidence in order documents
+
+The existing order document upload route accepts `document_type`, `number`,
+`document_date` and `Idempotency-Key` for private external evidence. It also
+accepts the explicit received/signed status and existing IDs for the proposal,
+basis contract, site and equipment. Technical and defect acts require a site.
+The saved scope captures the address and equipment as they were at upload.
+Typed external contract registration may start with number and date only. A
+contract recorded as signed requires its original file. Select its document ID
+explicitly when preparing a closing document.
+
+Typed evidence accepts validated PDF, DOCX and legacy Word DOC up to 10 MB.
+Use a PDF or DOCX when the deployment lacks `antiword`. Upload records the evidence
+and the supplied status. It makes no issuance or delivery transition. Original
+files use private storage and can be downloaded by version. PDF preview returns
+a page image and requires the same access as download. In production, file uploads
+require a clean ClamAV verdict before format parsing and storage. See the
+[scanner rollout procedure](deployment.md#external-order-document-scanner).
+
+Use `file_role`, `expected_version` and `Idempotency-Key` on the existing file
+attachment route to add an original version or a separate signed PDF. A stale
+version is rejected. A signed PDF can be appended to an eligible document in a
+closed order without changing the issued snapshot or its current artifact.
+
 ## Compose names
 
 `docker-compose.yml` service names include `app`, `db`, `web`, and `bot`

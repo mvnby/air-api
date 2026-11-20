@@ -15,7 +15,7 @@ CLIENT_ID = "kitlane-chatgpt"
 SCOPES = frozenset({
     "kitlane:read", "kitlane:incoming:write", "kitlane:tasks:write",
     "kitlane:maintenance:write", "kitlane:catalog:write",
-    "kitlane:orders:write", "kitlane:contracts:drafts:write",
+    "kitlane:orders:write", "kitlane:contracts:drafts:write", "kitlane:documents:uploads:write",
     "kitlane:customers:write", "kitlane:tenders:analyze",
     "kitlane:templates:read", "kitlane:templates:proposals:write",
     "kitlane:mail:read", "kitlane:mail:drafts:write", "kitlane:mail:send",

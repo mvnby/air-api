@@ -1,9 +1,9 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import PurePath
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header, Query
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,11 +20,19 @@ from core.manager_error_codes import (
     ORDER_NOT_FOUND,
 )
 from core.security import (
+    AuthenticatedUser,
     get_current_manager_tenant_scope,
     get_current_username,
+    require_manager_access,
     require_system_manager_tenant_scope,
 )
 from models.tenancy import TenantScope
+from modules.documents.application.external_order_documents import (
+    ExternalDocumentFileRole, ExternalDocumentStatus, ExternalDocumentType, ExternalOrderDocumentService,
+)
+from routers.manager_external_document_actions import (
+    attach_external_document, create_external_document, document_item, download_external_document,
+)
 from routers.manager_operation_ids import (
     GET_MANAGER_ORDER_DOCUMENTS,
     ATTACH_MANAGER_DOC_FILE,
@@ -103,50 +111,43 @@ def _order_documents_locked_error(endpoint: str, exc: OrderDocumentsLockedError)
 )
 async def get_manager_order_documents(
     order_id: int,
+    include_native: bool = Query(False),
+    document_type: str | None = Query(None),
+    site_id: int | None = Query(None, ge=1),
+    equipment_id: int | None = Query(None, ge=1),
+    limit: int | None = Query(None, ge=1, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
     List legacy-compatible document metadata for an order in the current Manager
-    tenant/storefront, including basis and scoped line metadata. Missing order returns 404.
-    Native artifacts/lifecycle use document-system endpoints; is_downloadable here reflects
-    the legacy file reference.
+    tenant/storefront, including basis, scope snapshots and private external file history.
+    Filter by semantic type, site or equipment and optionally include native documents.
+    Missing order returns 404. Native artifacts/lifecycle use document-system endpoints.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
-    docs = await DocumentService.list_order_documents(
-        session,
-        order_id,
-        tenant_scope=tenant_scope,
+    order_documents = await DocumentService.list_order_documents(
+        session, order_id, tenant_scope=tenant_scope, include_native=True,
     )
-    if docs is None:
+    if order_documents is None:
         raise manager_http_error(
             status_code=404,
             endpoint=GET_MANAGER_ORDER_DOCUMENTS,
             error_code=ORDER_NOT_FOUND,
         )
-    basis_lookup = await DocumentService.build_document_basis_lookup(session, list(docs))
-    return {
-        "items": [
-            ManagerOrderDocumentItem(
-                id=d.id,
-                proposal_id=d.proposal_id,
-                **basis_lookup.get(d.id, {}),
-                scope_customer_branch_id=d.scope_customer_branch_id,
-                scope_title=d.scope_title,
-                scope_address=d.scope_address,
-                scope_meta=d.scope_meta or {},
-                doc_type=d.doc_type,
-                number=d.number,
-                date=d.date,
-                edit_url=d.google_edit_url,
-                is_downloadable=bool(d.google_file_id),
-            )
-            for d in docs
-        ]
-    }
+    docs = [d for d in order_documents if (
+        (include_native or not DocumentService._is_native_managed_document(d))
+        and (document_type is None or d.doc_type == document_type)
+        and (site_id is None or site_id == (d.scope_meta or {}).get("site_id")
+             or site_id in ((d.scope_meta or {}).get("site_ids") or []))
+        and (equipment_id is None or equipment_id in ((d.scope_meta or {}).get("equipment_ids") or []))
+    )][:limit]
+    basis = await DocumentService.build_document_basis_lookup(session, order_documents)
+    files = await ExternalOrderDocumentService.files_by_document(session, tenant_scope, docs)
+    return {"items": [document_item(d, files.get(d.id, []), basis.get(d.id)) for d in docs]}
 
 
 @router.post(
@@ -157,19 +158,39 @@ async def get_manager_order_documents(
 async def upload_manager_order_document(
     order_id: int,
     file: UploadFile = File(...),
-    _: str = Depends(get_current_username),
+    document_type: ExternalDocumentType | None = Form(None),
+    number: str | None = Form(None),
+    document_date: date | None = Form(None),
+    external_status: ExternalDocumentStatus | None = Form(None),
+    site_id: int | None = Form(None),
+    equipment_ids: list[int] | None = Form(None),
+    base_document_id: int | None = Form(None),
+    proposal_id: int | None = Form(None),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    auth: AuthenticatedUser = Depends(require_manager_access),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Upload a legacy order document to its configured file provider for an accessible order
-    in the current tenant/storefront. Closed orders return 409 order_documents_locked.
-    Creates a document record/provider file; no caller idempotency receipt is provided, so
-    reconcile after an uncertain upload result.
+    Upload a DOC, DOCX or PDF to an accessible order in the current tenant/storefront.
+    Provide document_type, number, document_date and Idempotency-Key for typed private
+    evidence with immutable versions. An optional site/equipment must belong to the order.
+    Typed and legacy uploads return 409 on closed orders. The existing file-only request
+    retains legacy provider behavior and should be reconciled before retrying.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    if document_type is not None or idempotency_key is not None or any(value is not None for value in (
+        number, document_date, external_status, site_id, equipment_ids, base_document_id, proposal_id,
+    )):
+        return await create_external_document(
+            session, auth, UPLOAD_MANAGER_ORDER_DOCUMENT, order_id,
+            {"document_type": document_type, "number": number, "document_date": document_date,
+             "external_status": external_status or "received", "site_id": site_id,
+             "equipment_ids": equipment_ids or [], "base_document_id": base_document_id,
+             "proposal_id": proposal_id}, file, idempotency_key,
+        )
     try:
         doc = await DocumentService.upload_document(
             session,
@@ -179,21 +200,7 @@ async def upload_manager_order_document(
         )
     except OrderDocumentsLockedError as exc:
         raise _order_documents_locked_error(UPLOAD_MANAGER_ORDER_DOCUMENT, exc) from exc
-    return ManagerOrderDocumentItem(
-        id=doc.id,
-        proposal_id=doc.proposal_id,
-        base_document_id=doc.base_document_id,
-        base_customer_contract_id=doc.base_customer_contract_id,
-        scope_customer_branch_id=doc.scope_customer_branch_id,
-        scope_title=doc.scope_title,
-        scope_address=doc.scope_address,
-        scope_meta=doc.scope_meta or {},
-        doc_type=doc.doc_type,
-        number=doc.number,
-        date=doc.date,
-        edit_url=doc.google_edit_url,
-        is_downloadable=bool(doc.google_file_id),
-    )
+    return document_item(doc)
 
 
 @router.post(
@@ -207,19 +214,33 @@ async def register_manager_external_contract(
     contract_date: datetime = Form(...),
     external_url: str | None = Form(None),
     file: UploadFile | None = File(None),
-    _: str = Depends(get_current_username),
+    external_status: ExternalDocumentStatus | None = Form(None),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    auth: AuthenticatedUser = Depends(require_manager_access),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Register an external contract’s number/date and optional file or HTTP(S) URL for an
-    accessible order in the current tenant/storefront. Closed orders return 409; invalid
-    contract details/URL return 400. This records external evidence rather than generating a
-    native official contract; repeated POST can create another record.
+    Register an external contract’s number/date and optional original for a scoped order.
+    Supply Idempotency-Key and optionally external_status to record typed private evidence.
+    Typed registration accepts DOC, DOCX and PDF and never fetches a URL or replaces the
+    order’s selected framework agreement. Legacy optional reference URLs/files remain
+    compatible. Closed orders return 409.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    if external_status is not None or idempotency_key is not None:
+        if external_url:
+            raise manager_http_error(
+                status_code=400, endpoint=REGISTER_MANAGER_EXTERNAL_CONTRACT, error_code=BAD_REQUEST,
+                message="Для внешнего договора загрузите исходный файл.",
+            )
+        return await create_external_document(
+            session, auth, REGISTER_MANAGER_EXTERNAL_CONTRACT, order_id,
+            {"document_type": "contract", "number": number, "document_date": contract_date.date(),
+             "external_status": external_status or "received"}, file, idempotency_key,
+        )
     try:
         doc = await DocumentService.register_external_contract(
             session,
@@ -239,21 +260,7 @@ async def register_manager_external_contract(
             error_code=BAD_REQUEST,
             message=str(exc),
         ) from exc
-    return ManagerOrderDocumentItem(
-        id=doc.id,
-        proposal_id=doc.proposal_id,
-        base_document_id=doc.base_document_id,
-        base_customer_contract_id=doc.base_customer_contract_id,
-        scope_customer_branch_id=doc.scope_customer_branch_id,
-        scope_title=doc.scope_title,
-        scope_address=doc.scope_address,
-        scope_meta=doc.scope_meta or {},
-        doc_type=doc.doc_type,
-        number=doc.number,
-        date=doc.date,
-        edit_url=doc.google_edit_url,
-        is_downloadable=bool(doc.google_file_id),
-    )
+    return document_item(doc)
 
 
 @router.post(
@@ -264,19 +271,26 @@ async def register_manager_external_contract(
 async def attach_manager_doc_file(
     doc_id: int,
     file: UploadFile = File(...),
-    _: str = Depends(get_current_username),
+    file_role: ExternalDocumentFileRole | None = Form(None),
+    expected_version: int | None = Form(None, ge=0),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    auth: AuthenticatedUser = Depends(require_manager_access),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Replace/upload the provider file associated with an accessible legacy document in the
-    current tenant/storefront. Closed orders return 409, invalid file/document configuration
-    400 and missing document 404. Previous provider file cleanup is attempted after
-    replacement; this is not a native immutable artifact edit.
+    Append a private file to an accessible document using file_role, expected_version and
+    Idempotency-Key. Signed PDF copies may be attached to eligible closed/issued documents
+    without changing the issued record. A stale version returns 409. A file-only request
+    retains legacy provider behavior for mutable legacy documents.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    if file_role is not None or expected_version is not None or idempotency_key is not None:
+        return await attach_external_document(
+            session, auth, ATTACH_MANAGER_DOC_FILE, doc_id, file, file_role, expected_version, idempotency_key,
+        )
     try:
         doc = await DocumentService.attach_file_to_document(
             session,
@@ -299,21 +313,7 @@ async def attach_manager_doc_file(
             endpoint=ATTACH_MANAGER_DOC_FILE,
             error_code=DOCUMENT_NOT_FOUND,
         )
-    return ManagerOrderDocumentItem(
-        id=doc.id,
-        proposal_id=doc.proposal_id,
-        base_document_id=doc.base_document_id,
-        base_customer_contract_id=doc.base_customer_contract_id,
-        scope_customer_branch_id=doc.scope_customer_branch_id,
-        scope_title=doc.scope_title,
-        scope_address=doc.scope_address,
-        scope_meta=doc.scope_meta or {},
-        doc_type=doc.doc_type,
-        number=doc.number,
-        date=doc.date,
-        edit_url=doc.google_edit_url,
-        is_downloadable=bool(doc.google_file_id),
-    )
+    return document_item(doc)
 
 
 @router.get(
@@ -322,20 +322,27 @@ async def attach_manager_doc_file(
 )
 async def get_manager_doc_download(
     doc_id: int,
+    file_version: int | None = Query(None, ge=1),
+    preview: bool = Query(False),
+    preview_page: int = Query(1, ge=1, le=100),
     _: str = Depends(get_current_username),
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Download the provider-backed legacy document file for the current tenant/storefront. The
-    service exports Google content or reads uploaded evidence according to file type.
-    Missing document/content returns 404; unsupported/unavailable export or native-managed
-    routing misuse returns 400. Native artifacts have their own authenticated download
-    endpoint.
+    Download a document’s stored original, explicitly selected private file_version, or
+    legacy provider file under current tenant/storefront access. For a private PDF,
+    preview=true returns the requested preview_page as a raster PNG without exposing
+    the original PDF in an inline response. Missing document or file returns 404.
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
+    external = await download_external_document(
+        session, tenant_scope, GET_MANAGER_DOC_DOWNLOAD, doc_id, file_version, preview, preview_page,
+    )
+    if external is not None:
+        return external
     try:
         pdf_content, filename_encoded = await DocumentService.get_download_stream(
             session,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onScopeDispose, ref } from 'vue';
-import { ChevronDown, ChevronUp, MapPin, Plus } from 'lucide-vue-next';
+import { ChevronDown, ChevronUp, MapPin, Pencil, Plus } from 'lucide-vue-next';
 import {
   ManagerOrderSitesService,
   ManagerService,
@@ -9,6 +9,7 @@ import {
   type OrderSiteAddRequest,
   type OrderSiteItem,
   type OrderSiteList,
+  type OrderSiteUpdateRequest,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import OrderSiteEquipmentPanel from './OrderSiteEquipmentPanel.vue';
@@ -43,6 +44,9 @@ const standalonePrimary = computed(() => {
   return saved ? null : primary;
 });
 const adding = ref(false);
+const editingSite = ref<OrderSiteItem | null>(null);
+const editButton = ref<HTMLButtonElement | null>(null);
+const editTitleInput = ref<HTMLInputElement | null>(null);
 const saving = ref(false);
 const equipmentBusy = ref(false);
 const branches = ref<ManagerCustomerBranchItemResponse[]>([]);
@@ -52,6 +56,16 @@ const title = ref('');
 const address = ref('');
 const busy = computed(() => saving.value || equipmentBusy.value);
 const canEdit = computed(() => !props.disabled && !busy.value && !loading.value);
+const siteCorrection = computed(() => {
+  const draft = editingSite.value;
+  const newTitle = title.value.trim();
+  const newAddress = address.value.trim();
+  if (!draft || !newTitle || !newAddress) return null;
+  const correction: OrderSiteUpdateRequest['payload'] = { expected_version: draft.version };
+  if (newTitle !== draft.title) correction.title = newTitle;
+  if (newAddress !== draft.address) correction.address = newAddress;
+  return correction.title || correction.address ? correction : null;
+});
 const siteLabel = (site: OrderSiteItem) => site.title || site.address;
 const availableBranches = computed(() => {
   const linked = new Set(sites.value.map(site => site.customer_branch_id));
@@ -60,6 +74,7 @@ const availableBranches = computed(() => {
 let active = true;
 let branchRequest = 0;
 let intent: { fingerprint: string; request: OrderSiteAddRequest } | undefined;
+let editIntent: { fingerprint: string; request: OrderSiteUpdateRequest } | undefined;
 onScopeDispose(() => { active = false; });
 
 const loadSites = async () => {
@@ -149,9 +164,64 @@ const submit = () => {
 };
 const addPrimary = () => {
   const primary = standalonePrimary.value;
-  if (!primary) return;
+  if (!primary || editingSite.value) return;
   if (primary.customer_branch_id) return addSite({ customer_branch_id: primary.customer_branch_id });
   if (primary.address) return addSite({ title: primary.title || 'Основной объект', address: primary.address });
+};
+
+const startEdit = () => {
+  const site = selectedSite.value;
+  if (!canEdit.value || adding.value || !site) return;
+  editingSite.value = site;
+  title.value = site.title;
+  address.value = site.address;
+  saveError.value = '';
+  void nextTick(() => editTitleInput.value?.focus());
+};
+const clearEdit = () => {
+  editingSite.value = null;
+  title.value = '';
+  address.value = '';
+  saveError.value = '';
+  void nextTick(() => editButton.value?.focus());
+};
+const submitEdit = async () => {
+  const site = editingSite.value;
+  const payload = siteCorrection.value;
+  if (!canEdit.value || !site || !payload) return;
+  saving.value = true;
+  saveError.value = '';
+  const fingerprint = JSON.stringify([site.id, payload]);
+  if (editIntent?.fingerprint !== fingerprint) {
+    editIntent = { fingerprint, request: { payload, idempotency_key: crypto.randomUUID() } };
+  }
+  const request = editIntent.request;
+  try {
+    if (!await props.beforeAction() || !active) return;
+    const { result } = await ManagerOrderSitesService.managerUpdateOrderSite(props.orderId, site.id, request);
+    if (!active) return;
+    upsert(result);
+    editIntent = undefined;
+    clearEdit();
+  } catch (error) {
+    if (!active) return;
+    const detail = (error as { body?: { detail?: { code?: string } } })?.body?.detail;
+    if (detail?.code === 'version_conflict') {
+      await loadSites();
+      if (!active) return;
+      const latest = sites.value.find(item => item.id === site.id);
+      if (latest && !readError.value) {
+        editingSite.value = latest;
+        if (!payload.title) title.value = latest.title;
+        if (!payload.address) address.value = latest.address;
+        saveError.value = 'Объект изменился. Проверьте обновлённые данные перед сохранением.';
+        return;
+      }
+    }
+    saveError.value = 'Не удалось сохранить объект. ' + getApiErrorMessage(error);
+  } finally {
+    if (active) saving.value = false;
+  }
 };
 
 onMounted(() => {
@@ -187,16 +257,17 @@ onMounted(() => {
             <p v-if="standalonePrimary.title">{{ standalonePrimary.title }}</p>
             <p v-if="standalonePrimary.address">{{ standalonePrimary.address }}</p>
           </div>
-          <button v-if="!disabled && (standalonePrimary.customer_branch_id || standalonePrimary.address)" type="button" class="btn-mini-outline" :disabled="!canEdit || loading" @click="addPrimary">Добавить основной объект</button>
+          <button v-if="!disabled && (standalonePrimary.customer_branch_id || standalonePrimary.address)" type="button" class="btn-mini-outline" :disabled="!canEdit || !!editingSite" @click="addPrimary">Добавить основной объект</button>
         </div>
         <div v-if="sites.length" class="flex flex-wrap items-end gap-2">
           <label class="field-label min-w-0 flex-1 basis-56">
             Объект
-            <select v-model="selectedId" class="field-input" data-testid="order-site-select" :disabled="busy">
+            <select v-model="selectedId" class="field-input" data-testid="order-site-select" :disabled="busy || !!editingSite">
               <option v-for="site in sites" :key="site.id" :value="site.id">{{ siteLabel(site) }}</option>
             </select>
           </label>
-          <button v-if="!adding && !disabled" type="button" class="btn-mini-outline" :disabled="!canEdit || loading" @click="startAdd"><Plus class="h-4 w-4" /> Добавить объект</button>
+          <button v-if="!adding && !editingSite && !disabled" type="button" class="btn-mini-outline" :disabled="!canEdit" @click="startAdd"><Plus class="h-4 w-4" /> Добавить объект</button>
+          <button v-if="selectedSite && !adding && !editingSite && !disabled" ref="editButton" type="button" class="btn-mini-outline" :disabled="!canEdit" @click="startEdit"><Pencil class="h-4 w-4" /> Редактировать объект</button>
         </div>
         <div v-else-if="!adding" class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm text-slate-500">Объекты для этого заказа ещё не добавлены.</p>
@@ -226,6 +297,18 @@ onMounted(() => {
             </div>
           </fieldset>
         </form>
+        <form v-if="editingSite" aria-label="Редактирование объекта" class="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" data-testid="edit-order-site" @submit.prevent="submitEdit">
+          <fieldset class="space-y-3" :disabled="!canEdit">
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="field-label">Название<input ref="editTitleInput" v-model="title" class="field-input" maxlength="200" required /></label>
+              <label class="field-label">Полный адрес<input v-model="address" class="field-input" maxlength="1000" required /></label>
+            </div>
+            <div class="flex flex-wrap justify-end gap-2">
+              <button type="button" class="btn-mini-outline" @click="clearEdit">Отмена</button>
+              <button type="submit" class="btn-mini" :disabled="!siteCorrection">{{ saving ? 'Сохраняем…' : 'Сохранить объект' }}</button>
+            </div>
+          </fieldset>
+        </form>
         <p v-if="saveError" role="alert" class="break-words text-sm text-red-700 dark:text-red-300">{{ saveError }}</p>
         <OrderSiteEquipmentPanel
           v-if="selectedSite"
@@ -233,7 +316,7 @@ onMounted(() => {
           :site="selectedSite"
           :customer-id="customerId"
           :diagnostic-order="diagnosticOrder"
-          :disabled="disabled || saving || loading"
+          :disabled="disabled || saving || loading || !!editingSite"
           :before-action="beforeAction"
           @busy="equipmentBusy = $event"
           @site-updated="upsert"

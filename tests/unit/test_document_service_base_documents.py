@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from models import Customer, CustomerBranch, CustomerContract, DocumentTemplate, Order, OrderDocument, OrderProductLink, OrderProposal, OrderServiceLink, Product, Service
+from models import (
+    Customer, CustomerBranch, CustomerContract, DocumentLegalEntity, DocumentTemplate, Order, OrderDocument,
+    OrderProductLink, OrderProposal, OrderServiceLink, Product, Service,
+)
+from modules.documents.application.contract_act_numbers import ContractActNumberConfirmationRequired, allocate_contract_act_number
+from modules.documents.domain import DocumentNumberScope
+from modules.documents.infrastructure import DocumentNumberingRepository
 from services.document_service import DocumentService
 from services.documents.factory import DocumentFactory
 from services.documents.standard import ActStrategy, DefectActStrategy
@@ -51,12 +57,70 @@ async def test_document_numbering_uses_prefix_and_year(sqlite_session):
                 google_file_id="contract-old",
                 google_edit_url="https://example.com/contract-old",
             ),
+            OrderDocument(
+                tenant_id=1,
+                order_id=order.id,
+                doc_type="contract",
+                number="Д-2026-999",
+                date=datetime(2026, 5, 1),
+                origin="external_upload",
+                external_status="signed",
+            ),
         ]
     )
     await sqlite_session.commit()
 
     assert await DocumentService._get_next_number(sqlite_session, "contract", datetime(2026, 5, 1)) == "Д-2026-002"
     assert await DocumentService._get_next_number(sqlite_session, "contract", datetime(2027, 1, 1)) == "Д-2027-001"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("external_status", ["received", "signed"])
+async def test_external_act_does_not_change_issued_act_numbering(sqlite_session, external_status):
+    session = sqlite_session
+    issue_date = datetime(2026, 11, 20)
+    customer = Customer(tenant_id=1, name="Act numbering test", phone="")
+    issuer = DocumentLegalEntity(tenant_id=1, slug="numbering-test", display_name="Act issuer")
+    session.add_all([customer, issuer])
+    await session.flush()
+    contract = CustomerContract(
+        customer_id=customer.id, number="FRAMEWORK-1", valid_until=datetime(2027, 1, 1),
+    )
+    session.add(contract)
+    await session.flush()
+    order = Order(tenant_id=1, storefront_id=1, customer_id=customer.id, customer_contract_id=contract.id)
+    session.add(order)
+    await session.flush()
+
+    legacy = OrderDocument(
+        order_id=order.id, doc_type="act", number="А-2026-086", date=issue_date, google_file_id="previous-act",
+    )
+    session.add(legacy)
+    await session.flush()
+    session.add(OrderDocument(
+        tenant_id=1, order_id=order.id, doc_type="act", number="А-2026-999", date=issue_date,
+        origin="external_upload", external_status=external_status,
+    ))
+    await session.commit()
+
+    assert await DocumentService._get_act_number_for_document_basis(session, order) == 2
+    assert await DocumentService._get_next_number(session, "act", issue_date, tenant_id=1) == "А-2026-087"
+    reservation = await DocumentNumberingRepository.reserve(
+        session, scope=DocumentNumberScope(1, issuer.id, "act", "А-", "2026"),
+        idempotency_key="issue:test-native-act", legacy_document_type="act",
+    )
+    assert reservation.number_value == 87
+
+    new_act = OrderDocument(order_id=order.id, doc_type="act", base_customer_contract_id=contract.id)
+    with pytest.raises(ContractActNumberConfirmationRequired) as error:
+        await allocate_contract_act_number(
+            session, contract_id=contract.id, issuing_document=new_act, storefront_id=1,
+        )
+    assert error.value.previous_act["id"] == legacy.id
+    assert await allocate_contract_act_number(
+        session, contract_id=contract.id, issuing_document=new_act, storefront_id=1,
+        expected_previous_act_id=legacy.id, confirmed_previous_act_number=21,
+    ) == 22
 
 
 @pytest.mark.asyncio

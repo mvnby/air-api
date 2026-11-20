@@ -273,6 +273,7 @@ class DocumentNumberingRepository:
                     Order.tenant_id == scope.tenant_id,
                     OrderDocument.doc_type == normalized_type,
                     OrderDocument.internal_reference.is_(None),
+                    OrderDocument.origin.is_distinct_from("external_upload"),
                 )
             )
         ).scalars()
