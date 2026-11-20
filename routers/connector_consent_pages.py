@@ -10,7 +10,8 @@ SCOPE_LABELS = {
     "kitlane:catalog:write": ("Подбор и документы", "Сохранять варианты оборудования и готовить черновики КП и счетов."),
     "kitlane:orders:write": ("Заказы и предложения", "Создавать заказы на работы и продажи, изменять строки предложения и цены, привязывать объекты и оборудование к заказу. Для подбора оборудования нужны отдельные права."),
     "kitlane:customers:write": ("Создание клиентов", "Создавать карточки клиентов для заказов по вашему указанию, с проверкой совпадений."),
-    "kitlane:contracts:drafts:write": ("Договоры на работы", "Готовить и проверять нативные черновики договоров по предложению."),
+    "kitlane:contracts:drafts:write": ("Черновики договоров и актов", "Готовить и проверять нативные черновики договоров и технических актов."),
+    "kitlane:documents:uploads:write": ("Внешние документы заказов", "Регистрировать внешние договоры, сохранять оригиналы и прикладывать подписанные копии к документам вашей компании."),
     "kitlane:tenders:analyze": ("Анализ тендеров", "Передавать текст выбранных ТЗ в OpenAI или, по выбору владельца платформы, в DeepSeek."),
     "kitlane:templates:read": ("Чтение шаблонов", "Читать исходные шаблоны и отчёты вашей компании. Нужны права владельца или администратора."),
     "kitlane:templates:proposals:write": ("Проверка и правки шаблонов", "Сохранять замечания и неактивные версии. Активация только отдельным действием в Manager."),
@@ -29,7 +30,7 @@ def consent_page(*, user_name, company_name, storefront_name, pending, nonce):
         if scope == "kitlane:read":
             control = '<input type="checkbox" checked disabled aria-label="Просмотр данных компании обязателен">'
         else:
-            checked = "" if scope in {"kitlane:tenders:analyze", "kitlane:mail:send", "kitlane:templates:read", "kitlane:templates:proposals:write"} else " checked"
+            checked = "" if scope in {"kitlane:documents:uploads:write", "kitlane:tenders:analyze", "kitlane:mail:send", "kitlane:templates:read", "kitlane:templates:proposals:write"} else " checked"
             control = f'<input type="checkbox" name="scope:{esc(scope, quote=True)}" value="allow"{checked}>'
         permissions.append(f'<label class="permission">{control}<span><strong>{esc(label)}</strong><small>{esc(description)}</small></span></label>')
     return f'''<!doctype html>

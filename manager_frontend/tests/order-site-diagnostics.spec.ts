@@ -56,6 +56,10 @@ const openAct = async (wrapper: VueWrapper) => {
   await flushPromises();
   return wrapper.get('[data-testid="prepare-site-technical-act"]');
 };
+const original = (overrides: Record<string, unknown> = {}) => ({
+  id: 94, order_id: 42, status: 'issued', doc_type: 'defect_act', scope_site_ids: [1], scope_equipment_ids: [11],
+  legal_entity_id: 91, base_document_id: 88, display_number: 'Т-94', date: '2026-11-20', ...overrides,
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -183,6 +187,57 @@ describe('scoped order diagnostics', () => {
       }]);
     } finally { wrapper.unmount(); }
   });
+
+  it('deep-links to a correction and reuses the issued kind, issuer, basis and equipment with the latest version', async () => {
+    const previous = window.location.href;
+    window.history.replaceState(null, '', '/manager/orders/42?section=work&orderSiteId=1&replaceTechnicalActId=94');
+    api.native.mockResolvedValue({ items: [original()] });
+    api.get.mockResolvedValue(state(1, 11, 4, 'defect_found', 'Актуальный вывод'));
+    const wrapper = panel(1, [11, 12]);
+    try {
+      await flushPromises();
+      expect(api.native).toHaveBeenCalledWith(42);
+      expect(api.get).toHaveBeenCalledWith(42, 1, 11);
+      expect(api.get).not.toHaveBeenCalledWith(42, 1, 12);
+      const form = wrapper.get('[data-testid="prepare-site-technical-act"]');
+      expect(form.text()).toContain('Т-94');
+      const controls = form.findAll('select');
+      expect(controls.map(control => (control.element as HTMLSelectElement).value)).toEqual(['defect_act', '91', 'document:88']);
+      expect(controls.every(control => control.attributes('disabled') !== undefined)).toBe(true);
+      expect(form.findAll('input[type="checkbox"]').every(control => control.attributes('disabled') !== undefined)).toBe(true);
+      await form.trigger('submit');
+      await flushPromises();
+      expect(api.prepare.mock.calls[0]).toMatchObject([42, 1, {
+        document_type: 'defect_act', replaces_document_id: 94, legal_entity_id: 91,
+        base_document_id: 88, inspections: [{ equipment_id: 11, expected_version: 4 }],
+      }]);
+      expect(form.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+      expect(form.get('a').attributes('href')).toContain('documentId=101');
+    } finally {
+      wrapper.unmount();
+      window.history.replaceState(null, '', previous);
+    }
+  });
+
+  it.each([{ order_id: 43 }, { scope_site_ids: [2] }, { status: 'draft' }])(
+    'rejects an ineligible technical revision source %j',
+    async overrides => {
+      const previous = window.location.href;
+      window.history.replaceState(null, '', '/manager/orders/42?section=work&orderSiteId=1&replaceTechnicalActId=94');
+      api.native.mockResolvedValue({ items: [original(overrides)] });
+      const wrapper = panel(1, [11]);
+      try {
+        await flushPromises();
+        const form = wrapper.get('[data-testid="prepare-site-technical-act"]');
+        expect(form.get('[role="alert"]').text()).toContain('Исходный технический акт недоступен');
+        await form.trigger('submit');
+        expect(api.prepare).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        window.history.replaceState(null, '', previous);
+      }
+    },
+  );
 
   it('reads inspections for completed orders with the editor and act commands disabled', async () => {
     api.get.mockResolvedValue(state(3, 31, 1, 'restored'));

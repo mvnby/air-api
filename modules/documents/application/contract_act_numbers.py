@@ -44,6 +44,7 @@ def _act_history(contract: CustomerContract):
         .where(
             Order.customer_id == contract.customer_id,
             OrderDocument.doc_type == "act",
+            OrderDocument.origin.is_distinct_from("external_upload"),
             or_(
                 OrderDocument.status.is_(None),
                 OrderDocument.official_number.is_not(None),

@@ -10,6 +10,7 @@ import {
   type OrderSiteItem,
 } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
+import { readOrderPage, readOrderWorkspaceSection } from '../../services/order-navigation';
 import { equipmentTitle } from '../equipment/registry';
 import OrderSiteTechnicalActPanel from './OrderSiteTechnicalActPanel.vue';
 
@@ -66,8 +67,19 @@ const saveErrors = ref<Record<number, string>>({});
 const conflicts = ref<Record<number, boolean>>({});
 const pendingLoads = new Map<number, Promise<OrderInspectionState | undefined>>();
 const loadingItems = ref(new Set<number>());
-const expanded = ref(false);
-const showAct = ref(false);
+const replacementId = computed(() => {
+  const location = new URL(window.location.href);
+  const siteIds = location.searchParams.getAll('orderSiteId');
+  const values = location.searchParams.getAll('replaceTechnicalActId');
+  if (readOrderPage(location.href)?.orderId !== props.order.id
+    || readOrderWorkspaceSection(location.href) !== 'work'
+    || siteIds.length !== 1 || siteIds[0] !== String(props.site.id)
+    || values.length !== 1 || !/^[1-9]\d*$/.test(values[0]!)) return null;
+  const id = Number(values[0]);
+  return Number.isSafeInteger(id) ? id : null;
+});
+const expanded = ref(Boolean(replacementId.value));
+const showAct = ref(Boolean(replacementId.value && !props.disabled));
 const activeEquipmentId = ref<number | null>(null);
 const historical = ref<OrderInspectionRevisionItem | null>(null);
 const historyDraft = ref<InspectionDraft | null>(null);
@@ -298,6 +310,7 @@ const save = async () => {
         v-if="showAct"
         :order="order"
         :site="site"
+        :replacement-id="replacementId"
         :equipment="equipment"
         :inspections="inspections"
         :load-inspection="loadInspection"

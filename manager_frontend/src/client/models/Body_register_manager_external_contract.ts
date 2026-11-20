@@ -7,5 +7,6 @@ export type Body_register_manager_external_contract = {
     contract_date: string;
     external_url?: (string | null);
     file?: (Blob | null);
+    external_status?: ('received' | 'signed' | null);
 };
 

@@ -11,6 +11,7 @@ import {
 import { managerSession } from '../../../services/manager-session';
 import { getApiErrorMessage } from '../../../utils/api-errors';
 import { documentTypeName, officialDocumentTitle } from '../model/native-document-options';
+import { hasExternalOrigin } from '../integrations/external-order-documents-api';
 
 export const formatDocumentDate = (value: string | null | undefined) =>
   value ? value.slice(0, 10).split('-').reverse().join('.') : '—';
@@ -23,6 +24,7 @@ type BasisOption = {
   documentId?: number;
   contract?: RegisteredContract;
   isContract: boolean;
+  requiresExplicitChoice?: boolean;
 };
 
 type BasisInput = {
@@ -114,6 +116,7 @@ export function useNativeDocumentBasis(input: BasisInput) {
       if (nativeIds.has(item.id) || sourceIds.has(item.id) || !['contract', 'offer'].includes(item.doc_type)) continue;
       result.push({
         value: `document:${item.id}`, documentId: item.id, isContract: item.doc_type === 'contract',
+        requiresExplicitChoice: hasExternalOrigin(item),
         label: `${documentTypeName(item.doc_type)} № ${item.number} от ${formatDocumentDate(item.date)}`,
       });
     }
@@ -133,8 +136,9 @@ export function useNativeDocumentBasis(input: BasisInput) {
     // Losing eligibility must not silently replace the order's agreed contract.
     if (input.order().customer_contract_id || missingIssuer.value.length) return undefined;
     // With a choice between an unbound customer contract and another basis, let the manager decide.
-    if (items.length > 1 && items.some((item) => item.contract)) return undefined;
-    return items[0];
+    const defaultOptions = items.filter(item => !item.requiresExplicitChoice);
+    if (defaultOptions.length > 1 && defaultOptions.some((item) => item.contract)) return undefined;
+    return defaultOptions[0];
   });
   const value = computed({
     get: () => selected.value?.value || '',

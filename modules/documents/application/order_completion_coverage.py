@@ -129,6 +129,8 @@ async def _effective_acts(session: AsyncSession, order_id: int) -> list[OrderDoc
     statement = select(OrderDocument).where(
         OrderDocument.order_id == order_id,
         OrderDocument.doc_type == "act",
+        # A received file can support a native act without closing any volume.
+        or_(OrderDocument.origin.is_(None), OrderDocument.external_status == "signed"),
         or_(
             OrderDocument.status.in_((DocumentStatus.ISSUED.value, DocumentStatus.SENT.value, DocumentStatus.SIGNED.value)),
             OrderDocument.status.is_(None),

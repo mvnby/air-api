@@ -21,6 +21,7 @@ from schemas_order_sites import (
     OrderSiteLegacyPrimary,
     OrderSiteList,
     OrderSiteNewEquipment,
+    OrderSiteUpdatePayload,
 )
 from services.authenticated_command_service import AuthenticatedCommandService
 from services.equipment_service import EquipmentService
@@ -32,7 +33,7 @@ class OrderSiteVersionConflict(HTTPException):
     def __init__(self):
         super().__init__(
             status_code=409,
-            detail={"code": "version_conflict", "message": "Состав объекта изменился. Обновите данные."},
+            detail={"code": "version_conflict", "message": "Объект изменился. Обновите данные."},
         )
 
 
@@ -150,6 +151,42 @@ class OrderSiteService:
         if outcome.replayed:
             order = await cls._order(session, actor.tenant_scope, order_id)
             await cls._site(session, order, outcome.value.id)
+        return outcome
+
+    @classmethod
+    async def update_site(
+        cls, session, actor: CommandActor, order_id: int, site_id: int,
+        payload: OrderSiteUpdatePayload, *, idempotency_key: str,
+    ):
+        order = await cls._order(session, actor.tenant_scope, order_id)
+        await cls._site(session, order, site_id)
+
+        async def operation():
+            order = await cls._order(session, actor.tenant_scope, order_id, lock=True)
+            cls._require_writable(order)
+            site = await cls._site(session, order, site_id, lock=True)
+            if site.version != payload.expected_version:
+                raise OrderSiteVersionConflict()
+            title = payload.title or site.title
+            address = payload.address or site.address
+            if (title, address) != (site.title, site.address):
+                if site.customer_branch_id is None and await OrderSiteDAO.find_order_only_site(
+                    session, order, title=title, address=address, exclude_site_id=site.id,
+                ) is not None:
+                    raise HTTPException(status_code=409, detail="Объект с таким названием и адресом уже есть в заказе")
+                site.title, site.address = title, address
+                site.version += 1
+                await session.flush()
+            return PublicWriteCommandResponse(cls._site_item(site), resource_type="order_site", resource_id=site.id)
+
+        outcome = await AuthenticatedCommandService.execute(
+            session, actor=actor, command_name="order_site.update", idempotency_key=idempotency_key,
+            payload={"order_id": order_id, "site_id": site_id, "site": payload.model_dump(mode="json")},
+            response_model=OrderSiteItem, operation=operation,
+        )
+        if outcome.replayed:
+            order = await cls._order(session, actor.tenant_scope, order_id)
+            await cls._site(session, order, site_id)
         return outcome
 
     @staticmethod

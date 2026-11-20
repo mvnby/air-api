@@ -19,6 +19,8 @@ import { groupDocumentVersions } from '../model/document-version-history';
 import B2BContractTermsPanel from './B2BContractTermsPanel.vue';
 import ContractScenarioChooser from './ContractScenarioChooser.vue';
 import ExternalContractForm from './ExternalContractForm.vue';
+import ExternalOrderDocuments from './ExternalOrderDocuments.vue';
+import { hasExternalOrigin, matchesOrderDocumentSite, type OrderDocumentWithEvidence } from '../integrations/external-order-documents-api';
 import DocumentList from './DocumentList.vue';
 import FacsimilePdfEditor from './FacsimilePdfEditor.vue';
 import { canEditDocumentFacsimile } from '../model/facsimile-placement';
@@ -103,6 +105,26 @@ const access = computed(() => getOrderDocumentAccess(props.order.status));
 const contractSource = ref<'ours' | 'customer'>('ours');
 const orderDocuments = ref<ManagerOrderDocumentItem[]>([]);
 watch(() => props.order.documents, (documents) => { orderDocuments.value = documents || []; }, { immediate: true });
+const externalEvidenceScope = computed(() => {
+  const auth = managerSession.auth.value;
+  return auth?.tenant_id && auth.storefront_id ? `${auth.tenant_id}:${auth.storefront_id}` : null;
+});
+const canWriteExternalEvidence = computed(() => {
+  const auth = managerSession.auth.value;
+  return Boolean(auth?.staff_user_id && !auth.demo_read_only && !auth.must_change_password
+    && ['owner', 'admin', 'manager'].includes(auth.role || ''));
+});
+const externalDocuments = ref<OrderDocumentWithEvidence[]>([]);
+const documentSiteFilter = ref<number | null>(null);
+watch([() => props.order.id, externalEvidenceScope], () => {
+  externalDocuments.value = [];
+  documentSiteFilter.value = null;
+}, { flush: 'sync' });
+const allSavedOrderDocuments = computed(() => {
+  const records = new Map(orderDocuments.value.map(document => [document.id, document]));
+  for (const document of externalDocuments.value) if (hasExternalOrigin(document)) records.set(document.id, document);
+  return [...records.values()];
+});
 const canManageDocumentSettings = computed(() => (
   hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.documentsManage)
 ));
@@ -140,8 +162,10 @@ const sendableDocuments = computed(() => workspace.documents.value.filter((docum
   ['issued', 'sent', 'signed'].includes(document.status)
 )));
 const nativeDocumentIds = computed(() => new Set(workspace.documents.value.map((document) => document.id)));
-const otherContracts = computed(() => orderDocuments.value.filter((document) => (
-  document.doc_type === 'contract' && !nativeDocumentIds.value.has(document.id)
+const nativeEvidenceRevision = computed(() => workspace.documents.value.map(document => `${document.id}:${document.status}`).join(','));
+const otherContracts = computed(() => allSavedOrderDocuments.value.filter((document) => (
+  document.doc_type === 'contract' && !nativeDocumentIds.value.has(document.id) && !hasExternalOrigin(document)
+  && matchesOrderDocumentSite(document, documentSiteFilter.value)
 )));
 const loadOrderDocuments = async () => {
   const orderId = props.order.id;
@@ -159,11 +183,18 @@ const contractFileActions = useDocumentFileActions({
   refresh: () => emit('refresh'),
   notify: (message, type = 'success') => emit('toast', { message, type }),
 });
-const draftCount = computed(() => workspace.documents.value.filter((document) => document.status === 'draft').length);
-const documentGroups = computed(() => groupDocumentVersions(workspace.documents.value));
+const visibleNativeDocuments = computed(() => {
+  const siteId = documentSiteFilter.value;
+  if (siteId === null) return workspace.documents.value;
+  const matchingIds = new Set(externalDocuments.value.filter(document => matchesOrderDocumentSite(document, siteId)).map(document => document.id));
+  return workspace.documents.value.filter(document => matchingIds.has(document.id));
+});
+const draftCount = computed(() => visibleNativeDocuments.value.filter((document) => document.status === 'draft').length);
+const documentGroups = computed(() => groupDocumentVersions(visibleNativeDocuments.value));
 const linkedDocumentId = computed(() => {
   const location = new URL(window.location.href);
   if (readOrderPage(location.href)?.orderId !== props.order.id || location.searchParams.get('section') !== 'documents') return null;
+  if (location.searchParams.get('action') === 'attachExternalDocument') return null;
   const ids = location.searchParams.getAll('documentId');
   return ids.length === 1 && /^[1-9]\d*$/.test(ids[0]!) ? Number(ids[0]) : null;
 });
@@ -203,7 +234,7 @@ const googleEditor = useGoogleDocumentEditor({
 });
 
 const basis = useNativeDocumentBasis({
-  order: () => props.order, documents: workspace.documents, orderDocuments,
+  order: () => props.order, documents: workspace.documents, orderDocuments: allSavedOrderDocuments,
   documentType: workspace.documentType, issueDate: workspace.issueDate,
   legalEntityId: workspace.selectedLegalEntityId, legalEntities: workspace.legalEntities,
   baseDocumentId: workspace.baseDocumentId, baseCustomerContractId: workspace.baseCustomerContractId,
@@ -347,7 +378,23 @@ const openSettings = () => {
   if (!canManageDocumentSettings.value) return;
   return navigateManager('/manager/settings/documents');
 };
+const isOrderTechnicalAct = (document: ManagedDocumentItem) =>
+  document.doc_type === 'technical_inspection_act' || document.doc_type === 'defect_act';
+const technicalReplacementHref = (document: ManagedDocumentItem) => {
+  if (!isOrderTechnicalAct(document) || document.order_id !== props.order.id
+    || document.scope_site_ids?.length !== 1 || !document.scope_equipment_ids?.length) return '';
+  const params = new URLSearchParams({
+    section: 'work', orderSiteId: String(document.scope_site_ids[0]), replaceTechnicalActId: String(document.id),
+  });
+  const current = new URL(window.location.href).searchParams;
+  for (const key of ['company', 'site', 'returnTo']) {
+    const value = current.get(key);
+    if (value) params.set(key, value);
+  }
+  return `/manager/orders/${props.order.id}?${params}#order-workspace-sites`;
+};
 const prepareReplacement = (document: Parameters<typeof workspace.prepareReplacement>[0]) => {
+  if (isOrderTechnicalAct(document)) return;
   workspace.prepareReplacement(document);
   if (document.doc_type === 'act') {
     void actSites.load().then(() => {
@@ -547,6 +594,12 @@ defineExpose({
       <button v-if="access.canCreate" type="button" class="btn-mini min-h-9 w-fit shrink-0 px-3 focus-visible:ring-2 focus-visible:ring-brand-500" @click="openCreateForm">Новый документ</button>
     </div>
 
+    <ExternalOrderDocuments
+      :order-id="order.id" :proposal-id="proposalId" :scope-key="externalEvidenceScope"
+      :can-import="canWriteExternalEvidence && access.canUpload" :can-write="canWriteExternalEvidence" :native-revision="nativeEvidenceRevision"
+      @updated="externalDocuments = $event" @site-filter="documentSiteFilter = $event" @refresh="emit('refresh')" @toast="emit('toast', $event)"
+    />
+
     <div v-if="workspace.loading.value" class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
       <LoaderCircle :size="20" class="animate-spin shrink-0" aria-hidden="true" />Загружаем документный контур…
     </div>
@@ -613,7 +666,10 @@ defineExpose({
                 data-testid="edit-draft-template" @click="editTemplate(document)">Редактировать шаблон</button>
               <button v-if="canChangeDraft(document) && access.canCreate" class="native-action" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="editingDraftId = editingDraftId === document.id ? null : document.id">{{ document.doc_type === 'ttn1' ? 'Груз и параметры' : 'Изменить параметры' }}</button>
               <button v-if="canChangeDraft(document) && !document.maintenance_source_order_id && access.canDelete" class="native-action-danger" type="button" :disabled="workspace.busy.value || googleDraftBusy(document.id)" @click="workspace.deleteDraft(document)">Удалить черновик</button>
-              <button v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace && !['technical_inspection_act', 'defect_act'].includes(document.doc_type)" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
+              <template v-if="['issued', 'sent', 'signed'].includes(document.status) && !document.maintenance_source_order_id && access.canReplace">
+                <a v-if="technicalReplacementHref(document)" :href="technicalReplacementHref(document)" class="native-action" target="_blank" rel="noopener">Создать исправленную редакцию</a>
+                <button v-else-if="!isOrderTechnicalAct(document)" class="native-action" type="button" @click="prepareReplacement(document)">Создать исправленную редакцию</button>
+              </template>
               <a v-if="document.maintenance_source_order_id" :href="`/manager/orders/kanban?orderId=${document.maintenance_source_order_id}`" target="_blank" rel="noopener" class="native-action">Исходное ТО #{{ document.maintenance_source_order_id }} · замечания и новые версии</a>
               <button v-if="['issued', 'sent', 'signed'].includes(document.status) && access.canReplace" class="native-action-danger" type="button" @click="workspace.requestVoid(document)">Аннулировать</button>
             </div>
@@ -636,9 +692,9 @@ defineExpose({
 
         <DocumentVersionHistory :key="order.id" :documents="documentGroups.archived" title="История документов" test-id="native-document-history" @download="workspace.downloadArtifact" />
 
-        <div v-if="!workspace.documents.value.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+        <div v-if="!visibleNativeDocuments.length" class="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <FileText :size="32" class="shrink-0" aria-hidden="true" />
-          <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Внутренних документов пока нет</p>
+          <p class="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ documentSiteFilter ? 'Внутренних документов по объекту пока нет' : 'Внутренних документов пока нет' }}</p>
         </div>
       </div>
       <div v-if="access.canSend && canSendNativeEmail" class="mt-4 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">

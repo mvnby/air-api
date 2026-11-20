@@ -35,6 +35,17 @@ ChatGPT интерпретирует запрос пользователя, а K
 действий по содержимому переписки нет. Подготовка акта ТО может
 создать NEGOTIATION продолжение; исходное закрытое ТО сохраняется.
 
+## Осмотры и документы многообъектного заказа
+
+- Для `get_order_inspection` и `save_order_inspection` передайте `order_id`, `site_id` и `equipment_id`. `current_version: 0` означает первый осмотр. При записи копируйте значение в `expected_version`. Рекомендации и выполненные действия сохраняются в отдельных полях.
+- `prepare_order_technical_act` сохраняет черновик акта осмотра одного объекта, включая осмотр без выявленных дефектов. `prepare_order_defect_act` требует зафиксированного дефекта хотя бы по одной выбранной единице. Выберите действующее основание, актуальные версии объекта и осмотров. После сохранения инструмент возвращает ID документа, ревизию и конкретную ссылку в Manager.
+- `get_order_completion_act_source` читает версию основного предложения. `prepare_order_completion_act` сохраняет обычный акт оказанных услуг по выбранным объектам и подтверждённому договору. При частичной сдаче передайте строки предложения и закрываемые количества.
+- `list_order_documents` возвращает документы одного заказа, включая нативные, внешние и ранее зарегистрированные документы. Фильтры `document_type`, `site_id` и `equipment_id` можно сочетать. Размер страницы до 100. `file_version: 0` означает отсутствие версии внешнего файла. Нативная ревизия и версия файла возвращаются отдельно.
+- `register_external_order_contract` принимает реквизиты внешнего договора. `upload_order_document` сохраняет типизированный документ. `attach_order_document_file` добавляет версию оригинала или уже подписанный PDF к существующему документу и использует `expected_version` из `file_version`. Источник документа и внешний статус возвращаются отдельно. Для явной регистрации одних реквизитов договора используется `metadata_only`.
+- Для внешних документов используйте top-level поле `file` с метаданными ChatGPT fileParams. Ключ повтора, ID файла и его метаданные сохраняйте неизменными. Допустима обновлённая временная ссылка того же файла. При недоступной доставке ответ инструмента содержит адрес формы загрузки в Manager и код ошибки. Успешная запись возвращает ID документа и сохранённую версию файла.
+
+Для чтения нужен `kitlane:read`, для сохранения осмотра — `kitlane:orders:write`, для подготовки черновиков — `kitlane:contracts:drafts:write`. Внешние файлы требуют отдельного согласия на `kitlane:documents:uploads:write` при подключении. Раньше выданный grant сохраняет прежние права.
+
 ## Из чата в заказ на работы
 
 1. Для одного найденного клиента `create_service_order` создаёт заказ в переговорах и возвращает ID предложения. Для обращения передайте `incoming_id` и текущую версию из `get_incoming`. Для входящего заказа со статусом `new_lead` прочитайте `get_service_order_intake` и передайте `incoming_order_id` с `expected_incoming_order_revision`. Заказ сохранит свой номер и историю. Оценочный бюджет закупки используется как цена предложения только по указанию пользователя. На существующем заказе ID вариантов доступны через `get_order`.
@@ -104,7 +115,8 @@ expected_document_revision. Изменение только даты не тре
 - Callback по умолчанию: `https://chatgpt.com/connector_platform_oauth_redirect`.
 - Обязательный scope `kitlane:read`; отдельно разрешаются
   `kitlane:incoming:write`, `kitlane:tasks:write`, `kitlane:maintenance:write`,
-  `kitlane:orders:write`, `kitlane:customers:write`, `kitlane:contracts:drafts:write`, `kitlane:catalog:write`, `kitlane:mail:read`, `kitlane:mail:drafts:write` и
+  `kitlane:orders:write`, `kitlane:customers:write`, `kitlane:contracts:drafts:write`,
+  `kitlane:documents:uploads:write`, `kitlane:catalog:write`, `kitlane:mail:read`, `kitlane:mail:drafts:write` и
   `kitlane:mail:send`.
 
 Старые подключения не получают новые почтовые права автоматически. Для почты

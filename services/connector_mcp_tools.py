@@ -75,6 +75,34 @@ from services.order_equipment_identity_service import OrderEquipmentIdentityServ
 from schemas_connector_order_sites import OrderSiteAddInput, OrderSitesListInput, SiteEquipmentLinkInput, SiteEquipmentListInput
 from schemas_order_sites import OrderSiteEquipmentLinkResult, OrderSiteEquipmentList, OrderSiteItem, OrderSiteList
 from services.order_site_service import OrderSiteService
+from schemas_connector_order_documents import (
+    AttachOrderDocumentFileInput,
+    OrderDocumentsListInput,
+    OrderDocumentsListResult,
+    OrderExternalDocumentSaved,
+    PrepareOrderDefectActInput,
+    PrepareOrderInspectionActInput,
+    RegisterExternalOrderContractInput,
+    UploadOrderDocumentInput,
+)
+from schemas_order_completion_acts import (
+    OrderCompletionActPrepared,
+    OrderCompletionActSource,
+    OrderCompletionActSourceInput,
+    PrepareOrderCompletionActInput,
+)
+from schemas_order_diagnostics import (
+    OrderInspectionReadInput,
+    OrderInspectionSaved,
+    OrderInspectionSaveInput,
+    OrderInspectionState,
+    OrderTechnicalActPrepared,
+)
+from services.connector_order_documents import (
+    execute_order_document_workflow_tool,
+    list_order_documents,
+    write_external_order_document,
+)
 
 
 from api_contracts.document_template_audits import (
@@ -94,6 +122,7 @@ CATALOG_SCOPE = "kitlane:catalog:write"
 ORDER_SCOPE = "kitlane:orders:write"
 CUSTOMER_SCOPE = "kitlane:customers:write"
 CONTRACT_SCOPE = "kitlane:contracts:drafts:write"
+ORDER_DOCS_UPLOAD_SCOPE = "kitlane:documents:uploads:write"
 MAIL_READ_SCOPE = "kitlane:mail:read"
 MAIL_DRAFT_SCOPE = "kitlane:mail:drafts:write"
 MAIL_SEND_SCOPE = "kitlane:mail:send"
@@ -225,6 +254,63 @@ _ORDER_SITE_TOOLS = (
         "Link an existing physical unit or record a newly described unit at this confirmed site. Use the site's current expected_version. Supply an equipment_id or confirmed equipment facts, never guessed serials. Keep the exact key and payload after a timeout.",
         SiteEquipmentLinkInput, ConnectorWriteResult[OrderSiteEquipmentLinkResult], ORDER_SCOPE),
 )
+_ORDER_DOCUMENT_WORKFLOW_TOOLS = (
+    ConnectorTool(
+        "get_order_inspection",
+        "Read the current or a selected immutable inspection revision for one equipment ID on one order site. Current version 0 means no inspection has been saved.",
+        OrderInspectionReadInput, OrderInspectionState,
+    ),
+    ConnectorTool(
+        "save_order_inspection",
+        "Save verified inspection facts using the equipment inspection's current expected_version. Keep trial results, prior events, future recommendations and already performed actions in their separate fields. Leave unknown measurements empty. Retry with the same key and fields.",
+        OrderInspectionSaveInput, ConnectorWriteResult[OrderInspectionSaved], ORDER_SCOPE,
+    ),
+    ConnectorTool(
+        "prepare_order_technical_act",
+        "Prepare a native technical inspection act draft in the same service or repair order. Select one site, the current site version, each chosen equipment and inspection version, and one applicable contract basis. An inspection may have no defect. This step saves a draft for Manager review.",
+        PrepareOrderInspectionActInput, ConnectorWriteResult[OrderTechnicalActPrepared], CONTRACT_SCOPE,
+    ),
+    ConnectorTool(
+        "prepare_order_defect_act",
+        "Prepare a separate native defect act draft in the same service or repair order. Select one site, the current site version, equipment and inspection versions including a recorded defect, and one applicable contract basis. Save future repairs as recommendations and return the draft for Manager review.",
+        PrepareOrderDefectActInput, ConnectorWriteResult[OrderTechnicalActPrepared], CONTRACT_SCOPE,
+    ),
+    ConnectorTool(
+        "get_order_completion_act_source",
+        "Read the current version of the order's selected active proposal before preparing a standard completion act.",
+        OrderCompletionActSourceInput, OrderCompletionActSource,
+    ),
+    ConnectorTool(
+        "prepare_order_completion_act",
+        "Prepare one standard commercial completion act draft for the selected order sites, active proposal and agreed contract basis. Use the current proposal version. For partial delivery choose exact proposal lines and quantities. Reference existing actual work and preserve the agreed amount. The draft remains in the same order for Manager review.",
+        PrepareOrderCompletionActInput, ConnectorWriteResult[OrderCompletionActPrepared], CONTRACT_SCOPE,
+    ),
+)
+_ORDER_DOCUMENT_READ_TOOL = ConnectorTool(
+    "list_order_documents",
+    "Read documents of one accessible order, optionally filtered by document type, site and equipment. Returns stable IDs, native and external statuses, versions and Manager links. The upload screen link is available even when the list is empty.",
+    OrderDocumentsListInput, OrderDocumentsListResult,
+)
+_ORDER_DOCUMENT_UPLOAD_TOOLS = (
+    ConnectorTool(
+        "register_external_order_contract",
+        "Register the confirmed number and date of an external contract in this order. Pass the user-selected DOC, DOCX or PDF via ChatGPT file delivery. Set external_status=signed only for a contract already signed outside Kitlane. Use metadata_only only on explicit instruction to register without a file. The command records the evidence supplied by the user.",
+        RegisterExternalOrderContractInput, ConnectorWriteResult[OrderExternalDocumentSaved],
+        ORDER_DOCS_UPLOAD_SCOPE, file_params=("file",),
+    ),
+    ConnectorTool(
+        "upload_order_document",
+        "Save one user-selected DOC, DOCX or PDF privately in an existing order. Assign the confirmed semantic type, document number/date, external status, site, equipment and basis as applicable. If delivery is unavailable, use the returned Manager upload link. Retry with the same file ID, key and metadata.",
+        UploadOrderDocumentInput, ConnectorWriteResult[OrderExternalDocumentSaved],
+        ORDER_DOCS_UPLOAD_SCOPE, file_params=("file",),
+    ),
+    ConnectorTool(
+        "attach_order_document_file",
+        "Save a new original version or attach an already signed PDF copy to one existing document by order and document IDs. Read list_order_documents and use the current file_version as expected_version, including 0 if no file exists. Preserve the original issued snapshot. Retry with the same file ID, key and metadata.",
+        AttachOrderDocumentFileInput, ConnectorWriteResult[OrderExternalDocumentSaved],
+        ORDER_DOCS_UPLOAD_SCOPE, file_params=("file",),
+    ),
+)
 
 _MAIL_TOOLS = (
     ConnectorTool("list_mail_accounts", "Read company-configured mail senders and company signatures. Use before choosing a sender; never use personal or another company's identity.", EmptyInput, MailAccountListResponse, MAIL_READ_SCOPE, read_only=True),
@@ -276,11 +362,13 @@ _TEMPLATE_AUDIT_TOOLS = (
     ConnectorTool("prepare_template_revision", "Only on explicit user instruction prepare point edits as a new INACTIVE immutable version linked to saved findings. Supply report revision, source/context/legal evidence hashes, exact full block expected_text and reason. Preserve variable/condition/table tokens and untouched formatting/anchors; incomplete coverage refuses changes. No global phrase replacement. Return saved diff and preview link in Manager; only a separate explicit user action there activates. Existing drafts and issued files stay unchanged. Retry identical key/payload after timeout.", TemplateAuditProposalInput, ConnectorWriteResult[TemplateAuditReportResult], TEMPLATE_PROPOSAL_SCOPE, additional_scopes=(TEMPLATE_READ_SCOPE,)),
 )
 TEMPLATE_AUDIT_TOOLS = frozenset(tool.name for tool in _TEMPLATE_AUDIT_TOOLS)
-TOOLS = {tool.name: tool for tool in (*_TEMPLATE_AUDIT_TOOLS, *_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_ORDER_SITE_TOOLS, *_MAIL_TOOLS, *_SALES_TOOLS, *_AMENDMENT_TOOLS)}
+TOOLS = {tool.name: tool for tool in (*_TEMPLATE_AUDIT_TOOLS, *_TOOLS, *_MAINTENANCE_TOOLS, *_CATALOG_TOOLS, *_SERVICE_ORDER_TOOLS, *_ORDER_SITE_TOOLS, *_ORDER_DOCUMENT_WORKFLOW_TOOLS, _ORDER_DOCUMENT_READ_TOOL, *_ORDER_DOCUMENT_UPLOAD_TOOLS, *_MAIL_TOOLS, *_SALES_TOOLS, *_AMENDMENT_TOOLS)}
 SALES_TOOLS = frozenset(tool.name for tool in _SALES_TOOLS)
 MAINTENANCE_TOOLS = frozenset(tool.name for tool in _MAINTENANCE_TOOLS)
 CATALOG_TOOLS = frozenset(tool.name for tool in _CATALOG_TOOLS)
 MAIL_TOOLS = frozenset(tool.name for tool in _MAIL_TOOLS)
+ORDER_DOCUMENT_WORKFLOW_TOOLS = frozenset(tool.name for tool in _ORDER_DOCUMENT_WORKFLOW_TOOLS)
+ORDER_DOCUMENT_UPLOAD_TOOLS = frozenset(tool.name for tool in _ORDER_DOCUMENT_UPLOAD_TOOLS)
 
 
 def _task_projection(task: PersonalTaskResponse) -> ConnectorTaskResponse:
@@ -305,6 +393,15 @@ async def execute_tool(
         return (await read_tender_document(session, actor.tenant_scope, inputs)).model_dump(mode="json")
     if name == "analyze_tender_documents":
         return (await analyze_tender_documents(session, actor, inputs)).model_dump(mode="json")
+    if name == "list_order_documents":
+        result = await list_order_documents(session, actor, inputs)
+        return result.model_dump(mode="json")
+    if name in ORDER_DOCUMENT_WORKFLOW_TOOLS:
+        result = await execute_order_document_workflow_tool(session, actor, name, inputs)
+        return tool.output_model.model_validate(result).model_dump(mode="json")
+    if name in ORDER_DOCUMENT_UPLOAD_TOOLS:
+        result = await write_external_order_document(session, actor, name, inputs)
+        return result.model_dump(mode="json")
     if name == "list_order_consumer_documents":
         return (await list_order_consumer_documents(session, actor, inputs)).model_dump(mode="json")
     if name == "list_order_sites":

@@ -259,6 +259,24 @@ describe('NativeDocumentsWorkspace', () => {
     expect(notice().find('button').text()).toBe('Юрлица и шаблоны');
   });
 
+  it('opens scoped technical corrections at their site and suppresses the generic replacement form', async () => {
+    const technical = {
+      ...revision(93, 'issued', null, 'technical_inspection_act'), scope_site_ids: [14], scope_equipment_ids: [20, 21],
+    };
+    const defect = { ...revision(94, 'signed', null, 'defect_act'), scope_site_ids: [15], scope_equipment_ids: [22] };
+    const unscoped = revision(95, 'issued', null, 'technical_inspection_act');
+    vi.mocked(ManagerDocumentSystemService.listManagerManagedOrderDocuments).mockResolvedValue({ items: [technical, defect, unscoped] });
+    const wrapper = await mountWorkspace();
+    for (const [documentId, siteId] of [[93, 14], [94, 15]] as const) {
+      const card = wrapper.get(`[data-testid="current-document-${documentId}"]`);
+      const actions = card.findAll('a');
+      const link = actions.find(action => action.text() === 'Создать исправленную редакцию');
+      expect(link?.attributes('href')).toContain(`/manager/orders/42?section=work&orderSiteId=${siteId}&replaceTechnicalActId=${documentId}`);
+      expect(card.findAll('button').some(button => button.text() === 'Создать исправленную редакцию')).toBe(false);
+    }
+    expect(wrapper.get('[data-testid="current-document-95"]').text()).not.toContain('Создать исправленную редакцию');
+  });
+
   it('prepares a corrected TN-2 without carrying transport details into its payload', async () => {
     const revisionKey = 'd'.repeat(64);
     vi.spyOn(ManagerDocumentSystemService, 'getManagerWaybillComposition').mockResolvedValue({

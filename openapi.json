@@ -15040,7 +15040,7 @@
           "manager-docs"
         ],
         "summary": "Get Manager Order Documents",
-        "description": "List legacy-compatible document metadata for an order in the current Manager\ntenant/storefront, including basis and scoped line metadata. Missing order returns 404.\nNative artifacts/lifecycle use document-system endpoints; is_downloadable here reflects\nthe legacy file reference.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "List legacy-compatible document metadata for an order in the current Manager\ntenant/storefront, including basis, scope snapshots and private external file history.\nFilter by semantic type, site or equipment and optionally include native documents.\nMissing order returns 404. Native artifacts/lifecycle use document-system endpoints.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_order_documents",
         "security": [
           {
@@ -15055,6 +15055,84 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "include_native",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Native"
+            }
+          },
+          {
+            "name": "document_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Type"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Site Id"
+            }
+          },
+          {
+            "name": "equipment_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Equipment Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           }
         ],
@@ -15088,7 +15166,7 @@
           "manager-docs"
         ],
         "summary": "Upload Manager Order Document",
-        "description": "Upload a legacy order document to its configured file provider for an accessible order\nin the current tenant/storefront. Closed orders return 409 order_documents_locked.\nCreates a document record/provider file; no caller idempotency receipt is provided, so\nreconcile after an uncertain upload result.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Upload a DOC, DOCX or PDF to an accessible order in the current tenant/storefront.\nProvide document_type, number, document_date and Idempotency-Key for typed private\nevidence with immutable versions. An optional site/equipment must belong to the order.\nTyped and legacy uploads return 409 on closed orders. The existing file-only request\nretains legacy provider behavior and should be reconciled before retrying.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "upload_manager_order_document",
         "security": [
           {
@@ -15103,6 +15181,22 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -15146,7 +15240,7 @@
           "manager-docs"
         ],
         "summary": "Register Manager External Contract",
-        "description": "Register an external contract\u2019s number/date and optional file or HTTP(S) URL for an\naccessible order in the current tenant/storefront. Closed orders return 409; invalid\ncontract details/URL return 400. This records external evidence rather than generating a\nnative official contract; repeated POST can create another record.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Register an external contract\u2019s number/date and optional original for a scoped order.\nSupply Idempotency-Key and optionally external_status to record typed private evidence.\nTyped registration accepts DOC, DOCX and PDF and never fetches a URL or replaces the\norder\u2019s selected framework agreement. Legacy optional reference URLs/files remain\ncompatible. Closed orders return 409.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "register_manager_external_contract",
         "security": [
           {
@@ -15161,6 +15255,22 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -15204,7 +15314,7 @@
           "manager-docs"
         ],
         "summary": "Attach Manager Doc File",
-        "description": "Replace/upload the provider file associated with an accessible legacy document in the\ncurrent tenant/storefront. Closed orders return 409, invalid file/document configuration\n400 and missing document 404. Previous provider file cleanup is attempted after\nreplacement; this is not a native immutable artifact edit.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Append a private file to an accessible document using file_role, expected_version and\nIdempotency-Key. Signed PDF copies may be attached to eligible closed/issued documents\nwithout changing the issued record. A stale version returns 409. A file-only request\nretains legacy provider behavior for mutable legacy documents.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "attach_manager_doc_file",
         "security": [
           {
@@ -15219,6 +15329,22 @@
             "schema": {
               "type": "integer",
               "title": "Doc Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -15262,7 +15388,7 @@
           "manager-docs"
         ],
         "summary": "Get Manager Doc Download",
-        "description": "Download the provider-backed legacy document file for the current tenant/storefront. The\nservice exports Google content or reads uploaded evidence according to file type.\nMissing document/content returns 404; unsupported/unavailable export or native-managed\nrouting misuse returns 400. Native artifacts have their own authenticated download\nendpoint.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Download a document\u2019s stored original, explicitly selected private file_version, or\nlegacy provider file under current tenant/storefront access. For a private PDF,\npreview=true returns the requested preview_page as a raster PNG without exposing\nthe original PDF in an inline response. Missing document or file returns 404.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "get_manager_doc_download",
         "security": [
           {
@@ -15277,6 +15403,45 @@
             "schema": {
               "type": "integer",
               "title": "Doc Id"
+            }
+          },
+          {
+            "name": "file_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File Version"
+            }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Preview"
+            }
+          },
+          {
+            "name": "preview_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 1,
+              "title": "Preview Page"
             }
           }
         ],
@@ -20374,7 +20539,7 @@
           "manager-orders"
         ],
         "summary": "Delete Manager Order",
-        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Saved maintenance observations and diagnostic inspections prevent deletion with 409 before any cleanup.\nMissing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Hard-delete an accessible scoped order together with\nproposal/line/stage/executor/payment/document rows, enqueueing provider document\ncleanup. Bank receipt and outgoing-email histories are detached for audit rather than\nremoved. Saved maintenance observations, diagnostic inspections or private external evidence\nprevent deletion with 409 before any cleanup.\nMissing order/service validation returns 400; unexpected deletion failure 500.\nNo closed-order document lock is applied by this order-delete command; repeat after\ndeletion is not receipt replay.\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "delete_manager_order",
         "security": [
           {
@@ -26866,6 +27031,75 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OrderSiteAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderSiteItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/sites/{site_id}": {
+      "patch": {
+        "tags": [
+          "manager-order-sites"
+        ],
+        "summary": "Manager Update Order Site",
+        "description": "Correct the saved site title or address using its current version.",
+        "operationId": "manager_update_order_site",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Site Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderSiteUpdateRequest"
               }
             }
           }
@@ -43472,6 +43706,33 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "file_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "original",
+                  "signed_copy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Role"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
           }
         },
         "type": "object",
@@ -44118,6 +44379,21 @@
               }
             ],
             "title": "File"
+          },
+          "external_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "received",
+                  "signed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Status"
           }
         },
         "type": "object",
@@ -44402,6 +44678,109 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "contract",
+                  "technical_inspection_act",
+                  "defect_act",
+                  "act",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "document_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Date"
+          },
+          "external_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "received",
+                  "signed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Status"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          },
+          "equipment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Ids"
+          },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
           }
         },
         "type": "object",
@@ -79150,6 +79529,59 @@
         ],
         "title": "ManagerOrderDetailResponse"
       },
+      "ManagerOrderDocumentExternalFile": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "original",
+              "signed_copy"
+            ],
+            "title": "Role"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Uploaded At"
+          },
+          "uploaded_by": {
+            "type": "string",
+            "title": "Uploaded By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "role",
+          "filename",
+          "mime_type",
+          "size_bytes",
+          "checksum_sha256",
+          "uploaded_at",
+          "uploaded_by"
+        ],
+        "title": "ManagerOrderDocumentExternalFile"
+      },
       "ManagerOrderDocumentGeneratePayload": {
         "properties": {
           "additional_conditions": {
@@ -79317,6 +79749,54 @@
             "type": "boolean",
             "title": "Is Downloadable",
             "default": true
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "legacy",
+              "native_generated",
+              "external_upload"
+            ],
+            "title": "Origin",
+            "default": "legacy"
+          },
+          "external_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "received",
+                  "signed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Status"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "file_version": {
+            "type": "integer",
+            "title": "File Version",
+            "default": 0
+          },
+          "external_files": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerOrderDocumentExternalFile"
+            },
+            "type": "array",
+            "title": "External Files"
           }
         },
         "type": "object",
@@ -94128,6 +94608,68 @@
         "additionalProperties": false,
         "type": "object",
         "title": "OrderSiteNewEquipment"
+      },
+      "OrderSiteUpdatePayload": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "OrderSiteUpdatePayload"
+      },
+      "OrderSiteUpdateRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OrderSiteUpdatePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "payload"
+        ],
+        "title": "OrderSiteUpdateRequest"
       },
       "OrderTechnicalActPrepared": {
         "properties": {

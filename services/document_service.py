@@ -7,7 +7,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from models import Customer, CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderServiceLink, OrderStatus
+from models import Customer, CustomerBranch, CustomerContract, CustomerType, DocumentTemplate, GlobalConfig, Order, OrderDocument, OrderDocumentExternalFile, OrderServiceLink, OrderStatus
 from models.document import DocumentLegalEntity, DocumentNumberReservation
 from models.tenancy import TenantScope
 from modules.documents.application.contract_act_numbers import allocate_contract_act_number
@@ -458,6 +458,12 @@ class DocumentService:
 
         order_id = document.order_id
         await DocumentService.ensure_order_documents_mutable(session, order_id)
+        if document.origin == "external_upload" or await session.scalar(
+            select(OrderDocumentExternalFile.version).where(
+                OrderDocumentExternalFile.document_id == doc_id,
+            ).limit(1)
+        ) is not None:
+            raise DocumentHasDependentsError("Документ хранится как часть истории внешних документов заказа.")
         google_file_id = document.google_file_id
 
         dependent_query = select(OrderDocument.id).where(
@@ -625,6 +631,12 @@ class DocumentService:
             return None
 
         await DocumentService.ensure_order_documents_mutable(session, document.order_id)
+        if DocumentService._is_native_managed_document(document) or document.origin == "external_upload":
+            raise NativeManagedDocumentError("Для этого документа добавьте отдельную версию или подписанный экземпляр.")
+        if await session.scalar(select(OrderDocumentExternalFile.version).where(
+            OrderDocumentExternalFile.document_id == doc_id,
+        ).limit(1)) is not None:
+            raise NativeManagedDocumentError("Документ с подписанным экземпляром нельзя заменить.")
         previous_file_id = document.google_file_id
         title_prefix = f"{DOC_NAMES.get(document.doc_type, 'Документ')} {document.number}"
         file_id, edit_url = await DocumentService._upload_document_file(
@@ -718,6 +730,7 @@ class DocumentService:
         order_id: int,
         *,
         tenant_scope: TenantScope,
+        include_native: bool = False,
     ) -> Optional[list[OrderDocument]]:
         """Возвращает список документов заказа"""
         owned_order = await TenantEntityAccessService.get_order(
@@ -727,16 +740,16 @@ class DocumentService:
         )
         if owned_order is None:
             return None
-        query = (
-            select(OrderDocument)
-            .where(
-                OrderDocument.order_id == order_id,
+        query = select(OrderDocument).where(
+            OrderDocument.order_id == order_id,
+            (OrderDocument.tenant_id == owned_order.tenant_id) | OrderDocument.tenant_id.is_(None),
+        ).order_by(OrderDocument.created_at.desc(), OrderDocument.id.desc())
+        if not include_native:
+            query = query.where(
                 OrderDocument.status.is_(None),
                 OrderDocument.internal_reference.is_(None),
                 OrderDocument.template_version_id.is_(None),
             )
-            .order_by(OrderDocument.created_at.desc())
-        )
 
         result = await session.execute(query)
         return result.scalars().all()
@@ -800,6 +813,7 @@ class DocumentService:
         else:
             candidates = select(OrderDocument).where(
                 OrderDocument.order_id == order_id, OrderDocument.doc_type.in_(DocumentService.BASE_DOC_TYPES),
+                OrderDocument.origin.is_distinct_from("external_upload"),
             )
             if contract is not None and contract.source_document_id is not None:
                 candidates = candidates.where(OrderDocument.id != contract.source_document_id)
@@ -1334,7 +1348,10 @@ class DocumentService:
             )
 
         native_number_type = NATIVE_TYPE_FOR_GOOGLE_SERIES.get(doc_type)
-        query = select(OrderDocument.number).where(OrderDocument.number.like(f"{number_prefix}%"))
+        query = select(OrderDocument.number).where(
+            OrderDocument.number.like(f"{number_prefix}%"),
+            OrderDocument.origin.is_distinct_from("external_upload"),
+        )
         if doc_type == "service_act" and tenant_id is not None:
             # Google records have no issuer; they belong to the order tenant's default issuer.
             query = query.join_from(OrderDocument, Order).where(
@@ -1406,7 +1423,7 @@ class DocumentService:
             )
         else:
             return 1
-        result = await session.execute(query)
+        result = await session.execute(query.where(OrderDocument.origin.is_distinct_from("external_upload")))
         existing_count = int(result.scalar_one() or 0)
         return existing_count + 1
 

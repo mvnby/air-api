@@ -76,6 +76,7 @@ async def resolve_native_basis(
         documents = documents.where(
             or_(OrderDocument.legal_entity_id.is_(None), OrderDocument.legal_entity_id == issuer_id),
             or_(OrderDocument.doc_type != "invoice", OrderDocument.business_role == "offer"),
+            OrderDocument.origin.is_distinct_from("external_upload"),
         ).order_by((OrderDocument.doc_type == "contract").desc(), OrderDocument.created_at.desc(), OrderDocument.id.desc())
     if lock:
         documents = documents.with_for_update(of=OrderDocument).execution_options(populate_existing=True)

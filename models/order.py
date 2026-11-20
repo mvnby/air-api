@@ -743,6 +743,12 @@ class OrderDocument(SQLModel, table=True):
             name="ck_order_document_managed_scope_complete",
         ),
         CheckConstraint(
+            "(origin IS NULL AND external_status IS NULL) OR "
+            "(origin IS NOT NULL AND origin = 'external_upload' AND external_status IN ('received', 'signed') "
+            "AND external_status IS NOT NULL AND status IS NULL AND tenant_id IS NOT NULL)",
+            name="ck_order_document_external_origin",
+        ),
+        CheckConstraint(
             "official_number IS NULL OR (tenant_id IS NOT NULL AND legal_entity_id IS NOT NULL "
             "AND official_series IS NOT NULL AND official_period_key IS NOT NULL "
             "AND official_date IS NOT NULL)",
@@ -816,6 +822,8 @@ class OrderDocument(SQLModel, table=True):
     )
     scope_meta: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     doc_type: str = Field(index=True)
+    origin: Optional[str] = Field(default=None, max_length=24)
+    external_status: Optional[str] = Field(default=None, max_length=16)
     status: Optional[str] = Field(
         default=None, sa_column=Column(String(24), nullable=True, index=True)
     )

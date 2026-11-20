@@ -8,6 +8,7 @@ import type { OrderSiteAddRequest } from '../models/OrderSiteAddRequest';
 import type { OrderSiteEquipmentLinkRequest } from '../models/OrderSiteEquipmentLinkRequest';
 import type { OrderSiteEquipmentList } from '../models/OrderSiteEquipmentList';
 import type { OrderSiteList } from '../models/OrderSiteList';
+import type { OrderSiteUpdateRequest } from '../models/OrderSiteUpdateRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -58,6 +59,34 @@ export class ManagerOrderSitesService {
             url: '/api/manager/orders/{order_id}/sites',
             path: {
                 'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Manager Update Order Site
+     * Correct the saved site title or address using its current version.
+     * @param orderId
+     * @param siteId
+     * @param requestBody
+     * @returns ConnectorWriteResult_OrderSiteItem_ Successful Response
+     * @throws ApiError
+     */
+    public static managerUpdateOrderSite(
+        orderId: number,
+        siteId: number,
+        requestBody: OrderSiteUpdateRequest,
+    ): CancelablePromise<ConnectorWriteResult_OrderSiteItem_> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/orders/{order_id}/sites/{site_id}',
+            path: {
+                'order_id': orderId,
+                'site_id': siteId,
             },
             body: requestBody,
             mediaType: 'application/json',

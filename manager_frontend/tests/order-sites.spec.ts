@@ -5,6 +5,7 @@ import OrderSitesPanel from '../src/components/orders/OrderSitesPanel.vue';
 const api = vi.hoisted(() => ({
   listSites: vi.fn(),
   addSite: vi.fn(),
+  updateSite: vi.fn(),
   listSiteEquipment: vi.fn(),
   linkSiteEquipment: vi.fn(),
   listBranches: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../src/client', () => ({
   ManagerOrderSitesService: {
     managerListOrderSites: api.listSites,
     managerAddOrderSite: api.addSite,
+    managerUpdateOrderSite: api.updateSite,
     managerListOrderSiteEquipment: api.listSiteEquipment,
     managerLinkOrderSiteEquipment: api.linkSiteEquipment,
   },
@@ -137,6 +139,62 @@ describe('order sites in Manager', () => {
     } finally { wrapper.unmount(); }
   });
 
+  it('corrects the selected site and reuses the request after an interrupted response', async () => {
+    api.listSites.mockResolvedValue(sitePage([site(1, 'Объект A', 10), site(2, 'Объект B', 20)]));
+    api.updateSite
+      .mockRejectedValueOnce(new Error('Связь прервалась'))
+      .mockResolvedValueOnce({ result: { ...site(2, 'Новый объект B', 20, 2), address: 'Новый адрес' }, replayed: true });
+    const wrapper = panel();
+    try {
+      await expand(wrapper);
+      const picker = wrapper.get('[data-testid="order-site-select"]');
+      await picker.setValue('2');
+      await button(wrapper, 'Редактировать объект').trigger('click');
+      const form = wrapper.get('[data-testid="edit-order-site"]');
+      expect((form.get('input[maxlength="200"]').element as HTMLInputElement).value).toBe('Объект B');
+      await form.get('input[maxlength="200"]').setValue(' Новый объект B ');
+      await form.get('input[maxlength="1000"]').setValue(' Новый адрес ');
+      await form.trigger('submit');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Связь прервалась');
+      await form.trigger('submit');
+      await flushPromises();
+      expect(api.updateSite.mock.calls[0]).toEqual([42, 2, expect.objectContaining({
+        payload: { title: 'Новый объект B', address: 'Новый адрес', expected_version: 1 },
+      })]);
+      expect(api.updateSite.mock.calls[1]).toEqual(api.updateSite.mock.calls[0]);
+      expect((picker.element as HTMLSelectElement).value).toBe('2');
+      expect(wrapper.get('[data-testid="order-site-equipment"]').text()).toContain('Новый объект B');
+      expect(wrapper.find('[data-testid="edit-order-site"]').exists()).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
+
+  it('refreshes a changed site before resubmitting only the intended correction', async () => {
+    api.listSites
+      .mockResolvedValueOnce(sitePage([site(2, 'Объект B', 20, 1)]))
+      .mockResolvedValueOnce(sitePage([{ ...site(2, 'Объект B', 20, 2), address: 'Адрес коллеги' }]));
+    api.updateSite
+      .mockRejectedValueOnce({ status: 409, body: { detail: { code: 'version_conflict' } } })
+      .mockResolvedValueOnce({ result: { ...site(2, 'Исправленный объект B', 20, 3), address: 'Адрес коллеги' } });
+    const wrapper = panel();
+    try {
+      await expand(wrapper);
+      await button(wrapper, 'Редактировать объект').trigger('click');
+      const form = wrapper.get('[data-testid="edit-order-site"]');
+      await form.get('input[maxlength="200"]').setValue('Исправленный объект B');
+      await form.trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[role="alert"]').text()).toContain('Объект изменился');
+      expect((form.get('input[maxlength="1000"]').element as HTMLInputElement).value).toBe('Адрес коллеги');
+      await form.trigger('submit');
+      await flushPromises();
+      const first = api.updateSite.mock.calls[0]?.[2];
+      const second = api.updateSite.mock.calls[1]?.[2];
+      expect(second.payload).toEqual({ expected_version: 2, title: 'Исправленный объект B' });
+      expect(second.idempotency_key).not.toBe(first.idempotency_key);
+    } finally { wrapper.unmount(); }
+  });
+
   it('opens the linked site in a closed order without mutation controls', async () => {
     const oldUrl = window.location.href;
     window.history.replaceState(null, '', '/manager/orders/42?section=work&orderSiteId=2#order-workspace-sites');
@@ -148,6 +206,7 @@ describe('order sites in Manager', () => {
       expect(wrapper.get('[data-testid="order-site-equipment"]').text()).toContain('Объект B');
       expect(wrapper.text()).not.toContain('Добавить объект');
       expect(wrapper.text()).not.toContain('Привязать оборудование');
+      expect(wrapper.text()).not.toContain('Редактировать объект');
     } finally {
       wrapper.unmount();
       window.history.replaceState(null, '', oldUrl);
