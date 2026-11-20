@@ -27275,6 +27275,124 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/completion-acts/source": {
+      "get": {
+        "tags": [
+          "manager-order-completion-acts"
+        ],
+        "summary": "Get Order Completion Act Source",
+        "description": "Read the current proposal revision before preparing a scoped closing act.",
+        "operationId": "get_manager_order_completion_act_source",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCompletionActSource"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/completion-acts": {
+      "post": {
+        "tags": [
+          "manager-order-completion-acts"
+        ],
+        "summary": "Prepare Order Completion Act",
+        "description": "Prepare a standard closing-act draft using selected sites, one proposal and its basis.",
+        "operationId": "prepare_manager_order_completion_act",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareOrderCompletionActPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorWriteResult_OrderCompletionActPrepared_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/repair-complaints": {
       "get": {
         "tags": [
@@ -51364,6 +51482,23 @@
         ],
         "title": "ConnectorTokenResponse"
       },
+      "ConnectorWriteResult_OrderCompletionActPrepared_": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/OrderCompletionActPrepared"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "replayed"
+        ],
+        "title": "ConnectorWriteResult[OrderCompletionActPrepared]"
+      },
       "ConnectorWriteResult_OrderEquipmentSaveResult_": {
         "properties": {
           "result": {
@@ -55076,6 +55211,17 @@
           "detail"
         ],
         "title": "DocumentPdfRuntimeStatus"
+      },
+      "DocumentRoleType": {
+        "type": "string",
+        "enum": [
+          "seller_buyer",
+          "executor_customer",
+          "contractor_customer",
+          "seller_payer",
+          "executor_payer"
+        ],
+        "title": "DocumentRoleType"
       },
       "DocumentTemplateFileItem": {
         "properties": {
@@ -65515,6 +65661,31 @@
               }
             ],
             "title": "Scope Product Line Ids"
+          },
+          "scope_site_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Scope Site Ids"
+          },
+          "scope_equipment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Scope Equipment Ids"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
           },
           "waybill_composition": {
             "anyOf": [
@@ -91348,6 +91519,78 @@
         ],
         "title": "NativeTender"
       },
+      "OrderCompletionActPrepared": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "site_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Site Ids"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "title": "Proposal Id"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "manager_url": {
+            "type": "string",
+            "title": "Manager Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "site_ids",
+          "proposal_id",
+          "document_id",
+          "status",
+          "revision",
+          "manager_url"
+        ],
+        "title": "OrderCompletionActPrepared"
+      },
+      "OrderCompletionActSource": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order Id"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Proposal Id"
+          },
+          "proposal_version": {
+            "type": "string",
+            "title": "Proposal Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "proposal_id",
+          "proposal_version"
+        ],
+        "title": "OrderCompletionActSource"
+      },
       "OrderCustomerBranchBrief": {
         "properties": {
           "id": {
@@ -96290,6 +96533,180 @@
           "lines"
         ],
         "title": "PrepareMaintenanceOffer"
+      },
+      "PrepareOrderCompletionActPayload": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "site_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Site Ids"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Proposal Id"
+          },
+          "expected_proposal_version": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Proposal Version"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Legal Entity Id"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Issue Date"
+          },
+          "issue_city": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue City"
+          },
+          "document_role_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRoleType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_customer_contract_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Customer Contract Id"
+          },
+          "act_terms": {
+            "$ref": "#/components/schemas/ActTermsPayload"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "scope_service_line_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Scope Service Line Ids"
+          },
+          "scope_service_line_quantities": {
+            "additionalProperties": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "object",
+            "maxProperties": 500,
+            "title": "Scope Service Line Quantities"
+          },
+          "scope_product_line_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Scope Product Line Ids"
+          },
+          "scope_product_line_quantities": {
+            "additionalProperties": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "object",
+            "maxProperties": 500,
+            "title": "Scope Product Line Quantities"
+          },
+          "replaces_document_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces Document Id"
+          },
+          "expected_document_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Document Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "site_ids",
+          "proposal_id",
+          "expected_proposal_version",
+          "legal_entity_id",
+          "issue_date",
+          "act_terms"
+        ],
+        "title": "PrepareOrderCompletionActPayload"
       },
       "PrepareOrderTechnicalActPayload": {
         "properties": {

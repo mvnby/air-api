@@ -28,6 +28,7 @@ from routers import manager_equipment_links
 from routers import manager_order_equipment_identity
 from routers import manager_order_sites
 from routers import manager_order_diagnostics
+from routers import manager_order_completion_acts
 from routers import manager_google_auth
 from routers import manager_features
 from routers import manager_product_collections
@@ -117,6 +118,7 @@ router.include_router(manager_equipment_links.router)
 router.include_router(manager_order_equipment_identity.router)
 router.include_router(manager_order_sites.router)
 router.include_router(manager_order_diagnostics.router)
+router.include_router(manager_order_completion_acts.router)
 router.include_router(manager_repair_complaints.router)
 router.include_router(manager_leads.router)
 router.include_router(manager_mail.router)

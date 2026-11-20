@@ -1080,6 +1080,10 @@ class DocumentService:
             elif not has_stable_base:
                 raise ValueError("Невозможно создать акт/накладную: отсутствует договор или счет")
 
+        if doc_type == "act":
+            from modules.documents.application.order_completion_coverage import ensure_legacy_act_write_allowed
+            await ensure_legacy_act_write_allowed(session, order_id)
+
         # 1. Получаем template_id (managed template, legacy query param or default)
         document_template_id, template_id = await DocumentTemplateService.resolve_template_for_generation(
             session,

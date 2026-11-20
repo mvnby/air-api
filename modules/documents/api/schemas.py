@@ -535,6 +535,9 @@ class ManagedDocumentItem(BaseModel):
     basis_date: str | None = None
 
     scope_product_line_ids: list[int] | None = None
+    scope_site_ids: list[int] = Field(default_factory=list)
+    scope_equipment_ids: list[int] = Field(default_factory=list)
+    revision: str | None = None
     waybill_composition: WaybillComposition | None = None
     repair_defect: RepairDefect | None = None
     receipt_note: str | None = None

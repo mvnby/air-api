@@ -32,6 +32,7 @@ import WarrantyEquipmentPicker from './WarrantyEquipmentPicker.vue';
 import NativeActComposition from './NativeActComposition.vue';
 import { formatDocumentDate as formatDate, useNativeDocumentBasis } from '../composables/use-native-document-basis';
 import { useNativeActComposition } from '../composables/use-native-act-composition';
+import { useOrderActSites } from '../composables/use-order-act-sites';
 import NativeWaybillComposition from './NativeWaybillComposition.vue';
 import TransportTermsPanel from './TransportTermsPanel.vue';
 import { transportTermsError } from '../model/transport-terms';
@@ -109,7 +110,9 @@ const canSendNativeEmail = computed(() => managerSession.auth.value?.is_system_t
 const actComposition = useNativeActComposition(
   () => props.order, proposalId, (message, type = 'success') => emit('toast', { message, type }),
 );
+const actSites = useOrderActSites(() => props.order.id);
 const workspace = useManagedDocumentWorkspace({
+  completionSiteIds: () => actSites.selectedIds.value,
   waybillSelection: () => waybillSelection.value,
   actScope: () => actComposition.payload.value,
   customerContext: () => props.order.customer,
@@ -212,8 +215,12 @@ const actNeedsRole = computed(() => workspace.documentType.value === 'act' &&
 watch(() => selectedContract.value?.id, () => {
   if (workspace.documentType.value === 'act') workspace.documentRoleType.value = null;
 }, { flush: 'sync' });
-watch([() => workspace.documentType.value === 'act', () => props.order.customer?.id], ([active]) => {
-  if (active) void actComposition.loadBranches();
+watch(() => props.order.id, actSites.reset, { flush: 'sync' });
+watch([() => workspace.documentType.value === 'act', () => props.order.id, () => props.order.customer?.id], ([active]) => {
+  if (active) {
+    void actComposition.loadBranches();
+    void actSites.load();
+  }
 }, { immediate: true });
 
 const issuerProfileUrl = computed(() => {
@@ -248,8 +255,14 @@ const selectionError = computed(() => {
   if (basisRequired.value && !basis.selected.value) return basisOptions.value.length
     ? 'Выберите документ-основание' : 'Нет подходящего документа-основания на выбранную дату';
   if (actNeedsRole.value && !workspace.documentRoleType.value) return 'Выберите названия сторон по оригиналу договора';
-  if (workspace.documentType.value === 'act' && !actComposition.selectedServiceLineIds.value.length)
-    return 'Выберите хотя бы одну выполненную работу';
+  if (workspace.documentType.value === 'act') {
+    if (actSites.loading.value) return workspace.draftBlockedReason.value || 'Загружаем объекты заказа…';
+    if (actSites.error.value) return 'Повторите загрузку объектов заказа';
+    if (actSites.sites.value.length && !actSites.selectedIds.value.length) return 'Выберите объекты для акта';
+    if (actSites.selectedIds.value.length && !proposalId.value) return 'Выберите согласованное предложение';
+    if (actSites.selectedIds.value.length && !basis.selected.value) return 'Выберите договор-основание';
+    if (!actComposition.selectedServiceLineIds.value.length) return 'Выберите хотя бы одну выполненную работу';
+  }
   return '';
 });
 const waybillName = computed(() => ({ tn2: 'ТН-2', ttn1: 'ТТН-1' }[workspace.documentType.value] || ''));
@@ -336,6 +349,13 @@ const openSettings = () => {
 };
 const prepareReplacement = (document: Parameters<typeof workspace.prepareReplacement>[0]) => {
   workspace.prepareReplacement(document);
+  if (document.doc_type === 'act') {
+    void actSites.load().then(() => {
+      if (workspace.replacesDocumentId.value === document.id && props.order.id === document.order_id) {
+        actSites.selectedIds.value = [...(document.scope_site_ids || [])];
+      }
+    });
+  }
   if (isCustomerEquipmentWorkAct(document.doc_type)) {
     const saved = document.scope_product_line_ids;
     materialIds.value = saved && document.proposal_id === proposalId.value
@@ -754,7 +774,7 @@ defineExpose({
           <RepairDefectFields v-if="workspace.documentType.value === 'repair_defect_act'" :key="order.id"
             :terms="workspace.repairDefect.value" :order="workspace.replacesDocumentId.value ? undefined : order"
             @update-terms="workspace.repairDefect.value = $event" />
-          <NativeActComposition v-if="workspace.documentType.value === 'act'" :scope="actComposition" />
+          <NativeActComposition v-if="workspace.documentType.value === 'act'" :scope="actComposition" :order-sites="actSites" />
 
           <div v-if="workspace.documentType.value === 'invoice'" class="mt-4">
             <span class="text-xs font-bold text-slate-500">Роль счёта</span>

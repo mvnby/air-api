@@ -65,6 +65,7 @@ from .transport_context import build_transport_document_context
 from .value_formatters import amount_in_words, money, number_in_words, quantity
 from .draft_parameters import json_terms
 from .order_technical_act_snapshot import OrderTechnicalActScope, extend_technical_act_snapshot
+from .order_completion_coverage import COVERAGE_KEY, CompletionActScope, require_scope_in_template, selected_coverage
 from modules.documents.domain.contract_amendment import ContractAmendmentTerms
 
 
@@ -88,6 +89,8 @@ class DocumentContextSelection:
     scope_service_line_ids: tuple[int, ...] = ()
     scope_service_line_quantities: Mapping[int, int] | None = None
     scope_product_line_ids: tuple[int, ...] | None = None
+    scope_product_line_quantities: Mapping[int, int] | None = None
+    completion_act_scope: CompletionActScope | None = None
     business_role: str | None = None
     document_role_type: str | None = None
     consumer_terms: ConsumerDocumentTerms | None = None
@@ -139,6 +142,8 @@ class DocumentContextBuilder:
         template_storage: TemplateSourceStorage | None = None,
     ) -> dict[str, Any]:
         document_type = str(selection.document_type or "").strip().lower()
+        if selection.completion_act_scope is not None and document_type != "act":
+            raise DocumentContextError("Перечень объектов доступен для акта оказанных услуг")
         if selection.waybill_composition is not None and document_type not in WAYBILL_DOCUMENT_TYPES:
             raise DocumentContextError("Состав накладной доступен только для ТН-2 и ТТН-1")
         if document_type not in cls.NATIVE_TYPES:
@@ -221,6 +226,13 @@ class DocumentContextBuilder:
         )
         if selection.technical_act_scope is not None:
             product_links, service_lines = [], []
+        completion_coverage = None
+        if selection.completion_act_scope is not None:
+            if template_version is not None:
+                require_scope_in_template(template_version.placeholder_schema)
+            completion_coverage = selected_coverage(
+                selection.completion_act_scope, product_links, service_lines, selection.scope_product_line_quantities or {},
+            )
         try:
             base_document, base_contract = await resolve_native_basis(
                 session, order=order, document_type=document_type,
@@ -238,6 +250,10 @@ class DocumentContextBuilder:
             raise DocumentContextError(
                 "Для закрывающего документа нужен договор или акцептованный счет-оферта"
             )
+
+        if (completion_coverage and base_document and base_document.proposal_id is not None
+                and base_document.proposal_id != proposal_id):
+            raise DocumentContextError("Документ-основание подготовлен по другому предложению")
 
         role_type = role_source = None
         if document_type in PARTY_ROLE_DOCUMENT_TYPES:
@@ -264,7 +280,10 @@ class DocumentContextBuilder:
             except ValueError as exc:
                 raise DocumentContextError(str(exc)) from exc
         else:
-            rows = line_rows(product_links, service_lines, installation_descriptions)
+            rows = line_rows(
+                product_links, service_lines, installation_descriptions,
+                product_quantities=selection.scope_product_line_quantities,
+            )
         vat_label = "с НДС" if legal_entity.is_vat_payer else "без НДС"
         for row in rows:
             row["line.vat_label"] = vat_label
@@ -535,6 +554,9 @@ class DocumentContextBuilder:
             "conditions": conditions,
             "table_rows": {"lines": public_rows, **business_context.table_rows},
         }
+
+        if completion_coverage is not None:
+            snapshot["meta"][COVERAGE_KEY] = completion_coverage
 
         if document_type in WAYBILL_DOCUMENT_TYPES:
             # A product count is not a package count. Unmeasured cargo has no weight total.

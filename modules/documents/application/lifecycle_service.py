@@ -65,6 +65,7 @@ from .issuance_artifacts import (
 )
 from modules.documents.domain.placeholder_catalog import ORDER_TECHNICAL_ACT_TYPES
 from .open_contract_basis import validate_saved_basis_for_issue
+from .order_completion_coverage import COVERAGE_KEY, require_scope_in_template, validate_act_before_number_reservation
 from .waybill_paper import check_waybill_tax_profile, prepare_stock_files
 from .replacement_guard import lock_replacement_target
 from .template_selection import (
@@ -297,6 +298,7 @@ class ManagedDocumentService:
                 ),
                 "product_line_ids": list(selection.scope_product_line_ids or ()),
                 **(selection.technical_act_scope.identifiers() if selection.technical_act_scope else {}),
+                **({"site_ids": selection.completion_act_scope.site_ids} if selection.completion_act_scope else {}),
             },
             doc_type=str(selection.document_type).strip().lower(),
             business_role=snapshot["meta"].get("business_role"),
@@ -471,6 +473,9 @@ class ManagedDocumentService:
             tenant_scope=tenant_scope,
             document=document,
         )
+        await validate_act_before_number_reservation(session, document)
+        if (document.render_snapshot.get("meta") or {}).get(COVERAGE_KEY):
+            require_scope_in_template(version.placeholder_schema)
         check_waybill_tax_profile(document.render_snapshot, version.placeholder_schema, document.doc_type)
         editable_source: bytes | None = None
         required_placeholder_counts: dict[str, int] | None = None
@@ -757,7 +762,8 @@ class ManagedDocumentService:
             # Serialize effective changes and revisions in one order before locking
             # document rows. Rendering releases this lock; finalization repeats it.
             await session.execute(select(Order.id).join(OrderDocument, OrderDocument.order_id == Order.id).where(
-                OrderDocument.id == document_id, OrderDocument.doc_type.in_({"contract_amendment"} | ORDER_TECHNICAL_ACT_TYPES),
+                OrderDocument.id == document_id,
+                OrderDocument.doc_type.in_({"contract_amendment", "act"} | ORDER_TECHNICAL_ACT_TYPES),
                 Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id,
             ).with_for_update(of=Order))
         statement = (
@@ -776,6 +782,7 @@ class ManagedDocumentService:
         document = (await session.execute(statement)).scalar_one_or_none()
         if document is not None and for_update and (
             document.doc_type in ({"maintenance_defect_act", "participant_statement", "repair_defect_act"} | ORDER_TECHNICAL_ACT_TYPES) or
+            (document.doc_type == "act" and (document.render_snapshot or {}).get("meta", {}).get(COVERAGE_KEY)) or
             (document.status == "draft" and document.doc_type in {"retail_receipt", "warranty_certificate"})
         ):
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)

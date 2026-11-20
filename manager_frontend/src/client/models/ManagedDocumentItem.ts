@@ -19,6 +19,9 @@ export type ManagedDocumentItem = {
     basis_number?: (string | null);
     basis_date?: (string | null);
     scope_product_line_ids?: (Array<number> | null);
+    scope_site_ids?: Array<number>;
+    scope_equipment_ids?: Array<number>;
+    revision?: (string | null);
     waybill_composition?: (WaybillComposition_Output | null);
     repair_defect?: (RepairDefect | null);
     receipt_note?: (string | null);

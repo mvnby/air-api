@@ -663,7 +663,7 @@ async def _document_item(
 
 
 def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
-    from modules.documents.application.draft_parameters import read_draft_parameters
+    from modules.documents.application.draft_parameters import draft_revision, read_draft_parameters
     from modules.documents.domain import B2C_NATIVE_DOCUMENT_TYPES
     official_full_number = None
     if document.official_number:
@@ -700,6 +700,9 @@ def _document_item_from_parts(document, artifacts) -> ManagedDocumentItem:
         amendment_change_amount=statement_values.get("totals.amount") if document.doc_type == "contract_amendment" else None,
         basis_number=statement_values.get("basis.number"), basis_date=statement_values.get("basis.date"),
         scope_product_line_ids=scoped_products,
+        scope_site_ids=(document.scope_meta or {}).get("site_ids") or [],
+        scope_equipment_ids=(document.scope_meta or {}).get("equipment_ids") or [],
+        revision=draft_revision(document, artifacts) if document.doc_type == "act" else None,
         waybill_composition=((document.render_snapshot or {}).get("meta") or {}).get("waybill_composition"),
         repair_defect=(
             (document.render_snapshot or {}).get("meta", {}).get("draft_parameters", {}).get("repair_defect")

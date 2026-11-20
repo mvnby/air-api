@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagerDocumentSystemService,
   ManagerDocsService,
+  ManagerOrderSitesService,
+  ManagerOrderCompletionActsService,
   ManagerEquipmentLinksService,
   ManagerContractsService,
   ManagerService,
@@ -84,6 +86,9 @@ beforeEach(() => {
   openNativeDocumentPreview.mockReset().mockResolvedValue(undefined);
   vi.spyOn(ManagerContractsService, 'getManagerCustomerContracts').mockResolvedValue({ items: [] });
   vi.spyOn(ManagerService, 'getManagerCustomerBranches').mockResolvedValue({ items: [] });
+  vi.spyOn(ManagerOrderSitesService, 'managerListOrderSites').mockResolvedValue({
+    items: [], total: 0, limit: 100, offset: 0, legacy_primary: null,
+  });
   vi.spyOn(googleDocumentEditorApi, 'getConnectionStatus').mockResolvedValue({
     connected: false,
     provider: 'google_drive',
@@ -919,6 +924,43 @@ describe('NativeDocumentsWorkspace', () => {
         act_terms: expect.objectContaining({ claims_status: 'none' }),
       }),
     );
+  });
+
+  it('prepares one closing act for the selected order sites using the current proposal revision', async () => {
+    const sites = ['Склад', 'Офис', 'Мастерская'].map((title, index) => ({
+      id: index + 21, order_id: 42, version: 1, customer_branch_id: null,
+      title, address: 'Адрес ' + title, manager_url: '/manager/orders/42?section=work',
+    }));
+    vi.mocked(ManagerOrderSitesService.managerListOrderSites).mockResolvedValue({
+      items: sites, total: 3, limit: 100, offset: 0, legacy_primary: null,
+    });
+    const proposalVersion = 'b'.repeat(64);
+    const source = vi.spyOn(ManagerOrderCompletionActsService, 'getManagerOrderCompletionActSource').mockResolvedValue({
+      order_id: 42, proposal_id: 7, proposal_version: proposalVersion,
+    });
+    const prepare = vi.spyOn(ManagerOrderCompletionActsService, 'prepareManagerOrderCompletionAct').mockResolvedValue({
+      replayed: false,
+      result: {
+        order_id: 42, site_ids: [21, 22, 23], proposal_id: 7, document_id: 48,
+        revision: 'a'.repeat(64), status: 'draft', manager_url: '/manager/orders/42?section=documents&documentId=48',
+      },
+    });
+    const wrapper = await mountWorkspace();
+    await wrapper.get('[data-testid="native-document-type-act"]').trigger('click');
+    await flushPromises();
+    const create = wrapper.get('[data-testid="create-native-draft"]');
+    expect(create.attributes('disabled')).toBeDefined();
+    const siteInputs = wrapper.get('[data-testid="act-order-sites"]').findAll('input[type="checkbox"]');
+    for (const site of siteInputs) await site.setValue(true);
+    await create.trigger('click');
+    await flushPromises();
+    expect(source).toHaveBeenCalledWith(42, 7);
+    expect(prepare).toHaveBeenCalledExactlyOnceWith(42, expect.objectContaining({
+      site_ids: [21, 22, 23], proposal_id: 7, expected_proposal_version: proposalVersion,
+      base_customer_contract_id: 91, scope_service_line_ids: [45], scope_service_line_quantities: { 45: 3 },
+      idempotency_key: expect.any(String),
+    }));
+    expect(ManagerDocumentSystemService.createManagerManagedDocumentDraft).not.toHaveBeenCalled();
   });
 
   it('uses an unbound open contract, verified roles, selected site and partial works of the current proposal', async () => {
