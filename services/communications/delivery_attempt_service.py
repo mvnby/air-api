@@ -55,6 +55,7 @@ class CommunicationDeliveryAttemptService:
             "telegram_transport_error",
             "telegram_unexpected_error",
             "template_render_failed",
+            "tender_card_pending",
             "timeout",
         }
     )
@@ -213,12 +214,13 @@ class CommunicationDeliveryAttemptService:
         category: str,
         code: str,
     ) -> bool:
-        """Only retry outcomes that prove Telegram rejected before acceptance."""
+        """Retry only when Telegram has provably not accepted this delivery."""
 
         return (
             result.disposition == ProviderDeliveryDisposition.TRANSIENT_FAILURE
-            and str(category or "").strip().lower() == "rate_limit"
-            and str(code or "").strip().lower() == "telegram_retry_after"
+            and (str(category or "").strip().lower(), str(code or "").strip().lower()) in {
+                ("rate_limit", "telegram_retry_after"), ("template", "tender_card_pending"),
+            }
             and result.retry_after_seconds is not None
             and int(result.retry_after_seconds) > 0
         )

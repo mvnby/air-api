@@ -29,10 +29,12 @@ from services.communications.delivery_service import (
 from services.communications.delivery_pre_provider_release import (
     release_pre_provider_claim,
 )
+from services.communications.incoming_contracts import TENANT_INCOMING_TEMPLATE_KEY
 from services.communications.providers.base import (
     CommunicationDeliveryProvider,
     ProviderDeliveryDisposition,
     ProviderDeliveryResult,
+    TelegramMessageOptions,
 )
 from services.communications.processing_scope import CommunicationProcessingScope
 from services.communications.provider_boundary_authorization import (
@@ -44,6 +46,8 @@ from services.communications.template_registry import (
     TELEGRAM_CANARY_TEMPLATE_KEY,
     WebsiteTemplateRegistry,
 )
+from services.communications.telegram_cards import TenderCardPending, incoming_card, site_contact_options
+from services.communications.tenant_website_events import TENANT_WEBSITE_CONTACT_TEMPLATE_KEY
 
 logger = logging.getLogger(__name__)
 _TerminalResult = TypeVar("_TerminalResult")
@@ -146,7 +150,23 @@ class CommunicationDeliveryWorker:
 
         try:
             plan = self._plan(claim)
-            rendered_text = WebsiteTemplateRegistry.render(plan)
+            options = None
+            if plan.template_key == TENANT_INCOMING_TEMPLATE_KEY:
+                async with self._bounded_db_operation():
+                    async with self._session_factory() as session:
+                        rendered_text, options = await incoming_card(session, claim, plan)
+            else:
+                rendered_text = WebsiteTemplateRegistry.render(plan)
+                if plan.template_key == TENANT_WEBSITE_CONTACT_TEMPLATE_KEY:
+                    options = site_contact_options(plan)
+        except TenderCardPending:
+            result = ProviderDeliveryResult.transient_failure(
+                category="template", code="tender_card_pending",
+                message="Original tender card is still queued", retry_after_seconds=10,
+            )
+            return await self._finish_terminal_despite_cancellation(
+                self._record_failure(claim, result, recovery), delivery_id=claim.delivery_id,
+            )
         except Exception as exc:
             logger.warning(
                 "Communication delivery render failed delivery_id=%s error_type=%s",
@@ -217,7 +237,7 @@ class CommunicationDeliveryWorker:
         cancellation_after_finalize: asyncio.CancelledError | None = None
         provider_started_ns = time.monotonic_ns()
         try:
-            result = await self._send_with_heartbeat(claim, rendered_text)
+            result = await self._send_with_heartbeat(claim, rendered_text, options)
         except _ProviderResultDuringCancellation as exc:
             result = exc.result
             cancellation_after_finalize = exc.cancellation
@@ -370,6 +390,7 @@ class CommunicationDeliveryWorker:
         self,
         claim: ClaimedCommunicationDelivery,
         rendered_text: str,
+        options: TelegramMessageOptions | None = None,
     ) -> ProviderDeliveryResult:
         stop_heartbeat = asyncio.Event()
         provider_task = asyncio.create_task(
@@ -377,6 +398,7 @@ class CommunicationDeliveryWorker:
                 destination=claim.destination,
                 text=rendered_text,
                 delivery_id=claim.delivery_id,
+                **({"options": options} if options is not None else {}),
             )
         )
         heartbeat_task = asyncio.create_task(

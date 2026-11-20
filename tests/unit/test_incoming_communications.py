@@ -193,3 +193,130 @@ async def test_generic_final_boundary_revalidates_all_mode_recipient(
                 await authorize(delivery)
         else:
             await authorize(delivery)
+
+
+@pytest.mark.parametrize(("title", "location", "decision"), [
+    ("Ремонт кондиционеров", "г. Витебск", "recommend"),
+    ("Монтаж кондиционеров", "Орша", "recommend"),
+    ("Поставка кондиционеров с монтажом", "г. Витебск", "recommend"),
+    ("Поставка кондиционеров", "г. Витебск", "review"),
+    ("Поставка кондиционеров без монтажа", "г. Витебск", "skip"),
+    ("Обслуживание вентиляции", "Орша, Витебская область", "skip"),
+    ("Обслуживание вентиляции", "г. Витебск", "review"),
+    ("ТО кондиционеров", None, "review"),
+])
+def test_tender_cards_use_scope_and_work_location(title, location, decision):
+    from datetime import timedelta
+    from services.communications.tender_cards import native_tender_card
+
+    deadline = datetime.now(timezone.utc) + timedelta(days=7)
+    card = native_tender_card({
+        "tender": {"title": title, "location": location, "deadline_at": deadline.isoformat()},
+        "tender_updated_at": "latest",
+        "matches": {"a": {"relevance_status": "confirmed", "eligible": True, "updated_at": "latest"}},
+    }, None)
+    assert card.status == decision
+
+
+def test_mail_tender_uses_attachment_and_ignores_buyers_address_and_contract_deadline():
+    from datetime import timedelta
+    from services.communications.tender_cards import email_tender_card
+
+    deadline = datetime.now(timezone.utc) + timedelta(days=7)
+    subject = "Заявка о ценах auc0001234567"
+    body = "https://goszakupki.by/marketing/view/1234567"
+    assert email_tender_card("Оплата за ремонт кондиционеров", "", ()) is None
+    card = email_tender_card(subject, body, (
+        "Ремонт кондиционеров\nЮридический адрес заказчика: Минск\n"
+        "Место выполнения работ: г. Витебск\nКоличество: 12 кондиционеров\n"
+        f"Окончание подачи предложений: {deadline:%d.%m.%Y} 12:00 UTC+03:00\n"
+        "Срок выполнения договора: 31.12.2029",
+    ))
+    assert card.status == "recommend"
+    assert card.location == "г. Витебск"
+    assert "12 кондиционеров" in card.quantity
+    assert card.source_url == body
+    assert card.deadline_at.hour == 12
+
+
+async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_original(
+    db_engine, monkeypatch,
+):
+    from datetime import timedelta
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from models import StaffUser
+    from services.communications import tender_document_updates
+    from services.communications.delivery_worker import CommunicationDeliveryWorker
+    from services.communications.dispatcher import CommunicationOutboxDispatcher
+    from services.communications.processing_scope import CommunicationProcessingScope
+    from services.communications.provider_boundary_authorization import prepare_website_provider_boundary
+    from services.communications.providers.base import ProviderDeliveryResult
+
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    monkeypatch.setattr(tender_document_updates, "async_session_maker", session_factory)
+    now = datetime.now(timezone.utc)
+    deadline = now + timedelta(days=7)
+    item = _item(deadline_at=deadline.isoformat())
+    item["tender"].update(title="Услуги по закупке", source="goszakupki_by",
+                          url="https://goszakupki.by/marketing/view/1234567")
+    seen = []
+
+    async def read_detail(order):
+        seen.append(order.id)
+        return {"documents": [{"id": 1, "extracted_text":
+            "Ремонт кондиционеров\nМесто выполнения работ: г. Витебск\nКоличество: 12 кондиционеров"}]}
+
+    monkeypatch.setattr(tender_document_updates.BelzakupkiEnrichmentService, "_detail", read_detail)
+    async with session_factory() as session:
+        await add_tenant_members(session, StaffUser(display_name="Owner", status="active", roles=["owner"],
+                                                    primary_role="owner", telegram_id=101))
+        await session.commit()
+        result = await BelzakupkiImportService.import_page(
+            session, tenant_scope=SCOPE, page={"items": [item], "next_cursor": None, "has_more": False},
+            cursor_before=None, now=now,
+        )
+        initial, = await _events(session)
+        initial_id = initial.event_id
+        assert initial.payload["tender"]["status"] == "review"
+
+    await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
+    await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
+    async with session_factory() as session:
+        initial, promotion = sorted(await _events(session), key=lambda event: event.aggregate_version)
+        assert initial.payload["tender"]["status"] == "review"
+        assert promotion.payload["tender"]["status"] == "recommend"
+        assert promotion.payload["tender"]["prior_event_id"] == initial_id
+        assert promotion.payload["tender"]["location"] == "г. Витебск"
+        assert "12 кондиционеров" in promotion.payload["tender"]["quantity"]
+        assert seen == [result.order_id]
+
+    scope = CommunicationProcessingScope.all(control_revision=1,
+        event_created_at_watermark=now - timedelta(minutes=1))
+    for _ in range(2):
+        async with session_factory() as session:
+            dispatched = await CommunicationOutboxDispatcher.dispatch_next(session, dispatcher_id="tender-cards", scope=scope)
+            assert dispatched is not None and dispatched.delivery_count == 1
+            await session.commit()
+
+    class RecordingTelegram:
+        channel = "telegram"
+        messages = []
+
+        async def send(self, *, destination, text, delivery_id, options):
+            self.messages.append((destination, text, options))
+            return ProviderDeliveryResult.sent(1000 + len(self.messages))
+
+    async def authorize(session, claim):
+        return await prepare_website_provider_boundary(session, scope=scope, claim=claim)
+
+    provider = RecordingTelegram()
+    worker = CommunicationDeliveryWorker(session_factory=session_factory, provider=provider,
+                                         worker_id="tender-cards", scope=scope, provider_boundary_authorizer=authorize)
+    assert (await worker.run_once()).outcome == "sent"
+    assert (await worker.run_once()).outcome == "sent"
+    assert (await worker.run_once()).outcome == "idle"
+    first, updated = provider.messages
+    assert first[0] == updated[0] == "101"
+    assert first[2].silent and first[2].tender_topic
+    assert not updated[2].silent and updated[2].edit_message_id == 1001
+    assert updated[2].buttons[1] == ("На площадку", item["tender"]["url"])
