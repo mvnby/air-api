@@ -202,7 +202,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <ManagerContextHeader compact>
         <div class="selection-context-header">
           <div class="selection-heading"><h1>Подбор сплит-систем</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
-          <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="selection-order-return">Персональные предложения</a>
+          <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="text-sm font-semibold text-brand-700 underline">Персональные предложения</a>
           <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
         </div>
       </ManagerContextHeader>

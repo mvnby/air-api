@@ -10,7 +10,7 @@
     "test:module-recovery": "vitest run tests/manager-module-recovery.spec.ts",
     "test:components": "npm run test:ui-logic && vitest run",
     "preview": "vite preview",
-    "gen:api": "openapi --input ../openapi.json --output ./src/client --client fetch --useUnionTypes && git add -N -- src/client"
+    "gen:api": "openapi --input ../openapi.json --output ./src/client --client fetch --useUnionTypes"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
