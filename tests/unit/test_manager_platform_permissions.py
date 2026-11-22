@@ -48,6 +48,7 @@ from routers import (
     manager_installation_rates,
     manager_orders,
     manager_platform_ai,
+    manager_personal_offers,
     manager_product_collections,
     manager_repair_complaints,
     manager_service_estimates,
@@ -66,6 +67,7 @@ from routers.manager_permission_policy import (
     CATALOG_EDIT_OPERATION_IDS,
     CATALOG_DELETE_OPERATION_IDS,
     PLATFORM_MANAGER_OPERATION_IDS,
+    PERSONAL_OFFER_OPERATION_IDS,
     STOREFRONT_COLLECTION_OPERATION_IDS,
     SYSTEM_OWNER_OPERATION_IDS,
     SYSTEM_ANALYTICS_OPERATION_IDS,
@@ -275,10 +277,17 @@ def test_all_collection_routes_require_the_scoped_collection_capability():
         ), operation_id
 
 
-def test_catalog_decision_routes_require_manager_without_system_scope():
-    routes = {route.operation_id: route for route in _api_routes(manager_catalog_decision.router)}
-    assert CATALOG_DECISION_OPERATION_IDS == routes.keys()
-    for operation_id in CATALOG_DECISION_OPERATION_IDS:
+@pytest.mark.parametrize(
+    ("router", "operation_ids"),
+    [
+        (manager_catalog_decision.router, CATALOG_DECISION_OPERATION_IDS),
+        (manager_personal_offers.router, PERSONAL_OFFER_OPERATION_IDS),
+    ],
+)
+def test_sales_routes_require_manager_without_system_scope(router, operation_ids):
+    routes = {route.operation_id: route for route in _api_routes(router)}
+    assert operation_ids == routes.keys()
+    for operation_id in operation_ids:
         assert _has_direct_dependency(routes[operation_id], require_manager_access)
         assert not _has_direct_dependency(routes[operation_id], require_system_manager_tenant_scope)
 
