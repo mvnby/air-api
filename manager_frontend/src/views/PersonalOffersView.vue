@@ -121,7 +121,7 @@ async function load() {
 }
 
 async function loadMore() {
-  const last = offers.value.at(-1);
+  const last = offers.value[offers.value.length - 1];
   if (!last || loadingMore.value) return;
   loadingMore.value = true;
   error.value = '';
