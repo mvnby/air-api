@@ -21,8 +21,8 @@ const model = (overrides: Partial<ProductReaderDetail> = {}): ProductReaderDetai
 });
 const auth = (capabilities = ['crm.manage']) => ({ username: 'reader-test', staff_user_id: 7, tenant_id: 1, capabilities }) as any;
 const mounts: ReturnType<typeof mount>[] = [];
-const start = () => {
-  const wrapper = mount(CatalogDecisionProductDetailsDialog, { props: { open: true, item: { id: 11, title: 'Loading title' } }, attachTo: document.body });
+const start = (showPublicLink = false) => {
+  const wrapper = mount(CatalogDecisionProductDetailsDialog, { props: { open: true, item: { id: 11, title: 'Loading title' }, showPublicLink }, attachTo: document.body });
   mounts.push(wrapper); return wrapper;
 };
 const dialog = () => new DOMWrapper(document.body.querySelector<HTMLElement>('[role="dialog"]')!);
@@ -43,6 +43,34 @@ afterEach(() => {
 });
 
 describe('catalog product reader', () => {
+  it('makes the exact partner URL selectable when clipboard access is rejected', async () => {
+    const url = 'https://partner.example.test/product/gree-pular-12/';
+    vi.mocked(productReaderApi.detail).mockResolvedValue(model({ selection_item: { ...selection, public_site_url: url } }));
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard blocked'));
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      const wrapper = start(true);
+      await flushPromises();
+      await button('Копировать ссылку на сайте').trigger('click');
+      await flushPromises();
+      const input = dialog().get<HTMLInputElement>('input[readonly]').element;
+      expect(writeText).toHaveBeenCalledWith(url);
+      expect(input.value).toBe(url);
+      expect(input.selectionEnd).toBe(url.length);
+      expect(document.activeElement).toBe(input);
+      expect(wrapper.emitted('close')).toBeUndefined();
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+  it('explains when a readable model has no customer card', async () => {
+    start(true);
+    await flushPromises();
+    expect(dialog().text()).toContain('Публичная карточка недоступна на выбранной витрине.');
+    expect(dialog().text()).not.toContain('Копировать ссылку на сайте');
+  });
+
   it('renders grouped details, gallery enlargement, safe description and manuals', async () => {
     const wrapper = start(); await flushPromises();
     expect(dialog().get('h2').text()).toBe(model().title);

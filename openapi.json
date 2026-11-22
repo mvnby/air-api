@@ -49771,6 +49771,18 @@
           "is_published": {
             "type": "boolean",
             "title": "Is Published"
+          },
+          "public_site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Site Url",
+            "description": "Canonical HTTPS product URL when visible on the selected storefront's verified primary domain."
           }
         },
         "type": "object",
