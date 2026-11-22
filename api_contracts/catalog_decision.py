@@ -44,6 +44,10 @@ class CatalogDecisionProductResponse(BaseModel):
     is_inverter: bool
     wifi: Literal["builtin", "ready", "none"] = "none"
     is_published: bool
+    public_site_url: str | None = Field(
+        default=None,
+        description="Canonical HTTPS product URL when visible on the selected storefront's verified primary domain.",
+    )
 
 
 class CatalogDecisionListResponse(BaseModel):

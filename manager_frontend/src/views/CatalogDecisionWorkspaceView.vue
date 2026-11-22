@@ -10,6 +10,7 @@ import CatalogDecisionSelectionTray from '../components/catalog-decision/Catalog
 import CatalogDecisionTable from '../components/catalog-decision/CatalogDecisionTable.vue';
 import CatalogDecisionCompareDialog from '../components/catalog-decision/CatalogDecisionCompareDialog.vue';
 import CatalogDecisionProductDetailsDialog from '../components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
+import CatalogDecisionPublicLink from '../components/catalog-decision/CatalogDecisionPublicLink.vue';
 import { catalogDecisionChips, readCatalogDecisionQuery, writeCatalogDecisionQuery } from '../services/catalog-decision-query';
 import { catalogDecisionApi, defaultCatalogDecisionFilters, type CatalogDecisionFilters as Filters, type CatalogDecisionItem, type CatalogDecisionSort } from '../services/catalog-decision-api';
 import {
@@ -228,6 +229,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
               <p class="mt-2">В подбор попадают только подтверждённые комплекты сплит-систем. Технические фильтры не ослабляются автоматически.</p>
               <p class="mt-1">Применённые ограничения показаны выше. Можно снять отдельный фильтр или явно изменить условия.</p>
             </div></template>
+            <template #actions="{ item }"><CatalogDecisionPublicLink :item="item" /></template>
           </CatalogDecisionTable>
         </div>
         <div v-if="!loading && !error && !items.length" class="mt-2 flex flex-wrap justify-center gap-3 text-sm">
@@ -240,7 +242,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <div class="flex items-center justify-between text-sm"><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page <= 1 || loading" @click="go(page - 1)">Назад</button><span>Страница {{ page }} из {{ pages }}</span><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page >= pages || loading" @click="go(page + 1)">Далее</button></div>
       <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" :can-prepare-offer="canPrepareOffer" @prepare-offer="openManagerChild(personalOfferSelectionUrl(Object.keys(selected).map(Number), target.context.value?.orderId))" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
       <CatalogDecisionCompareDialog :open="compareOpen" :items="compareItems" :loading="compareLoading" :error="compareError" @close="closeCompare" />
-      <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && selected[detailItem.id])" :busy="target.saving.value || loading || Boolean(error)" :in-proposal="Boolean(detailItem && targetProductIds.includes(detailItem.id))" :selection-error="selectionError" @toggle="toggleSelection" @close="detailItem = null" />
+      <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && selected[detailItem.id])" :busy="target.saving.value || loading || Boolean(error)" :in-proposal="Boolean(detailItem && targetProductIds.includes(detailItem.id))" :selection-error="selectionError" show-public-link @toggle="toggleSelection" @close="detailItem = null" />
       <CatalogDecisionCollectionDialog :open="collectionDialogOpen" :items="Object.values(selected)" @close="collectionDialogOpen = false" @created="collectionCreated" />
       <CatalogDecisionOrderDialog :open="orderDialogOpen" :items="Object.values(selected)" @close="orderDialogOpen = false" @attached="orderAttached" />
       <CatalogDecisionQuickOrderDialog :open="quickOrderDialogOpen" :items="Object.values(selected)" @close="quickOrderDialogOpen = false" @created="orderCreated" />
