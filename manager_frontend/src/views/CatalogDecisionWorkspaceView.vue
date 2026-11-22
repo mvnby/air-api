@@ -21,10 +21,13 @@ import {
 import { managerSession } from '../services/manager-session';
 import { hasManagerCapability, isManagerPathAllowed, MANAGER_CAPABILITY } from '../manager-capabilities';
 import { useCatalogDecisionTarget } from '../composables/useCatalogDecisionTarget';
-import { returnToManager } from '../services/manager-navigation-history';
+import { openManagerChild, returnToManager } from '../services/manager-navigation-history';
+import { personalOfferSelectionUrl, personalOffersPath } from '../services/personal-offers';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 const target = useCatalogDecisionTarget();
+const canPrepareOffer = computed(() => !managerSession.auth.value?.demo_read_only
+  && (!target.requested || target.order.value?.status === 'negotiation'));
 const selectionError = ref('');
 const targetProductIds = computed(() => (target.proposal.value?.product_lines ?? []).flatMap(line => typeof line.product_id === 'number' ? [line.product_id] : []));
 const initializedSelectionKey = ref<string | null>(null);
@@ -199,6 +202,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <ManagerContextHeader compact>
         <div class="selection-context-header">
           <div class="selection-heading"><h1>Подбор сплит-систем</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
+          <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="selection-order-return">Персональные предложения</a>
           <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
         </div>
       </ManagerContextHeader>
@@ -234,7 +238,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       </div>
       <p v-if="canManageCatalog" class="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">Не хватает нужной модели? Неполные или неподтверждённые данные о комплекте и мощности могут исключать её из подбора. <a href="/manager/products" class="font-semibold underline underline-offset-2">Проверить в управлении каталогом</a></p>
       <div class="flex items-center justify-between text-sm"><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page <= 1 || loading" @click="go(page - 1)">Назад</button><span>Страница {{ page }} из {{ pages }}</span><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page >= pages || loading" @click="go(page + 1)">Далее</button></div>
-      <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
+      <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" :can-prepare-offer="canPrepareOffer" @prepare-offer="openManagerChild(personalOfferSelectionUrl(Object.keys(selected).map(Number), target.context.value?.orderId))" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
       <CatalogDecisionCompareDialog :open="compareOpen" :items="compareItems" :loading="compareLoading" :error="compareError" @close="closeCompare" />
       <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && selected[detailItem.id])" :busy="target.saving.value || loading || Boolean(error)" :in-proposal="Boolean(detailItem && targetProductIds.includes(detailItem.id))" :selection-error="selectionError" @toggle="toggleSelection" @close="detailItem = null" />
       <CatalogDecisionCollectionDialog :open="collectionDialogOpen" :items="Object.values(selected)" @close="collectionDialogOpen = false" @created="collectionCreated" />

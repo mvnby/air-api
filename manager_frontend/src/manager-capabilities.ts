@@ -68,7 +68,7 @@ export const requiredCapabilityForManagerPath = (path: string): ManagerCapabilit
   if (/^\/manager\/products\/\d+(?:\/|$)/.test(path)) {
     return MANAGER_CAPABILITY.catalogMasterEdit;
   }
-  if (path === '/manager/catalog-decision' || path === '/manager/catalog-decision/') {
+  if (['/manager/catalog-decision', '/manager/catalog-decision/', '/manager/personal-offers', '/manager/personal-offers/'].includes(path)) {
     return MANAGER_CAPABILITY.crmManage;
   }
   if (path.startsWith('/manager/installation-discounts')) {

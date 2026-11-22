@@ -31,6 +31,7 @@ from routers import manager_order_diagnostics
 from routers import manager_order_completion_acts
 from routers import manager_google_auth
 from routers import manager_features
+from routers import manager_personal_offers
 from routers import manager_product_collections
 from routers import manager_leads
 from routers import manager_mail
@@ -147,6 +148,7 @@ router.include_router(manager_supply.router)
 router.include_router(manager_supplier_mapping.router)
 router.include_router(manager_yandex_business.router)
 router.include_router(manager_warranties.router)
+router.include_router(manager_personal_offers.router)
 router.include_router(manager_product_collections.router)
 router.include_router(manager_tenant_offers.router)
 router.include_router(manager_tenant_catalog.router)
