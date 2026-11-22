@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, useSlots } from 'vue';
+import { ChevronDown } from 'lucide-vue-next';
 import type { CatalogDecisionItem, CatalogDecisionSort } from '../../services/catalog-decision-api';
 import CatalogMoney from './CatalogMoney.vue';
 
@@ -82,7 +83,12 @@ const sortOptions: Array<{ key: CatalogDecisionSort; label: string }> = [
           <span class="text-gray-500">Маржа</span><span class="text-right"><CatalogMoney :value="item.margin_abs_byn" /><span class="text-xs text-gray-500"> · {{ percent(item.margin_pct) }}</span></span>
           <span class="text-gray-500">{{ item.supplier_name || 'Поставщик' }}</span><span class="text-right" :class="item.availability === 'in_stock' ? 'text-emerald-700' : 'text-gray-500'">{{ availability(item) }} · {{ stock(item) }}</span>
         </div>
-        <div v-if="hasActions" class="mt-3 border-t border-gray-100 pt-2"><slot name="actions" :item="item" /></div>
+        <details v-if="hasActions" class="mt-2 border-t border-gray-100 pt-1">
+          <summary class="inline-flex min-h-10 cursor-pointer list-none items-center gap-1 text-xs font-semibold text-[var(--kitlane-accent-text)]">
+            Действия<ChevronDown class="h-4 w-4" aria-hidden="true" />
+          </summary>
+          <slot name="actions" :item="item" />
+        </details>
       </article>
     </div>
 

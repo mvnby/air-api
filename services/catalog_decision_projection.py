@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from crud.public_catalog import PublicCatalogDAO
+from crud.tenancy import TenancyDAO
 from models import Brand, Product, ProductSeries, ProductTagLink, Tag, Tenant, TenantOffer
 from models.product_constants import BTU_MAPPING
 from models.supplier import ProductLocalStock, ProductSupplierMapping, Supplier, SupplierOffer
@@ -19,7 +20,10 @@ from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 from services.catalog_form_factor import indoor_form_factor_expr
 from services.catalog_decision_search import split_catalog_decision_search
+from services.catalog_purge_service import build_catalog_purge_paths
 from services.product_kind_service import SPEC_BOOLEAN_FALSE_VALUES
+from services.public_catalog_visibility_service import PublicCatalogVisibilityService
+from services.storefront_context_service import InvalidStorefrontHostError, StorefrontContextService
 
 
 SUPPORTED_COOLING_BTU_CLASSES = frozenset({7, 9, 12, 18, 24, 30, 36, 42, 60})
@@ -56,7 +60,7 @@ class CatalogDecisionProductSnapshot:
 
 
 class CatalogDecisionQueryService:
-    """A two-query (rate + count/page) projection with metrics before pagination."""
+    """A storefront-scoped projection with metrics before pagination."""
 
     _CATEGORY_SLUGS = {
         "household": "cat-household",
@@ -436,6 +440,7 @@ class CatalogDecisionQueryService:
         # Nulls are always last, and product id makes every page boundary stable.
         rows = list((await session.execute(base.order_by(*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc()).offset((page - 1) * limit).limit(limit))).all())
         count = int((await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one())
+        public_urls = await cls._public_site_urls(session, tenant_scope, [row[0] for row in rows])
         items = []
         for row in rows:
             product = row[0]
@@ -459,9 +464,46 @@ class CatalogDecisionQueryService:
                 "area_m2": float(row.area_m2) if row.area_m2 is not None else None, "category": category,
                 "indoor_form_factor": row.indoor_form_factor, "is_inverter": bool(product.is_inverter), "wifi": wifi,
                 "is_published": bool(product.is_published),
+                "public_site_url": public_urls.get(product.id),
             })
         total = count
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
+
+    @staticmethod
+    async def _public_site_urls(
+        session: AsyncSession, tenant_scope: TenantScope, products: list[Product],
+    ) -> dict[int, str]:
+        candidates = {
+            product.id: product.slug for product in products
+            if product.id is not None and product.is_published and product.slug and product.slug not in {".", ".."}
+        }
+        if not candidates:
+            return {}
+        domains = await TenancyDAO.active_primary_domains(
+            session, storefront_ids=[tenant_scope.storefront_id],
+        )
+        try:
+            hostname = StorefrontContextService.normalize_hostname(domains.get(tenant_scope.storefront_id) or "")
+        except InvalidStorefrontHostError:
+            return {}
+
+        # Partner rows already require a visible, granted storefront offer.
+        # A system Manager can also browse master products on other storefronts.
+        visible_ids = set(candidates)
+        if tenant_scope.is_system and not await PublicCatalogVisibilityService.is_canonical_scope(session, tenant_scope):
+            visible_ids = set((await session.execute(
+                select(TenantOffer.product_id).where(
+                    TenantOffer.product_id.in_(candidates),
+                    *PublicCatalogDAO.visible_offer_conditions(tenant_scope),
+                )
+            )).scalars().all())
+
+        return {
+            product_id: f"https://{hostname}{path}"
+            for product_id in visible_ids
+            for path in build_catalog_purge_paths(product_slugs=[candidates[product_id]])
+            if path.startswith("/product/")
+        }
 
     @classmethod
     async def get_product_snapshots(

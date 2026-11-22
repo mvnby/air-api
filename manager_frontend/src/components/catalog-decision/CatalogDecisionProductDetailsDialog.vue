@@ -8,6 +8,7 @@ import { managerSession } from '../../services/manager-session';
 import { managerStorefrontSelection } from '../../services/manager-storefront-selection';
 import { hasManagerCapability, MANAGER_CAPABILITY } from '../../manager-capabilities';
 import CatalogMoney from './CatalogMoney.vue';
+import CatalogDecisionPublicLink from './CatalogDecisionPublicLink.vue';
 import ProductReaderGallery from '../products/product-reader/ProductReaderGallery.vue';
 
 const props = defineProps<{
@@ -17,6 +18,7 @@ const props = defineProps<{
   busy?: boolean;
   inProposal?: boolean;
   selectionError?: string;
+  showPublicLink?: boolean;
 }>();
 const emit = defineEmits<{ close: []; toggle: [item: CatalogDecisionItem]; edit: [id: number] }>();
 const instance = getCurrentInstance();
@@ -183,6 +185,7 @@ useDialogA11y({ open: computed(() => props.open), dialogRef, initialFocusRef: cl
             <p v-if="showSelection && !selected && !eligible" class="text-sm text-[var(--mv-text-muted)]">Добавление в подбор недоступно: проверьте доступность товара и цену.</p>
             <div class="flex flex-wrap items-center justify-end gap-3">
               <a v-if="detail && canEdit" :href="`/manager/products/${detail.id}`" class="mr-auto inline-flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--mv-text-muted)] hover:text-[var(--mv-text)]" @click="edit"><ExternalLink aria-hidden="true" class="h-4 w-4" />Редактировать</a>
+              <CatalogDecisionPublicLink v-if="detail && showPublicLink" :key="detail.id" :item="detail.selection_item" />
               <button v-if="showSelection" type="button" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" :disabled="selectionDisabled" :aria-pressed="!!selected" :aria-busy="!!busy" @click="toggle"><LoaderCircle v-if="busy" aria-hidden="true" class="h-4 w-4 animate-spin" />{{ selectionLabel }}</button>
               <button v-else type="button" class="btn-mini-outline min-h-10" @click="close">Закрыть</button>
             </div>
