@@ -55,6 +55,7 @@ const InstallerWorksView = defineManagerAsyncComponent('InstallerWorksView', () 
 const ProductsView = defineManagerAsyncComponent('ProductsView', () => import('./views/ProductsView.vue'));
 const TenantCatalogView = defineManagerAsyncComponent('TenantCatalogView', () => import('./views/TenantCatalogView.vue'));
 const CatalogDecisionWorkspaceView = defineManagerAsyncComponent('CatalogDecisionWorkspaceView', () => import('./views/CatalogDecisionWorkspaceView.vue'));
+const PersonalOffersView = defineManagerAsyncComponent('PersonalOffersView', () => import('./views/PersonalOffersView.vue'));
 const ProductCollectionsView = defineManagerAsyncComponent('ProductCollectionsView', () => import('./views/ProductCollectionsView.vue'));
 const ProductWorkspaceView = defineManagerAsyncComponent('ProductWorkspaceView', () => import('./views/ProductWorkspaceView.vue'));
 const MediaLibraryView = defineManagerAsyncComponent('MediaLibraryView', () => import('./views/MediaLibraryView.vue'));
@@ -235,6 +236,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/media')) return 'media-library';
   if (path.startsWith('/manager/catalog-quality')) return 'catalog-quality';
   if (path.startsWith('/manager/catalog-decision')) return 'catalog-decision';
+  if (path === '/manager/personal-offers' || path === '/manager/personal-offers/') return 'personal-offers';
   if (path.startsWith('/manager/product-collections')) return 'product-collections';
   if (path.startsWith('/manager/customers/profile')) return 'customer-profile';
   if (path.startsWith('/manager/customers')) return 'customers';
@@ -582,6 +584,7 @@ watch(currentPath, () => {
       <MediaLibraryView v-else-if="authorizedView === 'media-library'" :key="currentLocation" />
       <CatalogQualityView v-else-if="authorizedView === 'catalog-quality'" :key="currentLocation" />
       <CatalogDecisionWorkspaceView v-else-if="authorizedView === 'catalog-decision'" :key="currentLocation" />
+      <PersonalOffersView v-else-if="authorizedView === 'personal-offers'" :key="currentLocation" />
       <ProductCollectionsView v-else-if="authorizedView === 'product-collections'" :key="`${currentLocation}:${viewRevision}`" @location-change="replaceManagerLocation" />
       <CustomerProfileView v-else-if="authorizedView === 'customer-profile'" :key="currentLocation" />
       <CustomersView v-else-if="authorizedView === 'customers'" :key="currentLocation" />

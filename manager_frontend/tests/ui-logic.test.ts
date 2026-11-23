@@ -260,7 +260,7 @@ assert(
 );
 assert(
   navSections.find((section) => section.id === 'sales')?.items.map((item) => item.label).join('|')
-    === 'Скидки на монтаж|Подборки|Поставки',
+    === 'Скидки на монтаж|Персональные предложения|Подборки|Поставки',
   'sales navigation must group equipment selection and storefront workflows',
 );
 
