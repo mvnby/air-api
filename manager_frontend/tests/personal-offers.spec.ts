@@ -224,11 +224,16 @@ it('groups models, previews editable room names and all installation modes, then
   await savePreview(wrapper);
   expect(roomNamesInPreview(wrapper)).toEqual(['Помещение 1', 'Помещение 2', 'Баня']);
   expect(api.snapshot()!.rooms[0].title).toBe('Зал');
-  await button(wrapper, 'Заменить ссылку').trigger('click');
+  const updatePublication = button(wrapper.get('#offer-publication'), 'Опубликовать изменения и скопировать ссылку');
+  expect(updatePublication.classes()).toContain('bg-brand-600');
+  expect(wrapper.text()).toContain('По текущей ссылке открывается прежняя версия.');
+  expect(link(wrapper).element.value).toBe(shareUrl('1'));
+  await updatePublication.trigger('click');
   await flushPromises();
   expect(api.confirm).toHaveBeenCalledTimes(1);
   expect(link(wrapper).element.value).toBe(shareUrl('2'));
   expect(writeText).toHaveBeenLastCalledWith(shareUrl('2'));
+  expect(wrapper.text()).not.toContain('Опубликовать изменения и скопировать ссылку');
 
   mounted?.unmount();
   const reopened = await openEditor('?orderId=212&offerId=7');
@@ -316,7 +321,7 @@ it('moves focus from the editor to the preview and then to the published link ac
   expect(publication.get('[role="status"]').text()).toBe('Предложение опубликовано. Ссылка скопирована.');
   expect(writeText).toHaveBeenCalledExactlyOnceWith(shareUrl('1'));
   expect(publication.findAll('button').map(element => element.text())).toEqual([
-    'Скопировать ссылку', 'Заменить ссылку', 'Отозвать',
+    'Скопировать ссылку', 'Отозвать',
   ]);
 });
 
@@ -329,9 +334,22 @@ it('keeps a model photo, price and note with the row when ordering the offer', a
   await first.get('textarea').setValue('Для гостиной');
 
   const last = modelInRoom(wrapper, 0, products[2].title);
+  const list = roomsInEditor(wrapper)[0].get('ul');
+  const rows = () => list.findAll('li');
+  rows().forEach((row, index) => {
+    vi.spyOn(row.element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, index * 100, 300, 80));
+  });
   const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
   await first.get('[draggable]').trigger('dragstart', { dataTransfer });
-  await last.trigger('dragover', { dataTransfer });
+  await last.trigger('dragover', { dataTransfer, clientY: 210 });
+  expect(last.classes()).toContain('insert-before');
+  await last.trigger('drop', { dataTransfer });
+  expect(rows()[1].element).toBe(first.element);
+  expect(last.classes()).not.toContain('insert-before');
+
+  await first.get('[draggable]').trigger('dragstart', { dataTransfer });
+  await last.trigger('dragover', { dataTransfer, clientY: 270 });
+  expect(last.classes()).toContain('insert-after');
   await last.trigger('drop', { dataTransfer });
   expect(roomsInEditor(wrapper)[0].findAll('li').at(-1)?.element).toBe(first.element);
 
@@ -484,4 +502,37 @@ it('opens a room-first draft without models selected in the general catalog', as
   await button(roomsInEditor(wrapper)[0], 'Добавить из подбора').trigger('click');
   await flushPromises();
   expect(wrapper.getComponent(CatalogDecisionWorkspaceView).get('h1').text()).toBe('Модели · Подбор кондиционера');
+});
+
+it('preserves alternatives after adding the third model and removing a room; changes to package only on explicit selection', async () => {
+  const api = mockOfferApi();
+  const wrapper = await openEditor('?products=41,42');
+  await savePreview(wrapper);
+  await modelInRoom(wrapper, 0, products[1].title).get('[data-reorder-step]').trigger('click');
+  await button(roomsInEditor(wrapper)[0], 'Добавить из подбора').trigger('click');
+  await flushPromises();
+  const catalog = wrapper.getComponent(CatalogDecisionWorkspaceView);
+  catalog.getComponent(CatalogDecisionTable).vm.$emit('toggle', products[2]);
+  await flushPromises();
+  await button(catalog, 'Добавить выбранные').trigger('click');
+  await flushPromises();
+  await button(wrapper, 'Добавить помещение').trigger('click');
+  expect(roomsInEditor(wrapper)).toHaveLength(2);
+  await button(roomsInEditor(wrapper)[1], 'Убрать помещение').trigger('click');
+  expect(roomsInEditor(wrapper)).toHaveLength(1);
+  const mode = wrapper.get('form select');
+  expect((mode.element as HTMLSelectElement).value).toBe('choice');
+  await savePreview(wrapper);
+  expect(api.update.mock.calls.at(-1)![1].rooms[0]).toMatchObject({ selection_mode: 'choice', show_total: false });
+  await button(wrapper, 'Опубликовать и скопировать').trigger('click');
+  await flushPromises();
+  expect(api.snapshot()!.rooms[0].selection_mode).toBe('choice');
+  expect(api.snapshot()!.rooms[0].options.map(option => option.title)).toEqual([products[1].title, products[0].title, products[2].title]);
+  await mode.setValue('package');
+  await savePreview(wrapper);
+  expect(api.update.mock.calls.at(-1)![1].rooms[0]).toMatchObject({ selection_mode: 'package', show_total: false });
+  await wrapper.get('form input[type="checkbox"]').setValue(true);
+  await savePreview(wrapper);
+  expect(api.update.mock.calls.at(-1)![1].rooms[0]).toMatchObject({ selection_mode: 'package', show_total: true });
+  expect(wrapper.text().replace(/\s/gu, ' ')).toMatch(/Итого за комплект: 5 220/);
 });
