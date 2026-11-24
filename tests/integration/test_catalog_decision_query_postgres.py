@@ -477,8 +477,8 @@ async def test_catalog_decision_projection_has_a_bounded_query_count(db):
     finally:
         event.remove(engine.sync_engine, "after_cursor_execute", collect)
 
-    # Cold FX configuration needs at most three reads; count + page query add two.
-    assert len(statements) <= 5
+    # Cold FX configuration needs at most three reads; the page carries its count.
+    assert len(statements) <= 4
 
 
 @pytest.mark.asyncio
@@ -646,15 +646,24 @@ async def test_catalog_decision_smart_search_and_multiple_btu_classes(db):
     nine = _complete_product(title="DECISION indoor 09", slug="decision-09", price=900, brand_id=brand.id, series_id=series.id, power_cooling=2.6, specs={"area_m2": 28})
     twelve = _complete_product(title="DECISION indoor 12", slug="decision-12", price=1000, brand_id=brand.id, series_id=series.id, power_cooling=3.5, specs={"area_m2": 35})
     db.add_all([nine, twelve])
+    tag = await _category(db, "decision-efficient")
+    db.add(ProductTagLink(product_id=nine.id, tag_id=tag.id))
     await db.commit()
 
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
     result = await CatalogDecisionQueryService.list_products(
-        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        db, tenant_scope=scope,
         filters=CatalogDecisionFilters(search="Gree 12", cooling_btu_classes=(9, 12)), page=1, limit=20, sort="title", direction="asc",
     )
 
     # Text and nominal tokens are ANDed, exactly as in the public smart search.
     assert [item["id"] for item in result["items"]] == [twelve.id]
+    by_series_and_tag = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="Elite Efficient"),
+        page=1, limit=20, sort="title", direction="asc",
+    )
+    assert [item["id"] for item in by_series_and_tag["items"]] == [nine.id]
+    assert by_series_and_tag["meta"]["total"] == 1
 
 
 @pytest.mark.asyncio
@@ -827,5 +836,10 @@ async def test_recommended_respects_tenant_grant_offer_storefront_and_publicatio
     assert [item["id"] for item in selected["items"]] == [products[0].id]
     assert selected["items"][0]["retail_price_byn"] == 2500
     assert selected["meta"]["total"] == 1
+    beyond_end = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope, filters=CatalogDecisionFilters(search="TENANTRANK"),
+        page=2, limit=1, sort="recommended", direction="asc",
+    )
+    assert beyond_end == {"items": [], "meta": {"page": 2, "limit": 1, "total": 1, "pages": 1}}
     snapshots = await CatalogDecisionQueryService.get_product_snapshots(db, tenant_scope=scope, product_ids=[int(item.id) for item in products])
     assert set(snapshots) == {products[0].id}
