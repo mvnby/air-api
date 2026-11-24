@@ -74,28 +74,36 @@ function mockOfferApi() {
   const response = () => ({ ...structuredClone(draft), id: 7, version: revision, published: share });
   const projection = () => ({
     expires_at: draft.expires_at,
-    rooms: draft.rooms.map((room, index, rooms) => ({
-      title: room.title || (rooms.length === 1 ? 'Подбор кондиционера' : 'Помещение ' + (index + 1)),
-      installation: room.installation,
-      options: room.options.map(option => {
-        const product = products.find(item => item.id === option.product_id)!;
-        return {
-          title: product.title,
-          slug: 'fixture-model',
-          main_image: null,
-          price_byn: option.price_byn,
-          original_price_byn: product.retail_price_byn > Number(option.price_byn) ? String(product.retail_price_byn) : null,
-          total_price_byn: room.installation.mode === 'fixed'
-            ? String(Number(option.price_byn) + Number(room.installation.price_byn))
-            : null,
-          note: option.note,
-          cooling_power_kw: 2,
-          noise_indoor_min_db: 20,
-          is_inverter: true,
-          wifi: 'builtin' as const,
-        };
-      }),
-    })),
+    rooms: draft.rooms.map((room, index, rooms) => {
+      const packageMode = room.selection_mode === 'package';
+      const equipmentTotal = room.show_total ? room.options.reduce((sum, item) => sum + Number(item.price_byn), 0) : null;
+      return {
+        title: room.title || (packageMode ? 'Комплект ' + (index + 1) : rooms.length === 1 ? 'Подбор кондиционера' : 'Помещение ' + (index + 1)),
+        selection_mode: room.selection_mode,
+        equipment_total_byn: equipmentTotal === null ? null : String(equipmentTotal),
+        total_with_installation_byn: equipmentTotal !== null && room.installation.mode === 'fixed'
+          ? String(equipmentTotal + Number(room.installation.price_byn)) : null,
+        installation: room.installation,
+        options: room.options.map(option => {
+          const product = products.find(item => item.id === option.product_id)!;
+          return {
+            title: product.title,
+            slug: 'fixture-model',
+            main_image: null,
+            price_byn: option.price_byn,
+            original_price_byn: product.retail_price_byn > Number(option.price_byn) ? String(product.retail_price_byn) : null,
+            total_price_byn: !packageMode && room.installation.mode === 'fixed'
+              ? String(Number(option.price_byn) + Number(room.installation.price_byn))
+              : null,
+            note: option.note,
+            cooling_power_kw: 2,
+            noise_indoor_min_db: 20,
+            is_inverter: true,
+            wifi: 'builtin' as const,
+          };
+        }),
+      };
+    }),
   });
   let publicSnapshot: ReturnType<typeof projection> | undefined;
 
@@ -288,6 +296,37 @@ it('moves focus from the editor to the preview and then to the published link ac
   await button(wrapper, 'Опубликовать').trigger('click');
   await flushPromises();
   expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+});
+
+it('uses a single proposal mode and opts into the total separately for each package', async () => {
+  const api = mockOfferApi();
+  const wrapper = await openEditor('?products=41,42,43,44');
+  expect(wrapper.find('form input[type="checkbox"]').exists()).toBe(false);
+  const mode = wrapper.get('form select');
+  await mode.setValue('package');
+  await button(wrapper, 'Добавить комплект').trigger('click');
+  await modelInRoom(wrapper, 0, products[2].title).get('select').setValue('2');
+  await modelInRoom(wrapper, 0, products[3].title).get('select').setValue('2');
+  const [first, second] = roomsInEditor(wrapper);
+  await first.get('input[placeholder]').setValue('Обычные');
+  await second.get('input[placeholder]').setValue('Инверторные');
+  await first.get('select').setValue('fixed');
+  await first.get('input[inputmode=decimal]').setValue('500');
+  await first.get('input[type="checkbox"]').setValue(true);
+
+  await savePreview(wrapper);
+  expect(api.create.mock.calls[0][0].rooms.map(room => [room.selection_mode, room.show_total]))
+    .toEqual([['package', true], ['package', false]]);
+  expect(roomNamesInPreview(wrapper)).toEqual(['Обычные', 'Инверторные']);
+  expect(wrapper.text().replace(/\s/gu, ' ')).toMatch(/Итого с монтажом: 3 810(?:,00)? (?:BYN|Br)/);
+  expect(wrapper.text().match(/Итого за оборудование/g)).toHaveLength(1);
+
+  await mode.setValue('choice');
+  expect(wrapper.find('form input[type="checkbox"]').exists()).toBe(false);
+  await savePreview(wrapper);
+  expect(api.update.mock.calls[0][1].rooms.map(room => [room.selection_mode, room.show_total]))
+    .toEqual([['choice', false], ['choice', false]]);
+  expect(wrapper.text()).not.toContain('Итого');
 });
 
 it('shows save and publish failures at their actions and allows retry', async () => {
