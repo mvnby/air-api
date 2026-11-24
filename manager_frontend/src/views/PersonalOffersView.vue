@@ -2,7 +2,9 @@
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 import PersonalOfferRoomEditor from '../components/personal-offers/PersonalOfferRoomEditor.vue';
 import PersonalOfferPreviewPanel from '../components/personal-offers/PersonalOfferPreview.vue';
+import CatalogDecisionWorkspaceView from './CatalogDecisionWorkspaceView.vue';
 import { catalogDecisionApi, type CatalogDecisionItem } from '../services/catalog-decision-api';
+import { readCatalogDecisionQuery, writeCatalogDecisionQuery } from '../services/catalog-decision-query';
 import { navigateManager, replaceManagerLocation } from '../services/manager-navigation-history';
 import { managerSession } from '../services/manager-session';
 import {
@@ -28,7 +30,7 @@ const query = new URLSearchParams(window.location.search);
 const orderId = positiveId(query.get('orderId'));
 const offerId = positiveId(query.get('offerId'));
 const selectedIds = [...new Set((query.get('products') ?? '').split(',').flatMap(item => positiveId(item) ?? []))].slice(0, 24);
-const editing = Boolean(offerId || selectedIds.length);
+const editing = Boolean(offerId || selectedIds.length || query.get('new') === '1');
 const readOnly = computed(() => Boolean(managerSession.auth.value?.demo_read_only));
 const offers = ref<PersonalOffer[]>([]);
 const hasMore = ref(false);
@@ -42,6 +44,16 @@ const roomKeys = ref([0]);
 const selectionMode = computed(() => rooms.value[0]?.selection_mode ?? 'choice');
 const roomNames = computed(() => rooms.value.map((room, index) => room.title?.trim() || personalOfferRoomName(index, rooms.value.length, selectionMode.value)));
 const optionCount = computed(() => rooms.value.reduce((count, room) => count + room.options.length, 0));
+const picker = ref<{ roomKey: number; title: string; initialSearch: string; existingIds: number[]; limit: number } | null>(null);
+const pickerSearches = new Map<number, string>();
+const pickerFeedback = ref<{ roomKey: number; count: number } | null>(null);
+let pickerTrigger: HTMLButtonElement | null = null;
+const returnHref = window.history.state?.managerReturn?.href;
+const sourceCatalog = typeof returnHref === 'string' ? new URL(returnHref, window.location.origin) : null;
+const catalogSearch = sourceCatalog?.origin === window.location.origin && sourceCatalog.pathname === '/manager/catalog-decision'
+  ? sourceCatalog.search
+  : '?orderable=1';
+let lastPickerSearch = writeCatalogDecisionQuery('', { ...readCatalogDecisionQuery(catalogSearch), page: 1 });
 let nextRoomKey = 1;
 type OfferAction = 'preview' | 'publish' | 'revoke';
 const pendingAction = ref<OfferAction | null>(null);
@@ -50,9 +62,7 @@ const actionError = ref<{ action: OfferAction; message: string } | null>(null);
 const actionErrorMessage = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const initialized = ref(false);
-const searching = ref(false);
 const error = ref('');
-const searchStatus = ref('');
 const status = ref('');
 const manualCopy = ref(false);
 const linkField = ref<HTMLInputElement | null>(null);
@@ -117,7 +127,7 @@ async function load() {
       });
       rooms.value = [room];
       if (room.options.length !== selectedIds.length) status.value = 'Часть выбранных моделей больше недоступна в подборе.';
-    } else {
+    } else if (!editing) {
       const result = await personalOffersApi.list(orderId);
       offers.value = result.items;
       hasMore.value = result.has_more;
@@ -147,21 +157,6 @@ async function loadMore() {
   }
 }
 
-async function searchModels(search: string) {
-  if (!search.trim() || searching.value) return;
-  searching.value = true;
-  searchStatus.value = 'Ищем модели…';
-  try {
-    const result = await catalogDecisionApi.list(1, 24, { search: search.trim(), includeOrderable: true, isPublished: true }, 'title', 'asc');
-    remember(result.items ?? []);
-    searchStatus.value = result.items?.length ? 'Найденные модели добавлены в список выбора.' : 'Модели не найдены.';
-  } catch (err) {
-    searchStatus.value = getApiErrorMessage(err);
-  } finally {
-    searching.value = false;
-  }
-}
-
 function changeSelectionMode(event: Event) {
   const mode = (event.target as HTMLSelectElement).value as OfferSelectionMode;
   for (const room of rooms.value) {
@@ -188,21 +183,49 @@ function removeRoom(index: number) {
     return;
   }
   destination.options.push(...remaining);
+  pickerSearches.delete(roomKeys.value[index]!);
   rooms.value.splice(index, 1);
   roomKeys.value.splice(index, 1);
 }
 
-function addOption(roomIndex: number, productId: number) {
-  const product = choices.value.find(item => item.id === productId);
+const roomPickerLimit = (room: DraftRoom) => Math.min(24 - room.options.length, 48 - optionCount.value);
+
+function openPicker(roomIndex: number, event: MouseEvent) {
   const room = rooms.value[roomIndex];
-  if (!product || !room) return;
-  if (selectionMode.value === 'choice' && room.options.some(option => option.product_id === productId)) return;
-  if (room.options.length >= 24 || optionCount.value >= 48) {
-    error.value = 'Можно добавить до 24 моделей в одну группу и до 48 в предложение.';
-    return;
-  }
+  if (!room || busy.value || readOnly.value || roomPickerLimit(room) <= 0) return;
+  const roomKey = roomKeys.value[roomIndex]!;
+  pickerTrigger = event.currentTarget instanceof HTMLButtonElement ? event.currentTarget : null;
+  pickerFeedback.value = null;
+  picker.value = {
+    roomKey,
+    title: 'Модели · ' + roomNames.value[roomIndex],
+    initialSearch: pickerSearches.get(roomKey) ?? lastPickerSearch,
+    existingIds: selectionMode.value === 'choice' ? room.options.map(option => option.product_id) : [],
+    limit: roomPickerLimit(room),
+  };
+}
+
+async function closePicker(search: string) {
+  if (!picker.value) return;
+  pickerSearches.set(picker.value.roomKey, search);
+  lastPickerSearch = writeCatalogDecisionQuery('', { ...readCatalogDecisionQuery(search), page: 1 });
+  picker.value = null;
+  await nextTick();
+  revealResult(pickerTrigger?.disabled ? pickerTrigger.closest('section') : pickerTrigger, 'nearest');
+  pickerTrigger = null;
+}
+
+function addPickedModels(products: CatalogDecisionItem[], search: string) {
+  const context = picker.value;
+  const room = context && rooms.value[roomKeys.value.indexOf(context.roomKey)];
+  if (!context || !room || readOnly.value || busy.value) return;
+  const picks = products.filter(item => !context.existingIds.includes(item.id));
+  if (picks.length > roomPickerLimit(room)) return;
   error.value = '';
-  room.options.push(draftOption(product));
+  remember(picks);
+  room.options.push(...picks.map(draftOption));
+  pickerFeedback.value = { roomKey: context.roomKey, count: picks.length };
+  void closePicker(search);
 }
 
 function moveOption(roomIndex: number, optionIndex: number, destination: number) {
@@ -343,7 +366,9 @@ onMounted(load);
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6" data-testid="personal-offers-workspace">
+  <div>
+  <CatalogDecisionWorkspaceView v-if="picker" :picker="picker" @pick="addPickedModels" @cancel-pick="closePicker" />
+  <section v-show="!picker" class="mx-auto max-w-5xl space-y-4 p-4 sm:p-6" data-testid="personal-offers-workspace">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold">{{ editing ? 'Персональное предложение' : 'Персональные предложения' }}</h1>
@@ -414,13 +439,13 @@ onMounted(load);
             :index="index"
             :room-names="roomNames"
             :choices="choices"
+            :picker-limit="roomPickerLimit(room)"
+            :added-count="pickerFeedback?.roomKey === roomKeys[index] ? pickerFeedback?.count : undefined"
             @remove="removeRoom(index)"
-            @add-option="addOption(index, $event)"
+            @pick-models="openPicker(index, $event)"
             @remove-option="room.options.splice($event, 1)"
             @move-option="(optionIndex, destination) => moveOption(index, optionIndex, destination)"
-            @search="searchModels"
           />
-          <p v-if="searchStatus" role="status" class="text-sm">{{ searchStatus }}</p>
           <p v-if="actionError?.action === 'preview'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">{{ selectionMode === 'package' ? 'Добавить комплект' : 'Добавить помещение' }}</button>
@@ -441,4 +466,5 @@ onMounted(load);
       </template>
     </template>
   </section>
+  </div>
 </template>

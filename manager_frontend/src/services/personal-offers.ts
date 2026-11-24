@@ -78,7 +78,7 @@ export function personalOfferRoomName(index: number, count: number, mode?: Offer
 }
 
 export function personalOfferSelectionUrl(productIds: number[], orderId?: number) {
-  const query = new URLSearchParams({ products: productIds.join(',') });
+  const query = new URLSearchParams(productIds.length ? { products: productIds.join(',') } : { new: '1' });
   if (orderId) query.set('orderId', String(orderId));
   return personalOffersPath + '?' + query;
 }

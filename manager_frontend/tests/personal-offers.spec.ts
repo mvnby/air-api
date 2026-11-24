@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import PersonalOffersView from '../src/views/PersonalOffersView.vue';
 import CatalogDecisionWorkspaceView from '../src/views/CatalogDecisionWorkspaceView.vue';
 import CatalogDecisionTable from '../src/components/catalog-decision/CatalogDecisionTable.vue';
 import CatalogDecisionSelectionTray from '../src/components/catalog-decision/CatalogDecisionSelectionTray.vue';
 import { catalogDecisionApi } from '../src/services/catalog-decision-api';
+import { catalogDecisionSelectionStorageKey, saveCatalogDecisionSelection } from '../src/services/catalog-decision-selection';
 import { managerSession } from '../src/services/manager-session';
 import { personalOffersApi, type Draft } from '../src/services/personal-offers';
 import { ManagerOrdersService } from '../src/client';
@@ -27,7 +28,7 @@ const meta = { page: 1, pages: 1, total: products.length, limit: 40 };
 const shareUrl = (id: string) => 'https://mvn.by/predlozhenie/' + id.repeat(43) + '/';
 let mounted: VueWrapper | undefined;
 
-function button(wrapper: VueWrapper, label: string) {
+function button(wrapper: VueWrapper | DOMWrapper<Element>, label: string) {
   const found = wrapper.findAll('button').find(item => item.text().trim() === label);
   expect(found, 'button "' + label + '"').toBeDefined();
   return found!;
@@ -53,13 +54,16 @@ function modelInRoom(wrapper: VueWrapper, index: number, title: string) {
   return row!;
 }
 
-async function openEditor(query: string) {
-  history.replaceState({}, '', '/manager/personal-offers' + query);
+async function openEditor(query: string, catalogHref?: string) {
+  history.replaceState(catalogHref ? { managerReturn: { href: catalogHref } } : {}, '', '/manager/personal-offers' + query);
   managerSession.auth.value = managerAuth as never;
-  vi.spyOn(catalogDecisionApi, 'list').mockImplementation(async (_page, _limit, filters) => ({
-    items: products.filter(product => !filters.productIds || filters.productIds.includes(product.id)),
-    meta,
-  } as never));
+  vi.spyOn(catalogDecisionApi, 'list').mockImplementation(async (_page, _limit, filters) => {
+    const classes: Record<number, number> = { 41: 7, 42: 7, 43: 12, 44: 9 };
+    const items = products.filter(product => (!filters.productIds || filters.productIds.includes(product.id))
+      && (!filters.coolingBtuClasses?.length || filters.coolingBtuClasses.includes(classes[product.id])));
+    return { items, meta: { ...meta, total: items.length } } as never;
+  });
+  vi.spyOn(catalogDecisionApi, 'filterOptions').mockResolvedValue({ brands: [], series: [] } as never);
   mounted = mount(PersonalOffersView, { attachTo: document.body });
   await flushPromises();
   return mounted;
@@ -351,4 +355,73 @@ it('shows save and publish failures at their actions and allows retry', async ()
   await flushPromises();
   expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+});
+
+it('reuses catalog filters by room and adds verified models without changing the draft terms or catalog basket', async () => {
+  const api = mockOfferApi();
+  const basketKey = catalogDecisionSelectionStorageKey(managerAuth);
+  saveCatalogDecisionSelection([{ id: 41, title: products[0].title }], basketKey);
+  const basket = localStorage.getItem(basketKey);
+  const wrapper = await openEditor('?products=41', '/manager/catalog-decision?coolingBtuClasses=7,9&orderable=1&page=3');
+  await button(wrapper, 'Добавить помещение').trigger('click');
+  await roomNameInputs(wrapper)[0].setValue('Гостиная');
+  await roomNameInputs(wrapper)[1].setValue('Спальня');
+  await roomsInEditor(wrapper)[0].get('select').setValue('fixed');
+  await roomsInEditor(wrapper)[0].get('input[inputmode=decimal]').setValue('500');
+  await modelInRoom(wrapper, 0, products[0].title).get('input').setValue('1520,00');
+
+  async function openRoom(index: number) {
+    const trigger = button(roomsInEditor(wrapper)[index], 'Добавить из подбора');
+    await trigger.trigger('click');
+    await flushPromises();
+    return { trigger, catalog: wrapper.getComponent(CatalogDecisionWorkspaceView) };
+  }
+
+  const bedroom = await openRoom(1);
+  expect(bedroom.catalog.get('h1').text()).toBe('Модели · Спальня');
+  expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, expect.objectContaining({ coolingBtuClasses: [7, 9] }), 'recommended', 'asc');
+  expect(button(bedroom.catalog, '7').attributes('aria-pressed')).toBe('true');
+  expect(button(bedroom.catalog, '9').attributes('aria-pressed')).toBe('true');
+  expect(bedroom.catalog.getComponent(CatalogDecisionTable).props('items').map(item => item.id)).toEqual([41, 42, 44]);
+  bedroom.catalog.getComponent(CatalogDecisionTable).vm.$emit('toggle', products[3]);
+  await flushPromises();
+  await button(bedroom.catalog, 'Добавить выбранные').trigger('click');
+  await flushPromises();
+  expect(document.activeElement).toBe(bedroom.trigger.element);
+  expect(roomsInEditor(wrapper)[1].text()).toContain('Добавлено моделей: 1');
+  expect(modelInRoom(wrapper, 1, products[3].title).exists()).toBe(true);
+
+  const living = await openRoom(0);
+  expect(living.catalog.getComponent(CatalogDecisionTable).props('existingIds')).toEqual([41]);
+  await button(living.catalog, '7').trigger('click');
+  await button(living.catalog, '9').trigger('click');
+  await button(living.catalog, '12').trigger('click');
+  await flushPromises();
+  expect(living.catalog.getComponent(CatalogDecisionTable).props('items').map(item => item.id)).toEqual([43]);
+  living.catalog.getComponent(CatalogDecisionTable).vm.$emit('toggle', products[2]);
+  await flushPromises();
+  await button(living.catalog, 'Добавить выбранные').trigger('click');
+  await flushPromises();
+
+  const reopened = await openRoom(1);
+  expect(button(reopened.catalog, '12').attributes('aria-pressed')).toBe('false');
+  expect(button(reopened.catalog, '9').attributes('aria-pressed')).toBe('true');
+  await button(reopened.catalog, 'К предложению').trigger('click');
+  await flushPromises();
+  expect(location.search).toBe('?products=41');
+  expect(localStorage.getItem(basketKey)).toBe(basket);
+  await savePreview(wrapper);
+  const [hall, sleep] = api.create.mock.calls[0][0].rooms;
+  expect(hall.installation.price_byn).toBe('500');
+  expect(hall.options.map(item => [item.product_id, item.price_byn])).toEqual([[41, '1520.00'], [43, '1910']]);
+  expect(sleep.options.map(item => item.product_id)).toEqual([44]);
+});
+
+it('opens a room-first draft without models selected in the general catalog', async () => {
+  const wrapper = await openEditor('?new=1');
+  expect(roomsInEditor(wrapper)).toHaveLength(1);
+  expect(roomsInEditor(wrapper)[0].findAll('li')).toHaveLength(0);
+  await button(roomsInEditor(wrapper)[0], 'Добавить из подбора').trigger('click');
+  await flushPromises();
+  expect(wrapper.getComponent(CatalogDecisionWorkspaceView).get('h1').text()).toBe('Модели · Подбор кондиционера');
 });

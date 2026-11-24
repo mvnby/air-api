@@ -1,32 +1,27 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import type { CatalogDecisionItem } from '../../services/catalog-decision-api';
 import { personalOfferRoomName, type DraftRoom } from '../../services/personal-offers';
 
-const props = defineProps<{ room: DraftRoom; index: number; roomNames: string[]; roomKey: number; choices: CatalogDecisionItem[] }>();
+const props = defineProps<{
+  room: DraftRoom;
+  index: number;
+  roomNames: string[];
+  roomKey: number;
+  choices: CatalogDecisionItem[];
+  pickerLimit: number;
+  addedCount?: number;
+}>();
 const emit = defineEmits<{
   remove: [];
-  addOption: [productId: number];
+  pickModels: [event: MouseEvent];
   removeOption: [optionIndex: number];
   moveOption: [optionIndex: number, roomIndex: number];
-  search: [query: string];
 }>();
 
-const query = ref('');
-const candidate = ref('');
 const isPackage = computed(() => props.room.selection_mode === 'package');
 const titlePlaceholder = computed(() => personalOfferRoomName(props.index, props.roomNames.length, props.room.selection_mode));
-const available = computed(() => isPackage.value
-  ? props.choices
-  : props.choices.filter(choice => !props.room.options.some(option => option.product_id === choice.id)));
 const optionTitle = (id: number) => props.choices.find(choice => choice.id === id)?.title || 'Модель #' + id;
-
-function addModel() {
-  const id = Number(candidate.value);
-  if (!id) return;
-  emit('addOption', id);
-  candidate.value = '';
-}
 
 function moveModel(event: Event, from: number) {
   const select = event.target as HTMLSelectElement;
@@ -36,7 +31,7 @@ function moveModel(event: Event, from: number) {
 </script>
 
 <template>
-  <section class="space-y-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4" :aria-labelledby="'offer-room-' + roomKey">
+  <section class="space-y-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4" :aria-labelledby="'offer-room-' + roomKey" tabindex="-1">
     <div class="flex flex-wrap items-end justify-between gap-2">
       <label class="min-w-0 flex-1 text-sm font-medium" :id="'offer-room-' + roomKey">
         {{ isPackage ? 'Название комплекта' : 'Название помещения' }}
@@ -87,22 +82,10 @@ function moveModel(event: Event, from: number) {
         </div>
       </li>
     </ul>
-    <div class="grid gap-2 sm:grid-cols-2">
-      <div class="flex min-w-0 items-end gap-2">
-        <label class="min-w-0 flex-1 text-sm font-medium">Поиск моделей
-          <input v-model="query" type="search" maxlength="200" class="field-input mt-1 w-full" @keydown.enter.prevent="emit('search', query)" />
-        </label>
-        <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm" :disabled="!query.trim()" @click="emit('search', query)">Найти</button>
-      </div>
-      <div class="flex min-w-0 items-end gap-2">
-        <label class="min-w-0 flex-1 text-sm font-medium">Модель
-          <select v-model="candidate" class="field-input mt-1 w-full">
-            <option value="">Выберите модель</option>
-            <option v-for="choice in available" :key="choice.id" :value="choice.id">{{ choice.title }}</option>
-          </select>
-        </label>
-        <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="!candidate" @click="addModel">Добавить</button>
-      </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="min-h-10 rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm font-semibold disabled:opacity-50" :disabled="pickerLimit <= 0" @click="emit('pickModels', $event)">Добавить из подбора</button>
+      <span v-if="pickerLimit <= 0" class="text-sm text-[var(--mv-text-muted)]">Достигнут лимит моделей.</span>
+      <span v-if="addedCount" role="status" class="text-sm">Добавлено моделей: {{ addedCount }}</span>
     </div>
   </section>
 </template>
