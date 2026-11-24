@@ -6,6 +6,7 @@ from api_contracts.personal_offers import (
     ManagerPersonalOfferResponse,
     PersonalOfferDraftInput,
     PersonalOfferPublishInput,
+    PersonalOfferRenameInput,
     PersonalOfferUpdateInput,
     PersonalOfferVersionInput,
     PublicPersonalOfferResponse,
@@ -15,10 +16,12 @@ from core.security import get_current_manager_tenant_scope
 from models.tenancy import TenantScope
 from routers.manager_operation_ids import (
     CREATE_MANAGER_PERSONAL_OFFER,
+    DELETE_MANAGER_PERSONAL_OFFER,
     GET_MANAGER_PERSONAL_OFFER,
     LIST_MANAGER_PERSONAL_OFFERS,
     PREVIEW_MANAGER_PERSONAL_OFFER,
     PUBLISH_MANAGER_PERSONAL_OFFER,
+    RENAME_MANAGER_PERSONAL_OFFER,
     REVOKE_MANAGER_PERSONAL_OFFER,
     UPDATE_MANAGER_PERSONAL_OFFER,
 )
@@ -79,6 +82,35 @@ async def update_manager_personal_offer(
 ):
     """Replace editable draft fields using the last-read version. The live link is untouched."""
     return await PersonalOfferService.update(session, offer_id, scope, draft)
+
+
+@router.patch("/{offer_id}", response_model=ManagerPersonalOfferResponse, operation_id=RENAME_MANAGER_PERSONAL_OFFER)
+async def rename_manager_personal_offer(
+    command: PersonalOfferRenameInput,
+    offer_id: int = Path(gt=0),
+    session: AsyncSession = Depends(get_session),
+    scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    """Rename a draft in the selected storefront without changing the published link or snapshot.
+
+    A stale expected version returns 409. An empty title restores the default number in Manager.
+    """
+    return await PersonalOfferService.rename(session, offer_id, scope, command.title, command.expected_version)
+
+
+@router.delete("/{offer_id}", status_code=204, operation_id=DELETE_MANAGER_PERSONAL_OFFER)
+async def delete_manager_personal_offer(
+    offer_id: int = Path(gt=0),
+    expected_version: int = Query(gt=0),
+    session: AsyncSession = Depends(get_session),
+    scope: TenantScope = Depends(get_current_manager_tenant_scope),
+) -> None:
+    """Remove a draft from the selected storefront's Manager list and revoke its link atomically.
+
+    The draft is retained internally. A stale expected version returns 409; a missing, removed or
+    out-of-scope draft returns 404, including retries after a successful deletion.
+    """
+    await PersonalOfferService.delete(session, offer_id, scope, expected_version)
 
 
 @router.post("/{offer_id}/preview", response_model=PublicPersonalOfferResponse, operation_id=PREVIEW_MANAGER_PERSONAL_OFFER)

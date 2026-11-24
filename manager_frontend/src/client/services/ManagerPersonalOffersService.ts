@@ -6,6 +6,7 @@ import type { ManagerPersonalOfferListResponse } from '../models/ManagerPersonal
 import type { ManagerPersonalOfferResponse } from '../models/ManagerPersonalOfferResponse';
 import type { PersonalOfferDraftInput } from '../models/PersonalOfferDraftInput';
 import type { PersonalOfferPublishInput } from '../models/PersonalOfferPublishInput';
+import type { PersonalOfferRenameInput } from '../models/PersonalOfferRenameInput';
 import type { PersonalOfferUpdateInput } from '../models/PersonalOfferUpdateInput';
 import type { PersonalOfferVersionInput } from '../models/PersonalOfferVersionInput';
 import type { PublicPersonalOfferResponse } from '../models/PublicPersonalOfferResponse';
@@ -101,6 +102,62 @@ export class ManagerPersonalOffersService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Rename Manager Personal Offer
+     * Rename a draft in the selected storefront without changing the published link or snapshot.
+     *
+     * A stale expected version returns 409. An empty title restores the default number in Manager.
+     * @param offerId
+     * @param requestBody
+     * @returns ManagerPersonalOfferResponse Successful Response
+     * @throws ApiError
+     */
+    public static renameManagerPersonalOffer(
+        offerId: number,
+        requestBody: PersonalOfferRenameInput,
+    ): CancelablePromise<ManagerPersonalOfferResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/manager/personal-offers/{offer_id}',
+            path: {
+                'offer_id': offerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Manager Personal Offer
+     * Remove a draft from the selected storefront's Manager list and revoke its link atomically.
+     *
+     * The draft is retained internally. A stale expected version returns 409; a missing, removed or
+     * out-of-scope draft returns 404, including retries after a successful deletion.
+     * @param offerId
+     * @param expectedVersion
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteManagerPersonalOffer(
+        offerId: number,
+        expectedVersion: number,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/manager/personal-offers/{offer_id}',
+            path: {
+                'offer_id': offerId,
+            },
+            query: {
+                'expected_version': expectedVersion,
+            },
             errors: {
                 422: `Validation Error`,
             },

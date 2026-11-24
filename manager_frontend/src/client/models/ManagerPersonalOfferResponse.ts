@@ -6,6 +6,10 @@ import type { ManagerPersonalOfferPublished } from './ManagerPersonalOfferPublis
 import type { PersonalOfferRoomInput_Output } from './PersonalOfferRoomInput_Output';
 export type ManagerPersonalOfferResponse = {
     order_id?: (number | null);
+    /**
+     * Внутреннее название для списка Manager.
+     */
+    title?: (string | null);
     expires_at: string;
     rooms: Array<PersonalOfferRoomInput_Output>;
     id: number;

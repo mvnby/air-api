@@ -21,11 +21,13 @@ class PersonalOffer(SQLModel, table=True):
     tenant_id: int = Field(foreign_key="tenant.id")
     storefront_id: int
     order_id: int | None = Field(default=None, foreign_key="order.id", ondelete="SET NULL")
+    title: str | None = Field(default=None, max_length=100)
     version: int = Field(default=1)
     expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     rooms: list[dict] = Field(sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
+    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
 
 class PersonalOfferPublication(SQLModel, table=True):

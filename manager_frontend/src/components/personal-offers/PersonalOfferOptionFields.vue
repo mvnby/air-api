@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { ChevronDown } from 'lucide-vue-next';
 import type { DraftOption } from '../../services/personal-offers';
 import { productReaderUrl } from '../../services/product-reader-api';
 
-const props = defineProps<{
+defineProps<{
   option: DraftOption;
   title: string;
   image?: string | null;
   isPackage: boolean;
 }>();
-const noteInitiallyOpen = Boolean(props.option.note?.trim());
 </script>
 
 <template>
@@ -17,19 +15,26 @@ const noteInitiallyOpen = Boolean(props.option.note?.trim());
     <img v-if="productReaderUrl(image)" :src="productReaderUrl(image) ?? undefined" alt="" loading="lazy" class="h-12 w-16 shrink-0 rounded-md bg-gray-50 object-contain" />
     <p class="min-w-0 break-words text-sm font-semibold">{{ title }}</p>
   </div>
-  <label class="col-start-1 row-start-2 flex items-center gap-2 text-xs font-medium lg:col-start-3 lg:row-start-1">
-    <span class="whitespace-nowrap">Цена, BYN</span>
-    <input v-model="option.price_byn" type="text" inputmode="decimal" maxlength="14" :aria-label="'Цена, BYN — ' + title" class="field-input option-price min-w-0" />
-  </label>
-  <details :open="noteInitiallyOpen" class="group/note col-span-full min-w-0 lg:col-span-3 lg:col-start-2">
-    <summary class="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 text-xs font-semibold text-[var(--kitlane-accent-text)] [&::-webkit-details-marker]:hidden">
-      {{ option.note?.trim() ? 'Пояснение для клиента' : 'Добавить пояснение' }}
-      <ChevronDown class="h-4 w-4 group-open/note:rotate-180" aria-hidden="true" />
-    </summary>
-    <textarea v-model="option.note" rows="2" maxlength="500" :aria-label="isPackage ? 'Помещение или пояснение для клиента' : 'Пояснение для клиента'" class="field-input block w-full" />
-  </details>
+  <div class="col-span-full grid min-w-0 grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)] items-end gap-2 lg:col-span-2 lg:col-start-2">
+    <label class="block min-w-0 text-xs font-medium">
+      Цена, BYN
+      <input v-model="option.price_byn" type="text" inputmode="decimal" maxlength="14" :aria-label="'Цена, BYN — ' + title" class="field-input option-input" />
+    </label>
+    <label class="block min-w-0 text-xs font-medium">
+      {{ isPackage ? 'Помещение или пояснение' : 'Пояснение для клиента' }}
+      <textarea v-model="option.note" rows="1" maxlength="500" class="field-input option-input resize-y" />
+    </label>
+  </div>
 </template>
 
 <style scoped>
-.option-price { width: 6.75rem; }
+.option-input {
+  display: block;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.625rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
 </style>

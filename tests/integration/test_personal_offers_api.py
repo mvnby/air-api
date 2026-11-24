@@ -7,9 +7,10 @@ from sqlmodel import select
 
 from core.config import settings
 from models import Order, OrderStatus, Product
-from models.personal_offer import PersonalOfferPublication
+from models.personal_offer import PersonalOffer, PersonalOfferPublication
 from models.tenancy import Storefront, StorefrontDomain
 from services import personal_offer_service
+from services.manager_storefront_selector_service import MANAGER_STOREFRONT_HEADER
 from services.storefront_context_signature_service import StorefrontContextSignatureService
 
 
@@ -232,3 +233,77 @@ async def test_personal_offer_draft_rejects_ineligible_products_and_foreign_orde
     absent_product = await async_client.post(_MANAGER_PATH, json=_draft(product.id), headers=headers)
     assert absent_product.status_code == 409
     assert (await async_client.get(_MANAGER_PATH, headers=headers)).json() == {"items": [], "has_more": False}
+
+
+async def test_manager_renames_and_removes_a_published_offer_without_exposing_internal_title(
+    async_client, db, monkeypatch,
+):
+    other_storefront = await _seed_domains(db, monkeypatch)
+    product = Product(
+        title="Test split", slug="offer-management-split", product_kind="complete_split_system",
+        price=1570, is_published=True,
+    )
+    db.add(product)
+    await db.commit()
+    headers = await _manager_headers(async_client)
+    draft = _draft(product.id)
+    response = await async_client.post(_MANAGER_PATH, headers=headers, json={**draft, "title": "  Подбор для склада  "})
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert created["title"] == "Подбор для склада"
+    offer_id = created["id"]
+    manager_path = f"{_MANAGER_PATH}/{offer_id}"
+    publish = await async_client.post(
+        f"{manager_path}/publish", headers=headers,
+        json={"request_id": str(uuid4()), "expected_version": created["version"]},
+    )
+    assert publish.status_code == 200, publish.text
+    published_offer = publish.json()
+    public_path = _offer_path(published_offer)
+    public_headers = _signed_read(public_path, _HOSTS[0])
+    before = await async_client.get(public_path, headers=public_headers)
+    assert before.status_code == 200, before.text
+    assert "Подбор для склада" not in before.text
+
+    rename = {"title": "  Склад — инверторы  ", "expected_version": published_offer["version"]}
+    other_scope = {**headers, MANAGER_STOREFRONT_HEADER: other_storefront.slug}
+    assert (await async_client.patch(manager_path, headers=other_scope, json=rename)).status_code == 404
+    result = await async_client.patch(manager_path, headers=headers, json=rename)
+    assert result.status_code == 200, result.text
+    renamed = result.json()
+    assert renamed["title"] == "Склад — инверторы"
+    assert renamed["version"] == published_offer["version"] + 1
+    assert renamed["published"] == published_offer["published"]
+    assert renamed["rooms"] == created["rooms"]
+    assert (await async_client.get(public_path, headers=public_headers)).json() == before.json()
+    assert (await async_client.patch(manager_path, headers=headers, json=rename)).status_code == 409
+
+    # Existing Manager clients omit the new field on a draft update.
+    edited = await async_client.put(
+        manager_path, headers=headers, json={**draft, "expected_version": renamed["version"]},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["title"] == renamed["title"]
+    delete = {"expected_version": edited.json()["version"]}
+    assert (await async_client.delete(manager_path, headers=other_scope, params=delete)).status_code == 404
+    assert (
+        await async_client.delete(manager_path, headers=headers, params={"expected_version": renamed["version"]})
+    ).status_code == 409
+    assert (await async_client.get(public_path, headers=public_headers)).status_code == 200
+
+    deleted = await async_client.delete(manager_path, headers=headers, params=delete)
+    assert deleted.status_code == 204, deleted.text
+    assert deleted.headers["cache-control"] == "private, no-store"
+    assert (await async_client.get(_MANAGER_PATH, headers=headers)).json() == {"items": [], "has_more": False}
+    assert (await async_client.get(manager_path, headers=headers)).status_code == 404
+    assert (await async_client.post(f"{manager_path}/preview", headers=headers)).status_code == 404
+    assert (await async_client.get(public_path, headers=public_headers)).status_code == 404
+    assert (await async_client.delete(manager_path, headers=headers, params=delete)).status_code == 404
+
+    stored = await db.get(PersonalOffer, offer_id)
+    receipt = (await db.execute(
+        select(PersonalOfferPublication).where(PersonalOfferPublication.offer_id == offer_id)
+    )).scalar_one()
+    assert stored.title == renamed["title"]
+    assert stored.deleted_at is not None
+    assert receipt.revoked_at == stored.deleted_at

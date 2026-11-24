@@ -5,6 +5,10 @@
 import type { PersonalOfferRoomInput_Input } from './PersonalOfferRoomInput_Input';
 export type PersonalOfferUpdateInput = {
     order_id?: (number | null);
+    /**
+     * Внутреннее название для списка Manager.
+     */
+    title?: (string | null);
     expires_at: string;
     rooms: Array<PersonalOfferRoomInput_Input>;
     expected_version: number;

@@ -60,9 +60,10 @@ class PersonalOfferRoomInput(BaseModel):
 
 
 class PersonalOfferDraftInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     order_id: int | None = Field(default=None, gt=0)
+    title: OfferTitle | None = Field(default=None, description="Внутреннее название для списка Manager.")
     expires_at: AwareDatetime
     rooms: list[PersonalOfferRoomInput] = Field(min_length=1, max_length=24)
 
@@ -87,6 +88,12 @@ class PersonalOfferVersionInput(BaseModel):
 
 class PersonalOfferPublishInput(PersonalOfferVersionInput):
     request_id: UUID
+
+
+class PersonalOfferRenameInput(PersonalOfferVersionInput):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: OfferTitle | None = Field(description="Внутреннее название. Пустое значение возвращает название по номеру.")
 
 
 class ManagerPersonalOfferPublished(BaseModel):

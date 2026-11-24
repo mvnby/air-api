@@ -11,7 +11,11 @@ from models.tenancy import TenantScope
 class PersonalOfferDAO:
     @staticmethod
     def scope_filters(scope: TenantScope):
-        return PersonalOffer.tenant_id == scope.tenant_id, PersonalOffer.storefront_id == scope.storefront_id
+        return (
+            PersonalOffer.tenant_id == scope.tenant_id,
+            PersonalOffer.storefront_id == scope.storefront_id,
+            PersonalOffer.deleted_at.is_(None),
+        )
 
     @classmethod
     async def get(

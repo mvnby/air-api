@@ -13,7 +13,7 @@ export type DraftRoom = {
   installation: Installation;
   options: DraftOption[];
 };
-export type Draft = { order_id: number | null; expires_at: string; rooms: DraftRoom[] };
+export type Draft = { order_id: number | null; title?: string | null; expires_at: string; rooms: DraftRoom[] };
 
 export type PersonalOffer = Draft & {
   id: number;
@@ -49,7 +49,7 @@ export type PersonalOfferPreview = {
 
 const apiPath = '/api/manager/personal-offers';
 const offerUrl = (id: number) => apiPath + '/' + id;
-const writeOffer = <T>(method: 'POST' | 'PUT', url: string, body?: unknown) =>
+const writeOffer = <T>(method: 'POST' | 'PUT' | 'PATCH', url: string, body?: unknown) =>
   request<T>(OpenAPI, { method, url, body, mediaType: 'application/json' });
 
 export const personalOffersApi = {
@@ -59,10 +59,18 @@ export const personalOffersApi = {
   get: (id: number) => request<PersonalOffer>(OpenAPI, { method: 'GET', url: offerUrl(id) }),
   create: (draft: Draft) => writeOffer<PersonalOffer>('POST', apiPath, draft),
   update: (id: number, draft: Draft, version: number) => writeOffer<PersonalOffer>('PUT', offerUrl(id), { ...draft, expected_version: version }),
+  rename: (id: number, title: string | null, version: number) => writeOffer<PersonalOffer>('PATCH', offerUrl(id), { title, expected_version: version }),
+  delete: (id: number, version: number) => request<void>(OpenAPI, {
+    method: 'DELETE', url: offerUrl(id), query: { expected_version: version },
+  }),
   preview: (id: number) => writeOffer<PersonalOfferPreview>('POST', offerUrl(id) + '/preview'),
   publish: (id: number, version: number, requestId: string) => writeOffer<PersonalOffer>('POST', offerUrl(id) + '/publish', { expected_version: version, request_id: requestId }),
   revoke: (id: number, version: number) => writeOffer<PersonalOffer>('POST', offerUrl(id) + '/revoke', { expected_version: version }),
 };
+
+export const personalOfferName = (offer: PersonalOffer) => offer.title?.trim() || `Предложение №${offer.id}`;
+export const personalOfferActive = (offer: PersonalOffer) =>
+  Boolean(offer.published && new Date(offer.published.expires_at).getTime() > Date.now());
 
 export const newPersonalOfferRoom = (): DraftRoom => ({
   title: null,
