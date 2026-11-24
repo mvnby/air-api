@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import ManagerContextHeader from '../components/manager/ManagerContextHeader.vue';
 import BynSymbol from '../components/money/BynSymbol.vue';
 import CatalogDecisionFilters from '../components/catalog-decision/CatalogDecisionFilters.vue';
@@ -26,23 +26,32 @@ import { openManagerChild, returnToManager } from '../services/manager-navigatio
 import { personalOfferSelectionUrl, personalOffersPath } from '../services/personal-offers';
 import { getApiErrorMessage } from '../utils/api-errors';
 
-const target = useCatalogDecisionTarget();
+const props = defineProps<{
+  picker?: { title: string; initialSearch: string; existingIds: number[]; limit: number };
+}>();
+const emit = defineEmits<{
+  pick: [products: CatalogDecisionItem[], search: string];
+  cancelPick: [search: string];
+}>();
+const target = useCatalogDecisionTarget(props.picker ? '' : window.location.search);
 const canPrepareOffer = computed(() => !managerSession.auth.value?.demo_read_only
   && (!target.requested || target.order.value?.status === 'negotiation'));
 const selectionError = ref('');
-const targetProductIds = computed(() => (target.proposal.value?.product_lines ?? []).flatMap(line => typeof line.product_id === 'number' ? [line.product_id] : []));
+const existingIds = computed(() => props.picker?.existingIds ?? (target.proposal.value?.product_lines ?? []).flatMap(line => typeof line.product_id === 'number' ? [line.product_id] : []));
+const pickerHeading = ref<HTMLElement | null>(null);
 const initializedSelectionKey = ref<string | null>(null);
 let loadGeneration = 0;
 let disposed = false;
 const items = ref<CatalogDecisionItem[]>([]);
 const brands = ref<Array<{ id: number; title: string }>>([]);
 const series = ref<Array<{ id: number; title: string; brandId?: number | null }>>([]);
-const initialQuery = readCatalogDecisionQuery(window.location.search);
+const initialQuery = readCatalogDecisionQuery(props.picker?.initialSearch ?? window.location.search);
 const filters = ref<Filters>(initialQuery.filters);
 const sort = ref<CatalogDecisionSort>(initialQuery.sort);
 const direction = ref<'asc' | 'desc'>(initialQuery.direction);
 const page = ref(initialQuery.page); const pages = ref(1); const total = ref(0); const loading = ref(false); const error = ref('');
 const selected = ref<Record<number, CatalogDecisionSelectionItem>>({});
+const pickerProducts = shallowRef<CatalogDecisionItem[]>([]);
 const invalidSelectionIds = ref<number[]>([]);
 const selectionValidating = ref(false);
 const selectionCheckError = ref('');
@@ -66,6 +75,7 @@ let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let activeListRequest: ReturnType<typeof catalogDecisionApi.list> | undefined;
 const cancelListRequest = () => { activeListRequest?.cancel?.(); activeListRequest = undefined; };
 const selectionStorageKey = computed(() => {
+  if (props.picker) return null;
   const auth = managerSession.auth.value;
   if (!auth || (target.requested && !target.context.value)) return null;
   const base = catalogDecisionSelectionStorageKey(auth);
@@ -73,8 +83,12 @@ const selectionStorageKey = computed(() => {
   return context ? `${base}:order-${context.orderId}:proposal-${context.proposalId}` : base;
 });
 
+const queryWithFilters = (search: string) => writeCatalogDecisionQuery(search, {
+  filters: filters.value, sort: sort.value, direction: direction.value, page: page.value,
+});
 const syncQuery = () => {
-  const query = writeCatalogDecisionQuery(window.location.search, { filters: filters.value, sort: sort.value, direction: direction.value, page: page.value });
+  if (props.picker) return;
+  const query = queryWithFilters(window.location.search);
   // Do not dispatch popstate: the Manager shell remounts on navigation.
   window.history.replaceState(window.history.state, '', `${window.location.pathname}${query}${window.location.hash}`);
 };
@@ -98,12 +112,18 @@ const reset = () => { filterResetKey.value += 1; sort.value = 'recommended'; dir
 const changeSort = (next: CatalogDecisionSort) => { direction.value = next !== 'recommended' && sort.value === next && direction.value === 'asc' ? 'desc' : 'asc'; sort.value = next; page.value = 1; void load(); };
 const go = (next: number) => { if (next >= 1 && next <= pages.value && !loading.value) { page.value = next; void load(); } };
 const toggleSelection = (item: CatalogDecisionItem) => {
-  if (target.saving.value || loading.value || error.value) return;
+  if (target.saving.value || loading.value || error.value || existingIds.value.includes(item.id)) return;
   selectionError.value = '';
   const next = { ...selected.value };
   if (next[item.id]) delete next[item.id];
   else {
-    if (Object.keys(next).length >= 24) { selectionError.value = 'В один подбор можно добавить до 24 моделей.'; return; }
+    const limit = props.picker?.limit ?? 24;
+    if (Object.keys(next).length >= limit) {
+      selectionError.value = props.picker
+        ? `Максимум моделей для добавления: ${limit}.`
+        : 'В один подбор можно добавить до 24 моделей.';
+      return;
+    }
     next[item.id] = { id: item.id, title: item.title };
   }
   selected.value = next;
@@ -114,6 +134,7 @@ const validateSelection = async () => {
   const generation = ++selectionCheckGeneration;
   invalidSelectionIds.value = [];
   selectionCheckError.value = '';
+  pickerProducts.value = [];
   if (!ids.length) { selectionValidating.value = false; return; }
   selectionValidating.value = true;
   try {
@@ -121,11 +142,16 @@ const validateSelection = async () => {
     if (disposed || generation !== selectionCheckGeneration) return;
     const eligible = new Set((response.items ?? []).map(item => item.id));
     invalidSelectionIds.value = ids.filter(id => !eligible.has(id));
+    if (props.picker) pickerProducts.value = ids.flatMap(id => (response.items ?? []).filter(item => item.id === id));
   } catch (err) {
     if (!disposed && generation === selectionCheckGeneration) selectionCheckError.value = getApiErrorMessage(err) || 'Не удалось проверить выбранные модели.';
   } finally {
     if (!disposed && generation === selectionCheckGeneration) selectionValidating.value = false;
   }
+};
+const finishPicker = () => {
+  if (selectionValidating.value || selectionCheckError.value || invalidSelectionIds.value.length || !pickerProducts.value.length) return;
+  emit('pick', pickerProducts.value, queryWithFilters(''));
 };
 const openCompare = async () => {
   const ids = Object.values(selected.value).map(item => item.id);
@@ -191,7 +217,8 @@ watch(selected, (next) => {
 }, { deep: true, flush: 'sync' });
 onMounted(() => {
   void load();
-  void target.load();
+  if (props.picker) pickerHeading.value?.focus();
+  else void target.load();
   void loadFilterOptions();
 });
 onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckGeneration += 1; clearTimeout(searchTimer); loadGeneration += 1; cancelListRequest(); });
@@ -202,9 +229,13 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
     <div class="mx-auto max-w-screen-2xl space-y-3">
       <ManagerContextHeader compact>
         <div class="selection-context-header">
-          <div class="selection-heading"><h1>Подбор сплит-систем</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
-          <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="text-sm font-semibold text-brand-700 underline">Персональные предложения</a>
-          <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
+          <div class="selection-heading"><h1 ref="pickerHeading" :tabindex="picker ? -1 : undefined">{{ picker ? picker.title : 'Подбор сплит-систем' }}</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
+          <button v-if="picker" type="button" class="selection-order-return" @click="emit('cancelPick', queryWithFilters(''))">К предложению</button>
+          <template v-else>
+            <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="text-sm font-semibold text-brand-700 underline">Персональные предложения</a>
+            <button v-if="canPrepareOffer && !Object.keys(selected).length" type="button" class="selection-order-return" @click="openManagerChild(personalOfferSelectionUrl([], target.context.value?.orderId))">Новое предложение</button>
+            <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
+          </template>
         </div>
       </ManagerContextHeader>
       <div v-if="target.requested" class="selection-order-context text-sm text-brand-900">
@@ -223,7 +254,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <div class="relative min-h-48" :aria-busy="loading">
         <p class="min-h-5 text-xs text-gray-500" role="status">{{ loading ? 'Обновляем каталог…' : error ? 'Результаты не обновлены. Повторите загрузку.' : '' }}</p>
         <div :class="loading || error ? 'pointer-events-none opacity-50' : ''" :inert="loading || Boolean(error)">
-          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="targetProductIds" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
+          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="existingIds" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
             <template #empty><div v-if="!loading && !error" class="rounded-xl border border-dashed border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
               <p class="font-semibold text-gray-900">Подтверждённых комплектов по этим условиям нет</p>
               <p class="mt-2">В подбор попадают только подтверждённые комплекты сплит-систем. Технические фильтры не ослабляются автоматически.</p>
@@ -240,12 +271,37 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       </div>
       <p v-if="canManageCatalog" class="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">Не хватает нужной модели? Неполные или неподтверждённые данные о комплекте и мощности могут исключать её из подбора. <a href="/manager/products" class="font-semibold underline underline-offset-2">Проверить в управлении каталогом</a></p>
       <div class="flex items-center justify-between text-sm"><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page <= 1 || loading" @click="go(page - 1)">Назад</button><span>Страница {{ page }} из {{ pages }}</span><button class="rounded-lg border border-gray-200 px-3 py-2 disabled:opacity-40" :disabled="page >= pages || loading" @click="go(page + 1)">Далее</button></div>
-      <CatalogDecisionSelectionTray :items="Object.values(selected)" :invalid-ids="invalidSelectionIds" :validating="selectionValidating" :validation-error="selectionCheckError" :target-order-id="target.context.value?.orderId" :targeted="target.requested" :busy="target.saving.value" :can-attach="target.canAttach.value" :can-prepare-offer="canPrepareOffer" @prepare-offer="openManagerChild(personalOfferSelectionUrl(Object.keys(selected).map(Number), target.context.value?.orderId))" @compare="openCompare" @remove="removeSelection" @clear="selected = {}; selectionError = ''" @attach-target="attachToTarget" @create-collection="collectionDialogOpen = true" @attach-order="orderDialogOpen = true" @create-order="quickOrderDialogOpen = true" />
+      <CatalogDecisionSelectionTray
+        :items="Object.values(selected)"
+        :invalid-ids="invalidSelectionIds"
+        :validating="selectionValidating"
+        :validation-error="selectionCheckError"
+        :target-order-id="target.context.value?.orderId"
+        :targeted="target.requested"
+        :busy="target.saving.value"
+        :can-attach="target.canAttach.value"
+        :can-prepare-offer="canPrepareOffer"
+        :limit="picker?.limit"
+        @prepare-offer="openManagerChild(personalOfferSelectionUrl(Object.keys(selected).map(Number), target.context.value?.orderId))"
+        @compare="openCompare"
+        @remove="removeSelection"
+        @clear="selected = {}; selectionError = ''"
+        @attach-target="attachToTarget"
+        @create-collection="collectionDialogOpen = true"
+        @attach-order="orderDialogOpen = true"
+        @create-order="quickOrderDialogOpen = true"
+      >
+        <template v-if="picker" #actions="{ disabled }">
+          <button type="button" class="min-h-10 flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="disabled" @click="finishPicker">Добавить выбранные</button>
+        </template>
+      </CatalogDecisionSelectionTray>
       <CatalogDecisionCompareDialog :open="compareOpen" :items="compareItems" :loading="compareLoading" :error="compareError" @close="closeCompare" />
-      <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && selected[detailItem.id])" :busy="target.saving.value || loading || Boolean(error)" :in-proposal="Boolean(detailItem && targetProductIds.includes(detailItem.id))" :selection-error="selectionError" show-public-link @toggle="toggleSelection" @close="detailItem = null" />
-      <CatalogDecisionCollectionDialog :open="collectionDialogOpen" :items="Object.values(selected)" @close="collectionDialogOpen = false" @created="collectionCreated" />
-      <CatalogDecisionOrderDialog :open="orderDialogOpen" :items="Object.values(selected)" @close="orderDialogOpen = false" @attached="orderAttached" />
-      <CatalogDecisionQuickOrderDialog :open="quickOrderDialogOpen" :items="Object.values(selected)" @close="quickOrderDialogOpen = false" @created="orderCreated" />
+      <CatalogDecisionProductDetailsDialog :open="Boolean(detailItem)" :item="detailItem" :selected="Boolean(detailItem && selected[detailItem.id])" :busy="target.saving.value || loading || Boolean(error)" :in-proposal="Boolean(detailItem && existingIds.includes(detailItem.id))" :selection-error="selectionError" show-public-link @toggle="toggleSelection" @close="detailItem = null" />
+      <template v-if="!picker">
+        <CatalogDecisionCollectionDialog :open="collectionDialogOpen" :items="Object.values(selected)" @close="collectionDialogOpen = false" @created="collectionCreated" />
+        <CatalogDecisionOrderDialog :open="orderDialogOpen" :items="Object.values(selected)" @close="orderDialogOpen = false" @attached="orderAttached" />
+        <CatalogDecisionQuickOrderDialog :open="quickOrderDialogOpen" :items="Object.values(selected)" @close="quickOrderDialogOpen = false" @created="orderCreated" />
+      </template>
     </div>
   </section>
 </template>
