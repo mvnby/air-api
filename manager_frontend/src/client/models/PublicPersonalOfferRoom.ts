@@ -6,6 +6,9 @@ import type { PublicPersonalOfferInstallation } from './PublicPersonalOfferInsta
 import type { PublicPersonalOfferOption } from './PublicPersonalOfferOption';
 export type PublicPersonalOfferRoom = {
     title: string;
+    selection_mode?: 'choice' | 'package';
+    equipment_total_byn?: (string | null);
+    total_with_installation_byn?: (string | null);
     installation: PublicPersonalOfferInstallation;
     options: Array<PublicPersonalOfferOption>;
 };

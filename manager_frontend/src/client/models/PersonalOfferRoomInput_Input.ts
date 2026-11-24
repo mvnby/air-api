@@ -6,6 +6,8 @@ import type { PersonalOfferInstallationInput_Input } from './PersonalOfferInstal
 import type { PersonalOfferOptionInput_Input } from './PersonalOfferOptionInput_Input';
 export type PersonalOfferRoomInput_Input = {
     title?: (string | null);
+    selection_mode?: 'choice' | 'package';
+    show_total?: boolean;
     installation: PersonalOfferInstallationInput_Input;
     options: Array<PersonalOfferOptionInput_Input>;
 };

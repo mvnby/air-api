@@ -26,7 +26,9 @@ from services.public_catalog_visibility_service import PublicProductProjection
 from services.spec_normalizer import normalize_specs
 
 
-def display_room_title(title: str | None, position: int, total: int) -> str:
+def display_room_title(title: str | None, position: int, total: int, *, is_package: bool = False) -> str:
+    if is_package:
+        return (title or "").strip() or ("Комплект оборудования" if total == 1 else f"Комплект {position}")
     default = "Подбор кондиционера" if total == 1 else f"Помещение {position}"
     return (title or "").strip() or default
 
@@ -131,15 +133,25 @@ class PersonalOfferProjection:
         result = []
         for position, room in enumerate(rooms, 1):
             installation = room.installation
+            is_package = room.selection_mode == "package"
+            equipment_total = sum((option.price_byn for option in room.options), Decimal(0)) if room.show_total else None
+            total_with_installation = (
+                equipment_total + installation.price_byn
+                if equipment_total is not None and installation.price_byn is not None
+                else None
+            )
             result.append(PublicPersonalOfferRoom(
-                title=display_room_title(room.title, position, len(rooms)),
+                title=display_room_title(room.title, position, len(rooms), is_package=is_package),
+                selection_mode=room.selection_mode,
+                equipment_total_byn=equipment_total,
+                total_with_installation_byn=total_with_installation,
                 installation=PublicPersonalOfferInstallation(
                     mode=installation.mode,
                     price_byn=installation.price_byn,
                     description=(installation.description or None) if installation.mode != "none" else None,
                 ),
                 options=[
-                    _display_option(option, products[option.product_id], installation.price_byn)
+                    _display_option(option, products[option.product_id], None if is_package else installation.price_byn)
                     for option in room.options
                 ],
             ))

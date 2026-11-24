@@ -15,6 +15,12 @@ const wifiName = { builtin: 'Встроенный', ready: 'Опциональн
     </div>
     <section v-for="(room, index) in offer.rooms" :key="index" class="space-y-2">
       <h3 class="break-words text-base font-semibold">{{ room.title }}</h3>
+      <p v-if="room.selection_mode === 'package'" class="text-sm">В комплект входят все модели</p>
+      <p v-else-if="room.options.length > 1" class="text-sm">Выберите одну модель</p>
+      <p v-if="room.equipment_total_byn != null" class="text-sm font-semibold">
+        {{ room.installation.mode === 'none' ? 'Итого за комплект' : 'Итого за оборудование' }}: {{ formatOfferMoney(room.equipment_total_byn) }}
+      </p>
+      <p v-if="room.total_with_installation_byn != null" class="text-sm font-semibold">Итого с монтажом: {{ formatOfferMoney(room.total_with_installation_byn) }}</p>
       <p v-if="room.installation.mode === 'unknown'" class="text-sm">Монтаж: стоимость уточним</p>
       <p v-if="room.installation.mode === 'fixed' && room.installation.price_byn !== null" class="text-sm">Монтаж: {{ formatOfferMoney(room.installation.price_byn) }}</p>
       <p v-if="room.installation.description" class="break-words text-sm">{{ room.installation.description }}</p>

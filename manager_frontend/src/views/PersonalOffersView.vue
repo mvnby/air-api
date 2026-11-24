@@ -16,6 +16,7 @@ import {
   positiveId,
   type Draft,
   type DraftRoom,
+  type OfferSelectionMode,
   type PersonalOffer,
   type PersonalOfferPreview,
 } from '../services/personal-offers';
@@ -38,7 +39,8 @@ const rooms = ref<DraftRoom[]>([newPersonalOfferRoom()]);
 const draftExpiry = ref(localOfferDate(new Date(Date.now() + 7 * 86_400_000)));
 const choices = ref<CatalogDecisionItem[]>([]);
 const roomKeys = ref([0]);
-const roomNames = computed(() => rooms.value.map((room, index) => room.title?.trim() || personalOfferRoomName(index, rooms.value.length)));
+const selectionMode = computed(() => rooms.value[0]?.selection_mode ?? 'choice');
+const roomNames = computed(() => rooms.value.map((room, index) => room.title?.trim() || personalOfferRoomName(index, rooms.value.length, selectionMode.value)));
 const optionCount = computed(() => rooms.value.reduce((count, room) => count + room.options.length, 0));
 let nextRoomKey = 1;
 const busy = ref(false);
@@ -151,9 +153,17 @@ async function searchModels(search: string) {
   }
 }
 
+function changeSelectionMode(event: Event) {
+  const mode = (event.target as HTMLSelectElement).value as OfferSelectionMode;
+  for (const room of rooms.value) {
+    room.selection_mode = mode;
+    if (mode === 'choice') room.show_total = false;
+  }
+}
+
 function addRoom() {
   if (rooms.value.length >= 24) return;
-  rooms.value.push(newPersonalOfferRoom());
+  rooms.value.push({ ...newPersonalOfferRoom(), selection_mode: selectionMode.value });
   roomKeys.value.push(nextRoomKey++);
 }
 
@@ -161,7 +171,9 @@ function removeRoom(index: number) {
   const removed = rooms.value[index];
   const destination = rooms.value[index === 0 ? 1 : 0];
   if (!removed || !destination) return;
-  const remaining = removed.options.filter(option => !destination.options.some(item => item.product_id === option.product_id));
+  const remaining = selectionMode.value === 'choice'
+    ? removed.options.filter(option => !destination.options.some(item => item.product_id === option.product_id))
+    : [];
   if (destination.options.length + remaining.length > 24) {
     error.value = 'Перенесите часть моделей в другие помещения перед удалением.';
     return;
@@ -174,9 +186,10 @@ function removeRoom(index: number) {
 function addOption(roomIndex: number, productId: number) {
   const product = choices.value.find(item => item.id === productId);
   const room = rooms.value[roomIndex];
-  if (!product || !room || room.options.some(option => option.product_id === productId)) return;
+  if (!product || !room) return;
+  if (selectionMode.value === 'choice' && room.options.some(option => option.product_id === productId)) return;
   if (room.options.length >= 24 || optionCount.value >= 48) {
-    error.value = 'Можно добавить до 24 вариантов в помещение и до 48 в предложение.';
+    error.value = 'Можно добавить до 24 моделей в одну группу и до 48 в предложение.';
     return;
   }
   error.value = '';
@@ -189,10 +202,10 @@ function moveOption(roomIndex: number, optionIndex: number, destination: number)
   const nextRoom = rooms.value[destination];
   if (!room || !option || !nextRoom) return;
   if (nextRoom.options.length >= 24) {
-    error.value = 'В помещении может быть до 24 вариантов.';
+    error.value = 'В группе может быть до 24 моделей.';
     return;
   }
-  if (nextRoom.options.some(item => item.product_id === option.product_id)) {
+  if (selectionMode.value === 'choice' && nextRoom.options.some(item => item.product_id === option.product_id)) {
     error.value = 'В этом помещении уже есть такая модель.';
     return;
   }
@@ -206,8 +219,11 @@ function draftFromForm(): Draft {
   if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now()) throw new Error('Укажите будущую дату окончания предложения.');
   const normalizedRooms = rooms.value.map((room, index) => {
     const title = room.title?.trim() || null;
-    const label = title ?? personalOfferRoomName(index, rooms.value.length);
+    const label = title ?? personalOfferRoomName(index, rooms.value.length, selectionMode.value);
     if (!room.options.length) throw new Error(label + ': добавьте хотя бы одну модель.');
+    if (selectionMode.value === 'choice' && new Set(room.options.map(option => option.product_id)).size !== room.options.length) {
+      throw new Error(label + ': уберите повторяющиеся модели.');
+    }
     const fixed = room.installation.mode === 'fixed';
     const installationPrice = fixed ? personalOfferMoney(room.installation.price_byn) : null;
     if (fixed && installationPrice === null) throw new Error(label + ': укажите цену монтажа в BYN.');
@@ -218,6 +234,8 @@ function draftFromForm(): Draft {
     });
     return {
       title,
+      selection_mode: selectionMode.value,
+      show_total: selectionMode.value === 'package' && Boolean(room.show_total),
       installation: {
         mode: room.installation.mode,
         price_byn: installationPrice,
@@ -325,7 +343,7 @@ onMounted(load);
               <strong>Предложение №{{ item.id }}<span v-if="item.order_id"> · Заказ №{{ item.order_id }}</span></strong>
               <span class="text-sm">{{ offerActive(item) ? 'Опубликовано' : item.published ? 'Срок истёк' : 'Черновик' }}</span>
             </div>
-            <p class="mt-1 break-words text-sm text-[var(--mv-text-muted)]">{{ item.rooms.map((room, index) => room.title || personalOfferRoomName(index, item.rooms.length)).join(' · ') }}</p>
+            <p class="mt-1 break-words text-sm text-[var(--mv-text-muted)]">{{ item.rooms.map((room, index) => room.title || personalOfferRoomName(index, item.rooms.length, room.selection_mode)).join(' · ') }}</p>
           </a>
         </li>
       </ul>
@@ -350,6 +368,17 @@ onMounted(load);
           <label class="block max-w-sm text-sm font-medium">Действует до
             <input v-model="draftExpiry" type="datetime-local" required class="field-input mt-1 w-full" />
           </label>
+          <div>
+            <label class="block max-w-sm text-sm font-medium">Как клиент выбирает
+              <select :value="selectionMode" class="field-input mt-1 w-full" @change="changeSelectionMode">
+                <option value="choice">Подбор по помещениям</option>
+                <option value="package">Готовые комплекты</option>
+              </select>
+            </label>
+            <p class="mt-1 text-sm text-[var(--mv-text-muted)]">{{ selectionMode === 'package'
+              ? 'Клиент выбирает один комплект целиком. Добавьте в каждый комплект все нужные модели.'
+              : 'Клиент выбирает по одной модели для каждого помещения.' }}</p>
+          </div>
           <PersonalOfferRoomEditor
             v-for="(room, index) in rooms"
             :key="roomKeys[index]"
@@ -366,7 +395,7 @@ onMounted(load);
           />
           <p v-if="searchStatus" role="status" class="text-sm">{{ searchStatus }}</p>
           <div class="flex flex-wrap gap-2">
-            <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">Добавить помещение</button>
+            <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">{{ selectionMode === 'package' ? 'Добавить комплект' : 'Добавить помещение' }}</button>
             <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">{{ busy ? 'Сохраняем…' : 'Сохранить и открыть предпросмотр' }}</button>
           </div>
         </fieldset>

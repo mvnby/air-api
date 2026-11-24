@@ -14,8 +14,11 @@ const emit = defineEmits<{
 
 const query = ref('');
 const candidate = ref('');
-const titlePlaceholder = computed(() => personalOfferRoomName(props.index, props.roomNames.length));
-const available = computed(() => props.choices.filter(choice => !props.room.options.some(option => option.product_id === choice.id)));
+const isPackage = computed(() => props.room.selection_mode === 'package');
+const titlePlaceholder = computed(() => personalOfferRoomName(props.index, props.roomNames.length, props.room.selection_mode));
+const available = computed(() => isPackage.value
+  ? props.choices
+  : props.choices.filter(choice => !props.room.options.some(option => option.product_id === choice.id)));
 const optionTitle = (id: number) => props.choices.find(choice => choice.id === id)?.title || 'Модель #' + id;
 
 function addModel() {
@@ -36,13 +39,13 @@ function moveModel(event: Event, from: number) {
   <section class="space-y-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4" :aria-labelledby="'offer-room-' + roomKey">
     <div class="flex flex-wrap items-end justify-between gap-2">
       <label class="min-w-0 flex-1 text-sm font-medium" :id="'offer-room-' + roomKey">
-        Название помещения
+        {{ isPackage ? 'Название комплекта' : 'Название помещения' }}
         <input v-model="room.title" type="text" :placeholder="titlePlaceholder" maxlength="100" class="field-input mt-1 w-full" />
       </label>
-      <button v-if="roomNames.length > 1" type="button" class="rounded-lg px-2 py-2 text-sm text-red-700 underline" @click="emit('remove')">Убрать помещение</button>
+      <button v-if="roomNames.length > 1" type="button" class="rounded-lg px-2 py-2 text-sm text-red-700 underline" @click="emit('remove')">{{ isPackage ? 'Убрать комплект' : 'Убрать помещение' }}</button>
     </div>
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-sm font-medium">Монтаж
+      <label class="text-sm font-medium">{{ isPackage ? 'Монтаж всего комплекта' : 'Монтаж' }}
         <select v-model="room.installation.mode" class="field-input mt-1 w-full">
           <option value="none">Только оборудование</option>
           <option value="unknown">Стоимость уточним</option>
@@ -56,8 +59,12 @@ function moveModel(event: Event, from: number) {
         <textarea v-model="room.installation.description" rows="2" maxlength="500" class="field-input mt-1 w-full" />
       </label>
     </div>
+    <label v-if="isPackage" class="flex items-center gap-2 text-sm font-medium">
+      <input v-model="room.show_total" type="checkbox" />
+      Показать итог комплекта
+    </label>
     <ul v-if="room.options.length" class="space-y-2">
-      <li v-for="(option, optionIndex) in room.options" :key="option.product_id" class="space-y-2 rounded-lg border border-[var(--mv-border)] p-3">
+      <li v-for="(option, optionIndex) in room.options" :key="optionIndex" class="space-y-2 rounded-lg border border-[var(--mv-border)] p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="min-w-0 break-words text-sm font-semibold">{{ optionTitle(option.product_id) }}</p>
           <div class="flex flex-wrap items-center gap-2">
@@ -74,7 +81,7 @@ function moveModel(event: Event, from: number) {
           <label class="text-sm font-medium">Цена, BYN
             <input v-model="option.price_byn" type="text" inputmode="decimal" maxlength="14" class="field-input mt-1 w-full" />
           </label>
-          <label class="text-sm font-medium">Пояснение для клиента
+          <label class="text-sm font-medium">{{ isPackage ? 'Помещение или пояснение для клиента' : 'Пояснение для клиента' }}
             <textarea v-model="option.note" rows="2" maxlength="500" class="field-input mt-1 w-full" />
           </label>
         </div>

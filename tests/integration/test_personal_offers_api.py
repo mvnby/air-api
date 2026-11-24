@@ -163,16 +163,33 @@ async def test_personal_offer_publication_lifecycle(async_client, db, monkeypatc
 
     product.price = 1650
     await db.commit()
-    draft_payload["rooms"] = [draft_payload["rooms"][1]]
+    draft_payload["rooms"] = [{
+        "selection_mode": "package",
+        "show_total": True,
+        "installation": {"mode": "fixed", "price_byn": "500.25"},
+        "options": [
+            {"product_id": product.id, "price_byn": "1520.10", "note": "Гостиная"},
+            {"product_id": product.id, "price_byn": "1520.20", "note": "Спальня"},
+        ],
+    }]
     edited = await async_client.put(
         manager_path, headers=headers, json={**draft_payload, "expected_version": first["version"]},
     )
     assert edited.status_code == 200, edited.text
     assert edited.json()["published"] == first["published"]
+    stale_manager = await async_client.put(
+        manager_path, headers=headers, json={**_draft(product.id, order.id), "expected_version": edited.json()["version"]},
+    )
+    assert stale_manager.status_code == 409, stale_manager.text
     assert (await async_client.get(public_path, headers=public_headers)).json() == projected
     new_preview = await async_client.post(f"{manager_path}/preview", headers=headers)
-    assert new_preview.json()["rooms"][0]["title"] == "Подбор кондиционера"
-    assert new_preview.json()["rooms"][0]["options"][0]["original_price_byn"] == "1650"
+    package = new_preview.json()["rooms"][0]
+    assert package["title"] == "Комплект оборудования"
+    assert package["selection_mode"] == "package"
+    assert package["equipment_total_byn"] == "3040.30"
+    assert package["total_with_installation_byn"] == "3540.55"
+    assert all(option["total_price_byn"] is None for option in package["options"])
+    assert package["options"][0]["original_price_byn"] == "1650"
 
     second_command = {"request_id": str(uuid4()), "expected_version": edited.json()["version"]}
     second = await async_client.post(f"{manager_path}/publish", headers=headers, json=second_command)
