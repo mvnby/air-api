@@ -64,6 +64,7 @@ const loading = ref(true);
 const initialized = ref(false);
 const error = ref('');
 const status = ref('');
+const publicationStatus = ref('');
 const manualCopy = ref(false);
 const linkField = ref<HTMLInputElement | null>(null);
 const copyLinkButton = ref<HTMLButtonElement | null>(null);
@@ -294,11 +295,13 @@ async function perform(action: OfferAction, run: () => Promise<boolean | void>) 
     return (await run()) !== false;
   } catch (err) {
     actionError.value = { action, message: getApiErrorMessage(err) };
-    await nextTick();
-    revealResult(actionErrorMessage.value, 'nearest');
     return false;
   } finally {
     pendingAction.value = null;
+    if (actionError.value?.action === action) {
+      await nextTick();
+      revealResult(actionErrorMessage.value, 'nearest');
+    }
   }
 }
 
@@ -321,20 +324,21 @@ async function savePreview() {
 async function publish() {
   if (!preview.value || !offer.value || dirty.value || busy.value) return;
   if (offerActive(offer.value) && !await confirmDialog({
-    title: 'Опубликовать новую ссылку?',
+    title: 'Заменить ссылку?',
     description: 'Предыдущая ссылка перестанет работать.',
-    confirmText: 'Опубликовать',
+    confirmText: 'Заменить ссылку',
   })) return;
   if (!await perform('publish', async () => {
     if (!offer.value || dirty.value || !preview.value) return false;
+    publicationStatus.value = '';
     const { id, version } = offer.value;
     if (publicationRequest?.version !== version) publicationRequest = { version, id: crypto.randomUUID() };
     offer.value = await personalOffersApi.publish(id, version, publicationRequest.id);
     publicationRequest = undefined;
-    status.value = 'Предложение опубликовано. Ссылку можно отправить клиенту.';
+    publicationStatus.value = 'Предложение опубликовано. Ссылку можно отправить клиенту.';
   })) return;
   await nextTick();
-  revealResult(copyLinkButton.value, 'center');
+  revealResult(copyLinkButton.value, 'nearest');
 }
 
 async function revoke() {
@@ -343,18 +347,21 @@ async function revoke() {
     description: 'Клиент больше не сможет открыть предложение по этой ссылке.',
     confirmText: 'Отозвать',
   })) return;
-  await perform('revoke', async () => {
+  if (!await perform('revoke', async () => {
     if (!offer.value) return;
+    publicationStatus.value = '';
     offer.value = await personalOffersApi.revoke(offer.value.id, offer.value.version);
-    status.value = 'Ссылка отозвана.';
-  });
+    publicationStatus.value = 'Ссылка отозвана.';
+  })) return;
+  await nextTick();
+  revealResult(previewResult.value, 'nearest');
 }
 
 async function copyLink() {
   try {
     await navigator.clipboard.writeText(publicationUrl.value);
     manualCopy.value = false;
-    status.value = 'Ссылка скопирована.';
+    publicationStatus.value = 'Ссылка скопирована.';
   } catch {
     manualCopy.value = true;
     linkField.value?.focus();
@@ -374,7 +381,10 @@ onMounted(load);
         <h1 class="text-2xl font-bold">{{ editing ? 'Персональное предложение' : 'Персональные предложения' }}</h1>
         <a v-if="currentOrderId" :href="'/manager/orders/kanban?orderId=' + currentOrderId" class="text-sm underline">Заказ №{{ currentOrderId }}</a>
       </div>
-      <a v-if="editing" :href="listUrl" class="text-sm font-semibold underline" @click.prevent="navigateManager(listUrl)">Все предложения</a>
+      <div v-if="editing" class="flex flex-wrap gap-3 text-sm font-semibold">
+        <a v-if="publicationUrl && initialized" href="#offer-publication" class="underline" @click.prevent="revealResult(copyLinkButton && !copyLinkButton.disabled ? copyLinkButton : previewResult, 'start')">К опубликованной ссылке</a>
+        <a :href="listUrl" class="underline" @click.prevent="navigateManager(listUrl)">Все предложения</a>
+      </div>
       <a v-else href="/manager/catalog-decision" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">Перейти к подбору</a>
     </header>
 
@@ -402,19 +412,6 @@ onMounted(load);
     </template>
 
     <template v-else-if="initialized && editing">
-      <section v-if="offer?.published && publicationUrl" class="space-y-2 rounded-xl border border-[var(--mv-border)] p-4">
-        <h2 class="text-base font-bold">Опубликованная ссылка</h2>
-        <p class="text-sm">{{ offerActive(offer) ? 'Действует до' : 'Срок истёк' }} {{ formatOfferDate(offer.published.expires_at) }}</p>
-        <div class="flex flex-wrap gap-2">
-          <input ref="linkField" readonly :value="publicationUrl" aria-label="Ссылка на предложение" class="field-input min-w-0 flex-1" @focus="($event.target as HTMLInputElement).select()" />
-          <button ref="copyLinkButton" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white" :disabled="!offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
-          <button v-if="offerActive(offer) && !readOnly" type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm" :disabled="busy" @click="revoke">Отозвать</button>
-        </div>
-        <a :href="publicationUrl" target="_blank" rel="noopener noreferrer" class="text-sm underline">Открыть клиентскую страницу</a>
-        <p v-if="manualCopy" role="status" class="text-sm">Скопируйте выделенную ссылку вручную.</p>
-        <p v-if="actionError?.action === 'revoke'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
-      </section>
-
       <form class="space-y-4" @submit.prevent="savePreview">
         <fieldset class="space-y-4" :disabled="busy || readOnly">
           <label class="block max-w-sm text-sm font-medium">Действует до
@@ -446,24 +443,41 @@ onMounted(load);
             @remove-option="room.options.splice($event, 1)"
             @move-option="(optionIndex, destination) => moveOption(index, optionIndex, destination)"
           />
-          <p v-if="actionError?.action === 'preview'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">{{ selectionMode === 'package' ? 'Добавить комплект' : 'Добавить помещение' }}</button>
             <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">{{ pendingAction === 'preview' ? 'Сохраняем…' : 'Сохранить и открыть предпросмотр' }}</button>
           </div>
+          <p v-if="actionError?.action === 'preview'" ref="actionErrorMessage" role="alert" tabindex="-1" class="scroll-mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
         </fieldset>
       </form>
-      <template v-if="preview">
-        <div ref="previewResult" role="group" tabindex="-1" aria-labelledby="offer-preview-heading" class="scroll-mt-24">
-          <PersonalOfferPreviewPanel :offer="preview" />
+      <section v-if="preview || publicationUrl || publicationStatus" ref="previewResult" tabindex="-1" aria-labelledby="offer-preview-heading" class="scroll-mt-24 space-y-4 rounded-xl border border-[var(--mv-border)] bg-[var(--mv-surface)] p-4">
+        <header>
+          <h2 id="offer-preview-heading" class="text-lg font-bold">{{ preview ? 'Клиентский предпросмотр' : 'Публикация' }}</h2>
+          <p v-if="preview" class="text-sm text-[var(--mv-text-muted)]">Действует до {{ formatOfferDate(preview.expires_at) }}</p>
+        </header>
+        <div id="offer-publication" class="scroll-mt-24 space-y-2">
+          <p v-if="publicationStatus" role="status" class="text-sm">{{ publicationStatus }}</p>
+          <template v-if="offer?.published && publicationUrl">
+            <label for="offer-link" class="block text-sm font-semibold">Опубликованная ссылка</label>
+            <p v-if="!preview || preview.expires_at !== offer.published.expires_at || !offerActive(offer)" class="text-sm text-[var(--mv-text-muted)]">{{ offerActive(offer) ? 'Действует до' : 'Срок истёк' }} {{ formatOfferDate(offer.published.expires_at) }}</p>
+            <div class="flex flex-wrap gap-2">
+              <input id="offer-link" ref="linkField" readonly :value="publicationUrl" aria-label="Ссылка на предложение" class="field-input min-w-0 basis-full sm:flex-1" @focus="($event.target as HTMLInputElement).select()" />
+              <button ref="copyLinkButton" type="button" class="scroll-mt-24 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="!offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
+            </div>
+            <p v-if="manualCopy" role="status" class="text-sm">Скопируйте выделенную ссылку вручную.</p>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <a :href="publicationUrl" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-9 items-center underline">Открыть клиентскую страницу</a>
+              <template v-if="offerActive(offer) && !readOnly">
+                <button v-if="preview" type="button" class="min-h-9 underline disabled:opacity-50" :disabled="busy || dirty" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Заменить ссылку' }}</button>
+                <button type="button" class="min-h-9 underline disabled:opacity-50" :disabled="busy" @click="revoke">Отозвать</button>
+              </template>
+            </div>
+          </template>
+          <button v-if="preview && offer && !offerActive(offer)" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Опубликовать' }}</button>
+          <p v-if="actionError?.action === 'publish' || actionError?.action === 'revoke'" ref="actionErrorMessage" role="alert" tabindex="-1" class="scroll-mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
         </div>
-        <div class="space-y-2">
-          <p v-if="actionError?.action === 'publish'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
-          <button type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">
-            {{ pendingAction === 'publish' ? 'Публикуем…' : offer && offerActive(offer) ? 'Опубликовать новую ссылку' : 'Опубликовать' }}
-          </button>
-        </div>
-      </template>
+        <PersonalOfferPreviewPanel v-if="preview" :offer="preview" />
+      </section>
     </template>
   </section>
   </div>

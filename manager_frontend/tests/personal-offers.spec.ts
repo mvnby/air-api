@@ -12,7 +12,7 @@ import { ManagerOrdersService } from '../src/client';
 import * as feedback from '../src/services/ui-feedback';
 
 const products = [
-  { id: 41, title: 'Air 07 Бюджет', retail_price_byn: 1570 },
+  { id: 41, title: 'Air 07 Бюджет', retail_price_byn: 1570, main_image: 'https://mvn.by/images/fixture-07.webp' },
   { id: 42, title: 'Air 07 Тихий', retail_price_byn: 1740 },
   { id: 43, title: 'Air 12 Зал', retail_price_byn: 1910 },
   { id: 44, title: 'Air 09 Баня', retail_price_byn: 1600 },
@@ -163,6 +163,8 @@ it('groups models, previews editable room names and all installation modes, then
   const modelPrice = model.get<HTMLInputElement>('input[inputmode=decimal]');
   expect(Number(modelPrice.element.value)).toBe(1570);
   await modelPrice.setValue('1520,00');
+  expect(model.get('details').element.open).toBe(false);
+  model.get('details').element.open = true;
   await model.get('textarea').setValue('Короткое пояснение клиенту');
 
   await button(wrapper, 'Добавить помещение').trigger('click');
@@ -220,7 +222,7 @@ it('groups models, previews editable room names and all installation modes, then
   await savePreview(wrapper);
   expect(roomNamesInPreview(wrapper)).toEqual(['Помещение 1', 'Помещение 2', 'Баня']);
   expect(api.snapshot()!.rooms[0].title).toBe('Зал');
-  await button(wrapper, 'Опубликовать новую ссылку').trigger('click');
+  await button(wrapper, 'Заменить ссылку').trigger('click');
   await flushPromises();
   expect(api.confirm).toHaveBeenCalledTimes(1);
   expect(link(wrapper).element.value).toBe(shareUrl('2'));
@@ -297,9 +299,52 @@ it('moves focus from the editor to the preview and then to the published link ac
   expect(document.activeElement).not.toBe(document.body);
   expect(document.activeElement?.contains(previewHeading)).toBe(true);
 
+  const publication = wrapper.get('#offer-publication');
+  expect(publication.element.contains(button(wrapper, 'Опубликовать').element)).toBe(true);
+  expect(publication.element.nextElementSibling?.querySelector('h3')).not.toBeNull();
+  await button(publication, 'Опубликовать').trigger('click');
+  await flushPromises();
+  expect(document.activeElement).toBe(button(publication, 'Скопировать ссылку').element);
+  expect(publication.get('[role="status"]').text()).toBe('Предложение опубликовано. Ссылку можно отправить клиенту.');
+  expect(publication.findAll('button').map(element => element.text())).toEqual([
+    'Скопировать ссылку', 'Заменить ссылку', 'Отозвать',
+  ]);
+});
+
+it('keeps a model photo, price and expanded note with the row when ordering the offer', async () => {
+  const api = mockOfferApi();
+  const wrapper = await openEditor('?products=41,42,43');
+  const first = modelInRoom(wrapper, 0, products[0].title);
+  expect(first.get('img').attributes('src')).toBe(products[0].main_image);
+  await first.get('input').setValue('1530');
+  first.get('details').element.open = true;
+  await first.get('textarea').setValue('Для гостиной');
+
+  const last = modelInRoom(wrapper, 0, products[2].title);
+  const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+  await first.get('[draggable]').trigger('dragstart', { dataTransfer });
+  await last.trigger('dragover', { dataTransfer });
+  await last.trigger('drop', { dataTransfer });
+  expect(roomsInEditor(wrapper)[0].findAll('li').at(-1)?.element).toBe(first.element);
+
+  await first.get('[aria-label="Поднять Air 07 Бюджет"]').trigger('click');
+  expect(roomsInEditor(wrapper)[0].findAll('li')[1].element).toBe(first.element);
+  expect(first.get('details').element.open).toBe(true);
+  await savePreview(wrapper);
+  const previewOptions = wrapper.get('#offer-publication').element.nextElementSibling!.querySelectorAll('li');
+  expect(Array.from(previewOptions, row => row.querySelector('p')?.textContent)).toEqual([
+    products[1].title, products[0].title, products[2].title,
+  ]);
+  expect(api.create.mock.calls[0][0].rooms[0].options).toEqual([
+    { product_id: 42, price_byn: '1740', note: null },
+    { product_id: 41, price_byn: '1530', note: 'Для гостиной' },
+    { product_id: 43, price_byn: '1910', note: null },
+  ]);
   await button(wrapper, 'Опубликовать').trigger('click');
   await flushPromises();
-  expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+  expect(api.snapshot()!.rooms[0].options.map(option => option.title)).toEqual([
+    products[1].title, products[0].title, products[2].title,
+  ]);
 });
 
 it('uses a single proposal mode and opts into the total separately for each package', async () => {

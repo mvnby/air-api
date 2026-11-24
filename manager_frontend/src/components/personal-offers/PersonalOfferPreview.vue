@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatOfferDate, formatOfferMoney, type PersonalOfferPreview } from '../../services/personal-offers';
+import { formatOfferMoney, type PersonalOfferPreview } from '../../services/personal-offers';
 import { productReaderUrl } from '../../services/product-reader-api';
 
 defineProps<{ offer: PersonalOfferPreview }>();
@@ -8,11 +8,7 @@ const wifiName = { builtin: 'Встроенный', ready: 'Опциональн
 </script>
 
 <template>
-  <section class="space-y-4 rounded-xl border border-[var(--mv-border)] p-4" aria-labelledby="offer-preview-heading">
-    <div>
-      <h2 id="offer-preview-heading" class="text-lg font-bold">Клиентский предпросмотр</h2>
-      <p class="text-sm text-[var(--mv-text-muted)]">Действует до {{ formatOfferDate(offer.expires_at) }}</p>
-    </div>
+  <div class="space-y-4">
     <section v-for="(room, index) in offer.rooms" :key="index" class="space-y-2">
       <h3 class="break-words text-base font-semibold">{{ room.title }}</h3>
       <p v-if="room.selection_mode === 'package'" class="text-sm">В комплект входят все модели</p>
@@ -42,5 +38,5 @@ const wifiName = { builtin: 'Встроенный', ready: 'Опциональн
         </li>
       </ul>
     </section>
-  </section>
+  </div>
 </template>

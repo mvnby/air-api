@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, useSlots } from 'vue';
-import { ChevronDown } from 'lucide-vue-next';
+import { ChevronDown, Plus } from 'lucide-vue-next';
 import type { CatalogDecisionItem, CatalogDecisionSort } from '../../services/catalog-decision-api';
 import CatalogMoney from './CatalogMoney.vue';
 
@@ -12,6 +12,7 @@ const props = defineProps<{
   busy?: boolean;
   existingIds?: number[];
   hasFormFilter?: boolean;
+  offerPicker?: boolean;
 }>();
 const emit = defineEmits<{
   sort: [value: CatalogDecisionSort];
@@ -74,7 +75,7 @@ const sortOptions: Array<{ key: CatalogDecisionSort; label: string }> = [
             <p v-if="identity(item)" class="mt-1 text-xs text-gray-500">{{ identity(item) }}</p>
             <p class="mt-1 text-xs leading-5 text-gray-600">{{ specs(item) }}</p>
           </div>
-          <button type="button" class="h-9 shrink-0 rounded-lg border px-2 text-xs font-semibold disabled:cursor-default disabled:border-[var(--kitlane-border)] disabled:bg-[var(--kitlane-bg)] disabled:text-[var(--kitlane-muted)]" :class="selected(item.id) ? 'border-[var(--kitlane-accent)] bg-[var(--kitlane-accent)] text-white' : 'border-[var(--kitlane-control-border)] text-[var(--kitlane-accent-text)] hover:bg-[var(--kitlane-accent-soft)]'" :aria-pressed="selected(item.id)" :disabled="busy || inProposal(item.id)" @click="emit('toggle', item)">{{ inProposal(item.id) ? 'В предложении' : selected(item.id) ? 'Выбран' : 'Выбрать' }}</button>
+          <button type="button" class="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs font-semibold disabled:cursor-default disabled:border-[var(--kitlane-border)] disabled:bg-[var(--kitlane-bg)] disabled:text-[var(--kitlane-muted)]" :class="selected(item.id) ? 'border-[var(--kitlane-accent)] bg-[var(--kitlane-accent)] text-white' : 'border-[var(--kitlane-control-border)] text-[var(--kitlane-accent-text)] hover:bg-[var(--kitlane-accent-soft)]'" :aria-pressed="selected(item.id)" :disabled="busy || inProposal(item.id)" @click="emit('toggle', item)"><Plus v-if="offerPicker && !inProposal(item.id) && !selected(item.id)" class="h-3.5 w-3.5" aria-hidden="true" />{{ inProposal(item.id) ? 'В предложении' : selected(item.id) ? 'Выбран' : 'Выбрать' }}</button>
         </div>
         <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-gray-100 pt-2 text-sm">
           <span class="text-gray-500">Цена клиенту</span><strong class="text-right"><CatalogMoney :value="item.retail_price_byn" /></strong>
@@ -108,7 +109,7 @@ const sortOptions: Array<{ key: CatalogDecisionSort; label: string }> = [
         </thead>
         <tbody class="divide-y divide-gray-100">
           <tr v-for="item in items" :key="item.id" :class="selected(item.id) ? 'bg-[var(--kitlane-accent-soft)]' : ''">
-            <td class="px-3 py-3"><button type="button" class="rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:cursor-default disabled:border-[var(--kitlane-border)] disabled:bg-[var(--kitlane-bg)] disabled:text-[var(--kitlane-muted)]" :class="selected(item.id) ? 'border-[var(--kitlane-accent)] bg-[var(--kitlane-accent)] text-white' : 'border-[var(--kitlane-control-border)] text-[var(--kitlane-accent-text)] hover:bg-[var(--kitlane-accent-soft)]'" :aria-pressed="selected(item.id)" :disabled="busy || inProposal(item.id)" @click="emit('toggle', item)">{{ inProposal(item.id) ? 'В предложении' : selected(item.id) ? 'Выбран' : 'Добавить' }}</button></td>
+            <td class="px-3 py-3"><button type="button" class="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:cursor-default disabled:border-[var(--kitlane-border)] disabled:bg-[var(--kitlane-bg)] disabled:text-[var(--kitlane-muted)]" :class="selected(item.id) ? 'border-[var(--kitlane-accent)] bg-[var(--kitlane-accent)] text-white' : 'border-[var(--kitlane-control-border)] text-[var(--kitlane-accent-text)] hover:bg-[var(--kitlane-accent-soft)]'" :aria-pressed="selected(item.id)" :disabled="busy || inProposal(item.id)" @click="emit('toggle', item)"><Plus v-if="offerPicker && !inProposal(item.id) && !selected(item.id)" class="h-3.5 w-3.5" aria-hidden="true" />{{ inProposal(item.id) ? 'В предложении' : selected(item.id) ? 'Выбран' : offerPicker ? 'Выбрать' : 'Добавить' }}</button></td>
             <td class="min-w-72 px-3 py-3"><div class="flex gap-2.5"><img v-if="item.main_image" :src="item.main_image" alt="" class="h-12 w-12 shrink-0 rounded-md bg-gray-50 object-contain"><div class="min-w-0"><button type="button" class="text-left font-semibold text-[var(--kitlane-accent-text)] hover:underline" :aria-label="`Открыть карточку ${item.title}`" @click="emit('details', item)">{{ item.title }}</button><div v-if="identity(item)" class="mt-0.5 text-xs text-gray-500">{{ identity(item) }}</div><div class="mt-1 text-xs leading-5 text-gray-600">{{ specs(item) }}</div></div></div></td>
             <td class="px-3 py-3 font-semibold"><CatalogMoney :value="item.retail_price_byn" /></td>
             <td class="px-3 py-3"><CatalogMoney :value="item.purchase_cost_byn" /></td>
