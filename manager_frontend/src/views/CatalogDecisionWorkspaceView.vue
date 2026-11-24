@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { LoaderCircle } from 'lucide-vue-next';
 import ManagerContextHeader from '../components/manager/ManagerContextHeader.vue';
 import BynSymbol from '../components/money/BynSymbol.vue';
 import CatalogDecisionFilters from '../components/catalog-decision/CatalogDecisionFilters.vue';
@@ -8,6 +9,7 @@ import CatalogDecisionOrderDialog from '../components/catalog-decision/CatalogDe
 import CatalogDecisionQuickOrderDialog from '../components/catalog-decision/CatalogDecisionQuickOrderDialog.vue';
 import CatalogDecisionSelectionTray from '../components/catalog-decision/CatalogDecisionSelectionTray.vue';
 import CatalogDecisionTable from '../components/catalog-decision/CatalogDecisionTable.vue';
+import CatalogDecisionSortControl from '../components/catalog-decision/CatalogDecisionSortControl.vue';
 import CatalogDecisionCompareDialog from '../components/catalog-decision/CatalogDecisionCompareDialog.vue';
 import CatalogDecisionProductDetailsDialog from '../components/catalog-decision/CatalogDecisionProductDetailsDialog.vue';
 import CatalogDecisionPublicLink from '../components/catalog-decision/CatalogDecisionPublicLink.vue';
@@ -246,27 +248,32 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <p v-if="success" class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><span>{{ success.message }}</span><a class="font-semibold underline underline-offset-2" :href="success.href">{{ success.label }}</a></p>
       <CatalogDecisionFilters :reset-key="filterResetKey" :model-value="filters" :brands="brands" :series="series" @update:model-value="updateFilters" @reset="reset" />
       <p v-if="filterOptionsError" role="alert" class="flex items-center gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{{ filterOptionsError }}<button type="button" class="font-semibold underline" @click="loadFilterOptions">Повторить</button></p>
-      <div class="flex flex-wrap items-center gap-1.5" aria-label="Выбранные фильтры">
-        <button v-for="chip in chips" :key="chip.key" type="button" class="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-2 py-1 text-xs text-brand-900 hover:bg-brand-100" :aria-label="`Снять фильтр: ${chip.label}`" @click="updateFilters(chip.remove())">{{ chip.label.endsWith(' BYN') ? chip.label.slice(0, -4) : chip.label }}<template v-if="chip.label.endsWith(' BYN')"><span class="sr-only"> BYN</span><BynSymbol /></template><span aria-hidden="true">×</span></button>
-        <button type="button" class="ml-1 text-xs text-gray-600 underline underline-offset-2" @click="reset">Сбросить всё</button>
-      </div>
       <p v-if="error || selectionError" role="alert" class="rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ error || selectionError }} <button v-if="error" type="button" class="ml-2 font-semibold underline" @click="load">Повторить</button></p>
-      <div class="relative min-h-48" :aria-busy="loading">
-        <p class="min-h-5 text-xs text-gray-500" role="status">{{ loading ? 'Обновляем каталог…' : error ? 'Результаты не обновлены. Повторите загрузку.' : '' }}</p>
-        <div :class="loading || error ? 'pointer-events-none opacity-50' : ''" :inert="loading || Boolean(error)">
-          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="existingIds" :offer-picker="Boolean(picker)" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
+      <div class="space-y-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5" role="group" aria-label="Управление результатами подбора">
+          <div class="flex flex-wrap items-center gap-x-1.5" role="group" aria-label="Выбранные фильтры">
+            <button v-for="chip in chips" :key="chip.key" type="button" class="inline-flex min-h-8 items-center gap-1 rounded-lg bg-brand-50 px-2 text-xs text-brand-900 hover:bg-brand-100" :aria-label="`Снять фильтр: ${chip.label}`" @click="updateFilters(chip.remove())">{{ chip.label.endsWith(' BYN') ? chip.label.slice(0, -4) : chip.label }}<template v-if="chip.label.endsWith(' BYN')"><span class="sr-only"> BYN</span><BynSymbol /></template><span aria-hidden="true">×</span></button>
+            <button type="button" class="min-h-8 px-1 text-xs text-[var(--kitlane-muted)] underline underline-offset-2" @click="reset">Сбросить всё</button>
+          </div>
+          <div class="relative flex min-w-0 items-center pr-5 sm:ml-auto">
+            <p class="sr-only" role="status">{{ loading ? 'Обновляем каталог…' : '' }}</p>
+            <LoaderCircle v-if="loading" class="absolute right-0 size-3.5 text-[var(--kitlane-accent-text)] motion-safe:animate-spin" aria-hidden="true" />
+            <CatalogDecisionSortControl :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" @sort="changeSort" />
+          </div>
+        </div>
+        <div :aria-busy="loading" :class="loading || error ? 'pointer-events-none opacity-50' : ''" :inert="loading || Boolean(error)">
+          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="existingIds" :offer-picker="Boolean(picker)" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
             <template #empty><div v-if="!loading && !error" class="rounded-xl border border-dashed border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
               <p class="font-semibold text-gray-900">Подтверждённых комплектов по этим условиям нет</p>
               <p class="mt-2">В подбор попадают только подтверждённые комплекты сплит-систем. Технические фильтры не ослабляются автоматически.</p>
               <p class="mt-1">Применённые ограничения показаны выше. Можно снять отдельный фильтр или явно изменить условия.</p>
             </div></template>
-            <template #actions="{ item }"><CatalogDecisionPublicLink :item="item" /></template>
+            <template #actions="{ item, compact }"><CatalogDecisionPublicLink :item="item" :compact="compact" /></template>
           </CatalogDecisionTable>
         </div>
-        <div v-if="!loading && !error && !items.length" class="mt-2 flex flex-wrap justify-center gap-3 text-sm">
+        <div v-if="!loading && !error && !items.length && (filters.search || !filters.includeOrderable)" class="mt-2 flex flex-wrap justify-center gap-3 text-sm">
           <button v-if="filters.search" type="button" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="updateFilters({ ...filters, search: undefined })">Убрать поисковый запрос</button>
           <button v-if="!filters.includeOrderable" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="updateFilters({ ...filters, includeOrderable: true })">Показать также заказные</button>
-          <button class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-brand-700" @click="reset">Сбросить фильтры</button>
         </div>
       </div>
       <p v-if="canManageCatalog" class="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">Не хватает нужной модели? Неполные или неподтверждённые данные о комплекте и мощности могут исключать её из подбора. <a href="/manager/products" class="font-semibold underline underline-offset-2">Проверить в управлении каталогом</a></p>

@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
+import CatalogDecisionSortControl from '../src/components/catalog-decision/CatalogDecisionSortControl.vue';
 import CatalogDecisionTable from '../src/components/catalog-decision/CatalogDecisionTable.vue';
 import type { CatalogDecisionItem } from '../src/services/catalog-decision-api';
 
@@ -31,26 +32,37 @@ const item: CatalogDecisionItem = {
   is_published: true,
 };
 
-describe('CatalogDecisionTable', () => {
+describe('CatalogDecisionSortControl', () => {
   it('does not claim other forms are included when an explicit form filter applies', () => {
-    const wrapper = mount(CatalogDecisionTable, { props: { items: [], selectedIds: [], sort: 'recommended', direction: 'asc', hasFormFilter: true } });
+    const wrapper = mount(CatalogDecisionSortControl, { props: { sort: 'recommended', direction: 'asc', hasFormFilter: true } });
     expect(wrapper.text()).not.toContain('Другие формы блоков тоже в подборе');
     expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(false);
     expect(wrapper.get('select[aria-label="Сортировать модели"]').element.value).toBe('recommended');
   });
   it('offers wall-first ordering on every screen without a reverse control or a form restriction', async () => {
-    const cassette = { ...item, id: 2, title: 'Cassette', indoor_form_factor: 'cassette' };
-    const wrapper = mount(CatalogDecisionTable, { props: { items: [item, cassette], selectedIds: [], sort: 'recommended', direction: 'asc' } });
+    const wrapper = mount(CatalogDecisionSortControl, { props: { sort: 'recommended', direction: 'asc' } });
     expect(wrapper.get('select[aria-label="Сортировать модели"]').element.value).toBe('recommended');
-    expect(wrapper.get('section[aria-label="Сортировка каталога"]').classes()).not.toContain('md:hidden');
     expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Другие формы блоков тоже в подборе');
-    expect(wrapper.text()).toContain('Cassette');
     await wrapper.setProps({ sort: 'cooling_power', direction: 'desc' });
-    expect(wrapper.find('button[aria-label^="Изменить порядок"]').exists()).toBe(true);
+    await wrapper.get('button[aria-label^="Изменить порядок"]').trigger('click');
+    expect(wrapper.emitted('sort')?.at(-1)).toEqual(['cooling_power']);
     await wrapper.get('select[aria-label="Сортировать модели"]').setValue('recommended');
     expect(wrapper.emitted('sort')?.at(-1)).toEqual(['recommended']);
   });
+
+  it('offers purchase and margin sorting on narrow screens', async () => {
+    const wrapper = mount(CatalogDecisionSortControl, { props: { sort: 'title', direction: 'asc' } });
+
+    expect(wrapper.text()).toContain('Сортировка');
+    expect(wrapper.text()).toContain('Закупка');
+    expect(wrapper.text()).toContain('Маржа %');
+    await wrapper.get('select[aria-label="Сортировать модели"]').setValue('purchase_cost');
+    expect(wrapper.emitted('sort')?.at(-1)).toEqual(['purchase_cost']);
+  });
+});
+
+describe('CatalogDecisionTable', () => {
   it('keeps commercial precision and the accessible BYN text together', () => {
     const wrapper = mount(CatalogDecisionTable, { props: { items: [item], selectedIds: [], sort: 'title', direction: 'asc' } });
 
@@ -64,6 +76,10 @@ describe('CatalogDecisionTable', () => {
 
     expect(wrapper.get('th[aria-sort="ascending"]').text()).toContain('Модель');
     expect(wrapper.findAll('button[aria-pressed="true"]').some(button => button.text().includes('Выбран'))).toBe(true);
+    const desktopSelection = wrapper.get('tbody button[aria-label="Выбрать Gree Pular 12"]');
+    expect(desktopSelection.attributes('aria-pressed')).toBe('true');
+    await desktopSelection.trigger('click');
+    expect(wrapper.emitted('toggle')).toEqual([[item]]);
     await wrapper.get('button[aria-label="Открыть карточку Gree Pular 12"]').trigger('click');
     expect(wrapper.emitted('details')).toEqual([[item]]);
   });
@@ -89,15 +105,5 @@ describe('CatalogDecisionTable', () => {
 
     expect(wrapper.text()).toContain('Цена клиенту0 BYN');
     expect(wrapper.text()).toContain('Закупка—');
-  });
-
-  it('offers purchase and margin sorting on narrow screens', async () => {
-    const wrapper = mount(CatalogDecisionTable, { props: { items: [item], selectedIds: [], sort: 'title', direction: 'asc' } });
-
-    expect(wrapper.text()).toContain('Сортировка');
-    expect(wrapper.text()).toContain('Закупка');
-    expect(wrapper.text()).toContain('Маржа %');
-    await wrapper.get('select[aria-label="Сортировать модели"]').setValue('purchase_cost');
-    expect(wrapper.emitted('sort')?.at(-1)).toEqual(['purchase_cost']);
   });
 });
