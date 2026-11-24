@@ -28,7 +28,7 @@ const optionTitle = (id: number) => products.value.get(id)?.title || 'Модел
 const optionKeys = new WeakMap<DraftOption, number>();
 let nextOptionKey = 0;
 const draggedOption = ref<DraftOption | null>(null);
-const dropIndex = ref<number | null>(null);
+const dropSlot = ref<number | null>(null);
 const reorderStatus = ref('');
 
 function optionKey(option: DraftOption) {
@@ -62,22 +62,46 @@ function startDrag(event: DragEvent, option: DraftOption) {
   event.dataTransfer.setData('text/plain', '');
 }
 
-function dragOver(event: DragEvent, index: number) {
+function dragOver(event: DragEvent) {
   if (!draggedOption.value || !event.dataTransfer) return;
   event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-  dropIndex.value = index;
+  const list = event.currentTarget as HTMLUListElement;
+  const nextRow = Array.from(list.children).findIndex(row => {
+    const { top, height } = row.getBoundingClientRect();
+    return event.clientY < top + height / 2;
+  });
+  const slot = nextRow < 0 ? props.room.options.length : nextRow;
+  const from = props.room.options.indexOf(draggedOption.value);
+  const canMove = from >= 0 && slot !== from && slot !== from + 1;
+  event.dataTransfer.dropEffect = canMove ? 'move' : 'none';
+  dropSlot.value = canMove ? slot : null;
+}
+
+function dragLeave(event: DragEvent) {
+  const list = event.currentTarget as HTMLUListElement;
+  if (event.relatedTarget instanceof Node) {
+    if (!list.contains(event.relatedTarget)) dropSlot.value = null;
+    return;
+  }
+  const { top, bottom, left, right } = list.getBoundingClientRect();
+  if (event.clientY < top || event.clientY >= bottom || event.clientX < left || event.clientX >= right) {
+    dropSlot.value = null;
+  }
 }
 
 function endDrag() {
   draggedOption.value = null;
-  dropIndex.value = null;
+  dropSlot.value = null;
 }
 
-function dropOption(event: DragEvent, index: number) {
+function dropOption(event: DragEvent) {
   if (!draggedOption.value) return;
   event.preventDefault();
-  reorderOption(props.room.options.indexOf(draggedOption.value), index);
+  if (dropSlot.value !== null) {
+    const from = props.room.options.indexOf(draggedOption.value);
+    const to = dropSlot.value > from ? dropSlot.value - 1 : dropSlot.value;
+    reorderOption(from, to);
+  }
   endDrag();
 }
 
@@ -117,14 +141,15 @@ function moveModel(event: Event, from: number) {
       Показать итог комплекта
     </label>
     <p class="sr-only" role="status">{{ reorderStatus }}</p>
-    <ul v-if="room.options.length" class="space-y-2" @dragleave.self="dropIndex = null">
+    <ul v-if="room.options.length" class="flex flex-col gap-2" @dragover="dragOver" @dragleave="dragLeave" @drop="dropOption">
       <li
         v-for="(option, optionIndex) in room.options"
         :key="optionKey(option)"
-        class="grid min-w-0 items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--mv-border)] p-2.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
-        :class="dropIndex === optionIndex && draggedOption !== option ? 'ring-2 ring-inset ring-[var(--kitlane-accent)]' : ''"
-        @dragover="dragOver($event, optionIndex)"
-        @drop="dropOption($event, optionIndex)"
+        class="relative grid min-w-0 items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--mv-border)] p-2.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
+        :class="{
+          'insert-before': dropSlot === optionIndex,
+          'insert-after': optionIndex === room.options.length - 1 && dropSlot === room.options.length,
+        }"
       >
         <span
           v-if="room.options.length > 1"
@@ -171,4 +196,22 @@ function moveModel(event: Event, from: number) {
 }
 
 .move-model { width: 8.5rem; }
+
+.insert-before { margin-top: 1rem; }
+.insert-after { margin-bottom: 1rem; }
+
+.insert-before::before,
+.insert-after::after {
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--kitlane-accent);
+  pointer-events: none;
+  content: '';
+}
+
+.insert-before::before { top: calc(-0.75rem - 1px); }
+.insert-before:first-child::before { top: calc(-0.5rem - 1px); }
+.insert-after::after { bottom: calc(-0.5rem - 1px); }
 </style>

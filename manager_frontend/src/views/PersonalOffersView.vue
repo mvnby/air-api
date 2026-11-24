@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import PersonalOfferRoomEditor from '../components/personal-offers/PersonalOfferRoomEditor.vue';
 import PersonalOfferPreviewPanel from '../components/personal-offers/PersonalOfferPreview.vue';
 import PersonalOffersList from '../components/personal-offers/PersonalOffersList.vue';
@@ -37,6 +37,7 @@ const editing = Boolean(offerId || selectedIds.length || query.get('new') === '1
 const readOnly = computed(() => Boolean(managerSession.auth.value?.demo_read_only));
 const offer = ref<PersonalOffer | null>(null);
 const preview = ref<PersonalOfferPreview | null>(null);
+const publishedPreview = shallowRef<PersonalOfferPreview | null>(null);
 const rooms = ref<DraftRoom[]>([newPersonalOfferRoom()]);
 const draftTitle = ref('');
 const draftExpiry = ref(localOfferDate(new Date(Date.now() + 7 * 86_400_000)));
@@ -86,6 +87,9 @@ const listUrl = orderId ? personalOffersPath + '?orderId=' + orderId : personalO
 const newOfferUrl = personalOfferSelectionUrl([], orderId);
 const detailUrl = (id: number) => listUrl + (orderId ? '&' : '?') + 'offerId=' + id;
 const publicationUrl = computed(() => offer.value?.published?.url ?? '');
+const hasActivePublication = computed(() => Boolean(offer.value && offerActive(offer.value)));
+const canPublishPreview = computed(() => Boolean(preview.value && offer.value
+  && (!hasActivePublication.value || preview.value !== publishedPreview.value)));
 
 watch(signature, () => {
   preview.value = null;
@@ -300,6 +304,8 @@ async function savePreview() {
       if (!offerId) replaceManagerLocation(detailUrl(offer.value.id));
     }
     preview.value = await personalOffersApi.preview(offer.value.id);
+    publicationStatus.value = '';
+    manualCopy.value = false;
   })) return;
   await nextTick();
   revealResult(previewResult.value, 'start');
@@ -340,6 +346,7 @@ async function publish() {
       const publication = personalOffersApi.publish(id, version, publicationRequest.id);
       const copying = copyPublishedLink(publication);
       offer.value = await publication;
+      publishedPreview.value = preview.value;
       publicationRequest = undefined;
       const copied = await copying;
       await nextTick();
@@ -435,7 +442,7 @@ onMounted(() => { if (editing) void load(); });
           <div>
             <label class="block max-w-sm text-sm font-medium">Как клиент выбирает
               <select :value="selectionMode" class="field-input mt-1 w-full" @change="changeSelectionMode">
-                <option value="choice">Подбор по помещениям</option>
+                <option value="choice">По одной модели на помещение</option>
                 <option value="package">Готовые комплекты</option>
               </select>
             </label>
@@ -472,23 +479,33 @@ onMounted(() => { if (editing) void load(); });
         </header>
         <div id="offer-publication" class="scroll-mt-24 space-y-2">
           <p v-if="publicationStatus" role="status" class="text-sm">{{ publicationStatus }}</p>
+          <button
+            v-if="canPublishPreview && !readOnly"
+            type="button"
+            class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            :disabled="busy || dirty"
+            @click="publish"
+          >
+            {{ pendingAction === 'publish' ? 'Публикуем…' : hasActivePublication ? 'Опубликовать изменения и скопировать ссылку' : 'Опубликовать и скопировать' }}
+          </button>
+          <p v-if="canPublishPreview && !readOnly && hasActivePublication" class="text-sm text-[var(--mv-text-muted)]">
+            По текущей ссылке открывается прежняя версия. После публикации новая ссылка заменит текущую.
+          </p>
           <template v-if="offer?.published && publicationUrl">
             <label for="offer-link" class="block text-sm font-semibold">Опубликованная ссылка</label>
             <p v-if="!preview || preview.expires_at !== offer.published.expires_at || !offerActive(offer)" class="text-sm text-[var(--mv-text-muted)]">{{ offerActive(offer) ? 'Действует до' : 'Срок истёк' }} {{ formatOfferDate(offer.published.expires_at) }}</p>
             <div class="flex flex-wrap gap-2">
               <input id="offer-link" ref="linkField" readonly :value="publicationUrl" aria-label="Ссылка на предложение" class="field-input min-w-0 basis-full sm:flex-1" @focus="($event.target as HTMLInputElement).select()" />
-              <button ref="copyLinkButton" type="button" class="scroll-mt-24 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || !offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
+              <button ref="copyLinkButton" type="button" class="scroll-mt-24 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50" :class="canPublishPreview && !readOnly ? 'border border-[var(--mv-border)]' : 'bg-brand-600 text-white'" :disabled="busy || !offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
             </div>
             <p v-if="manualCopy" role="status" class="text-sm">Скопируйте выделенную ссылку вручную.</p>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               <a :href="publicationUrl" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-9 items-center underline">Открыть клиентскую страницу</a>
               <template v-if="offerActive(offer) && !readOnly">
-                <button v-if="preview" type="button" class="min-h-9 underline disabled:opacity-50" :disabled="busy || dirty" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Заменить ссылку' }}</button>
                 <button type="button" class="min-h-9 underline disabled:opacity-50" :disabled="busy" @click="revoke">Отозвать</button>
               </template>
             </div>
           </template>
-          <button v-if="preview && offer && !offerActive(offer)" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Опубликовать и скопировать' }}</button>
           <p v-if="actionError?.action === 'publish' || actionError?.action === 'revoke'" ref="actionErrorMessage" role="alert" tabindex="-1" class="scroll-mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
         </div>
         <PersonalOfferPreviewPanel v-if="preview" :offer="preview" />
