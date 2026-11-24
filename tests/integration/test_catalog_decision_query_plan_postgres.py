@@ -32,19 +32,29 @@ async def test_list_count_and_facets_materialize_large_specs_once(db, monkeypatc
         return await original(statement, *args, **kwargs)
 
     monkeypatch.setattr(db, 'execute', record)
+    scope = TenantScope(tenant_id=1, storefront_id=1, is_system=True)
     result = await CatalogDecisionQueryService.list_products(
-        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+        db, tenant_scope=scope,
         filters=CatalogDecisionFilters(cooling_btu_classes=(24,), indoor_form_factor='wall'),
         page=1, limit=5, sort='cooling_power', direction='asc',
     )
     assert result['meta']['total'] == 12
     assert [r['id'] for r in result['items']] == [p.id for p in products[:5]]
-    await CatalogDecisionQueryService.list_filter_options(
-        db, tenant_scope=TenantScope(tenant_id=1, storefront_id=1, is_system=True),
+    assert len(statements) == 1  # page and exact count share the same conversion
+
+    specific = await CatalogDecisionQueryService.list_products(
+        db, tenant_scope=scope,
+        filters=CatalogDecisionFilters(search='wall-10 7 кВт'),
+        page=1, limit=5, sort='recommended', direction='asc',
     )
-    assert len(statements) == 4  # page, count, brands, series
+    assert specific['meta']['total'] == 1
+    assert [r['id'] for r in specific['items']] == [products[10].id]
+    assert len(statements) == 2
+
+    await CatalogDecisionQueryService.list_filter_options(db, tenant_scope=scope)
+    assert len(statements) == 4  # broad page, specific page, brands, series
     conn = await db.connection()
-    for statement in statements:
+    for statement, max_candidates in zip(statements, (12, 1, 12, 12), strict=True):
         compiled = statement.compile(dialect=db.bind.dialect, compile_kwargs={'render_postcompile': True})
         plan = (await conn.exec_driver_sql(
             'EXPLAIN (ANALYZE, VERBOSE, FORMAT JSON) ' + str(compiled),
@@ -53,7 +63,7 @@ async def test_list_count_and_facets_materialize_large_specs_once(db, monkeypatc
         conversions = [n for n in _nodes(plan) if n.get('Subplan Name') == 'CTE catalog_decision_specs']
         assert len(conversions) == 1
         assert conversions[0]['Actual Loops'] <= 1
-        assert conversions[0]['Actual Rows'] <= len(products)
+        assert conversions[0]['Actual Rows'] <= max_candidates
         # The raw JSON column is converted at the materialization boundary,
         # never repeatedly inside the outer numeric/filter expressions.
         assert str(compiled).count('CAST(product.specs AS JSONB)') == 1

@@ -116,7 +116,7 @@ class CatalogDecisionQueryService:
             raise ValueError("Unsupported cooling BTU class")
 
     @staticmethod
-    def _specs_cte(session: AsyncSession, *, product_ids=(), complete_only: bool = True):
+    def _specs_cte(session: AsyncSession, *, product_ids=(), complete_only: bool = True, text_conditions=()):
         # Product.specs is stored as JSON. Repeated casts inside numeric guards,
         # filters and ordering reparse each large document dozens of times.
         # PostgreSQL must materialize this conversion once per candidate row.
@@ -129,6 +129,13 @@ class CatalogDecisionQueryService:
             statement = statement.where(Product.product_kind == "complete_split_system")
         if product_ids:
             statement = statement.where(Product.id.in_(product_ids))
+        if text_conditions:
+            statement = (
+                statement
+                .outerjoin(Brand, Brand.id == Product.brand_id)
+                .outerjoin(ProductSeries, ProductSeries.id == Product.series_id)
+                .where(*text_conditions)
+            )
         return statement.cte("catalog_decision_specs").prefix_with("MATERIALIZED", dialect="postgresql")
 
     @staticmethod
@@ -284,27 +291,37 @@ class CatalogDecisionQueryService:
             .cte("catalog_decision_local_stock")
         )
 
-    @classmethod
-    def _conditions(cls, session: AsyncSession, filters: CatalogDecisionFilters, *, availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min, specs=None):
+    @staticmethod
+    def _text_search_conditions(tokens: list[str]):
         conditions = []
-        search = (filters.search or "").strip()
-        if search:
-            tokens, exact_capacities = split_catalog_decision_search(search)
-            conditions.extend(cooling_nominal == capacity for capacity in exact_capacities)
-            for token in tokens:
-                if token.isdigit() and token in BTU_MAPPING:
-                    ranges = BTU_MAPPING[token]
-                    conditions.append(or_(
-                        area.between(ranges["area"][0], ranges["area"][1]),
-                        and_(cooling_min <= ranges["power"][1], cooling_max >= ranges["power"][0]),
-                        Product.title.ilike(f"%{token}%"),
-                    ))
-                else:
-                    pattern = f"%{token}%"
-                    conditions.append(or_(
-                        Product.title.ilike(pattern), Product.slug.ilike(pattern), Brand.title.ilike(pattern), ProductSeries.title.ilike(pattern),
-                        Product.tags.any(Tag.title.ilike(pattern)),
-                    ))
+        for token in tokens:
+            if token in BTU_MAPPING:
+                continue
+            pattern = f"%{token}%"
+            conditions.append(or_(
+                Product.title.ilike(pattern), Product.slug.ilike(pattern), Brand.title.ilike(pattern),
+                ProductSeries.title.ilike(pattern), Product.tags.any(Tag.title.ilike(pattern)),
+            ))
+        return conditions
+
+    @classmethod
+    def _conditions(
+        cls, session: AsyncSession, filters: CatalogDecisionFilters, *,
+        availability, retail, cooling_nominal, cooling_min, cooling_max, area, heating_min,
+        specs=None, text_search_applied: bool = False,
+    ):
+        tokens, exact_capacities = split_catalog_decision_search(filters.search or "")
+        conditions = [cooling_nominal == capacity for capacity in exact_capacities]
+        if not text_search_applied:
+            conditions.extend(cls._text_search_conditions(tokens))
+        for token in tokens:
+            ranges = BTU_MAPPING.get(token)
+            if ranges:
+                conditions.append(or_(
+                    area.between(ranges["area"][0], ranges["area"][1]),
+                    and_(cooling_min <= ranges["power"][1], cooling_max >= ranges["power"][0]),
+                    Product.title.ilike(f"%{token}%"),
+                ))
         if filters.cooling_btu_classes:
             btu_conditions = []
             for btu in filters.cooling_btu_classes:
@@ -373,7 +390,11 @@ class CatalogDecisionQueryService:
         page: int, limit: int, sort: str, direction: Literal["asc", "desc"],
     ) -> dict:
         cls._validate_filters(filters)
-        specs_cte = cls._specs_cte(session, product_ids=filters.product_ids)
+        tokens, _ = split_catalog_decision_search(filters.search or "")
+        # Restrict plain-text matches before converting the often large specs documents.
+        specs_cte = cls._specs_cte(
+            session, product_ids=filters.product_ids, text_conditions=cls._text_search_conditions(tokens),
+        )
         specs = specs_cte.c.specs
         usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
         metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
@@ -401,11 +422,16 @@ class CatalogDecisionQueryService:
             cls._json_float(session, "__filter_min_heat", specs=specs),
         ).label("heating_min_c")
         indoor_form = indoor_form_factor_expr(session, specs=specs)
-        conditions = cls._conditions(session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal, cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min, specs=specs)
+        conditions = cls._conditions(
+            session, filters, availability=availability, retail=retail, cooling_nominal=cooling_nominal,
+            cooling_min=cooling_min, cooling_max=cooling_max, area=area, heating_min=heating_min, specs=specs,
+            text_search_applied=True,
+        )
         conditions.append(cls._complete_split_condition(session, specs=specs))
         base = (
             select(
-                Product, Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
+                Product.id, Product.title, Product.slug, Product.main_image, Product.is_inverter, Product.is_published,
+                Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
                 retail.label("retail_price_byn"), purchase, metrics.c.recommended_price_byn,
                 metrics.c.supplier_name, metrics.c.supplier_qty,
                 margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
@@ -438,18 +464,32 @@ class CatalogDecisionQueryService:
             else []
         )
         # Nulls are always last, and product id makes every page boundary stable.
-        rows = list((await session.execute(base.order_by(*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc()).offset((page - 1) * limit).limit(limit))).all())
-        count = int((await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one())
-        public_urls = await cls._public_site_urls(session, tenant_scope, [row[0] for row in rows])
+        page_query = (
+            base.add_columns(func.count().over().label("total_count"))
+            .order_by(*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+        rows = (await session.execute(page_query)).all()
+        if rows:
+            total = rows[0].total_count
+        elif page == 1:
+            total = 0
+        else:
+            # A page past the end has no row carrying the window count.
+            total = (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+        public_urls = await cls._public_site_urls(session, tenant_scope, {
+            row.id: row.slug for row in rows
+            if row.is_published and row.slug and row.slug not in {".", ".."}
+        })
         items = []
         for row in rows:
-            product = row[0]
             wifi_raw = row.wifi_raw
             wifi = "builtin" if wifi_raw in (True, "true", "True", "1") else "ready" if wifi_raw == "ready" else "none"
             category = None
             # Category is a display hint only; filtering remains the canonical tag EXISTS above.
             items.append({
-                "id": product.id, "title": product.title, "slug": product.slug, "main_image": product.main_image,
+                "id": row.id, "title": row.title, "slug": row.slug, "main_image": row.main_image,
                 "brand_title": row.brand_title, "series_title": row.series_title,
                 "retail_price_byn": float(row.retail_price_byn),
                 "purchase_cost_byn": round(float(row.purchase_cost_byn), 2) if row.purchase_cost_byn is not None else None,
@@ -462,21 +502,16 @@ class CatalogDecisionQueryService:
                 "cooling_max_kw": float(row.cooling_max_kw) if row.cooling_max_kw is not None else None,
                 "heating_min_c": int(row.heating_min_c) if row.heating_min_c is not None else None,
                 "area_m2": float(row.area_m2) if row.area_m2 is not None else None, "category": category,
-                "indoor_form_factor": row.indoor_form_factor, "is_inverter": bool(product.is_inverter), "wifi": wifi,
-                "is_published": bool(product.is_published),
-                "public_site_url": public_urls.get(product.id),
+                "indoor_form_factor": row.indoor_form_factor, "is_inverter": bool(row.is_inverter), "wifi": wifi,
+                "is_published": bool(row.is_published),
+                "public_site_url": public_urls.get(row.id),
             })
-        total = count
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
 
     @staticmethod
     async def _public_site_urls(
-        session: AsyncSession, tenant_scope: TenantScope, products: list[Product],
+        session: AsyncSession, tenant_scope: TenantScope, candidates: dict[int, str],
     ) -> dict[int, str]:
-        candidates = {
-            product.id: product.slug for product in products
-            if product.id is not None and product.is_published and product.slug and product.slug not in {".", ".."}
-        }
         if not candidates:
             return {}
         domains = await TenancyDAO.active_primary_domains(
