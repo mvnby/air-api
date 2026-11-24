@@ -254,7 +254,7 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
       <div class="relative min-h-48" :aria-busy="loading">
         <p class="min-h-5 text-xs text-gray-500" role="status">{{ loading ? 'Обновляем каталог…' : error ? 'Результаты не обновлены. Повторите загрузку.' : '' }}</p>
         <div :class="loading || error ? 'pointer-events-none opacity-50' : ''" :inert="loading || Boolean(error)">
-          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="existingIds" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
+          <CatalogDecisionTable :items="items" :selected-ids="Object.keys(selected).map(Number)" :sort="sort" :direction="direction" :has-form-filter="Boolean(filters.indoorFormFactor)" :busy="target.saving.value || loading || Boolean(error)" :existing-ids="existingIds" :offer-picker="Boolean(picker)" @sort="changeSort" @toggle="toggleSelection" @details="detailItem = $event">
             <template #empty><div v-if="!loading && !error" class="rounded-xl border border-dashed border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
               <p class="font-semibold text-gray-900">Подтверждённых комплектов по этим условиям нет</p>
               <p class="mt-2">В подбор попадают только подтверждённые комплекты сплит-систем. Технические фильтры не ослабляются автоматически.</p>
