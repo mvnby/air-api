@@ -121,7 +121,7 @@ function moveModel(event: Event, from: number) {
       <li
         v-for="(option, optionIndex) in room.options"
         :key="optionKey(option)"
-        class="grid min-w-0 items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--mv-border)] p-2.5 lg:grid-cols-[auto_minmax(0,1fr)_auto_auto]"
+        class="grid min-w-0 items-center gap-x-3 gap-y-1 rounded-lg border border-[var(--mv-border)] p-2.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
         :class="dropIndex === optionIndex && draggedOption !== option ? 'ring-2 ring-inset ring-[var(--kitlane-accent)]' : ''"
         @dragover="dragOver($event, optionIndex)"
         @drop="dropOption($event, optionIndex)"
@@ -142,10 +142,10 @@ function moveModel(event: Event, from: number) {
           :image="products.get(option.product_id)?.main_image"
           :is-package="isPackage"
         />
-        <div class="col-span-full flex flex-wrap items-center gap-1 lg:col-span-1 lg:col-start-4 lg:row-start-1 lg:flex-nowrap lg:justify-end">
+        <div class="col-span-full flex flex-wrap items-center gap-1 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:flex-nowrap lg:justify-end">
           <template v-if="room.options.length > 1">
-            <button type="button" data-reorder-step class="order-step" :aria-label="'Поднять ' + optionTitle(option.product_id)" title="Выше" :disabled="optionIndex === 0" @click="stepOption($event, optionIndex, -1)"><ChevronUp class="h-4 w-4" aria-hidden="true" /></button>
-            <button type="button" data-reorder-step class="order-step" :aria-label="'Опустить ' + optionTitle(option.product_id)" title="Ниже" :disabled="optionIndex + 1 === room.options.length" @click="stepOption($event, optionIndex, 1)"><ChevronDown class="h-4 w-4" aria-hidden="true" /></button>
+            <button type="button" data-reorder-step class="order-step w-auto min-w-9 gap-1 px-1.5 text-xs" :aria-label="'Поднять ' + optionTitle(option.product_id)" :disabled="optionIndex === 0" @click="stepOption($event, optionIndex, -1)"><ChevronUp class="h-4 w-4" aria-hidden="true" />Выше</button>
+            <button type="button" data-reorder-step class="order-step w-auto min-w-9 gap-1 px-1.5 text-xs" :aria-label="'Опустить ' + optionTitle(option.product_id)" :disabled="optionIndex + 1 === room.options.length" @click="stepOption($event, optionIndex, 1)"><ChevronDown class="h-4 w-4" aria-hidden="true" />Ниже</button>
           </template>
           <select v-if="roomNames.length > 1" class="field-input move-model text-xs" :aria-label="'Перенести ' + optionTitle(option.product_id)" @change="moveModel($event, optionIndex)">
               <option value="">Перенести в…</option>
@@ -153,7 +153,7 @@ function moveModel(event: Event, from: number) {
                 <option v-if="roomIndex !== index" :value="roomIndex + 1">{{ roomName }}</option>
               </template>
           </select>
-          <button type="button" class="order-step text-red-700" :aria-label="'Убрать ' + optionTitle(option.product_id)" title="Убрать модель" @click="emit('removeOption', optionIndex)"><X class="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" class="order-step w-9 text-red-700" :aria-label="'Убрать ' + optionTitle(option.product_id)" title="Убрать модель" @click="emit('removeOption', optionIndex)"><X class="h-4 w-4" aria-hidden="true" /></button>
         </div>
       </li>
     </ul>
@@ -167,7 +167,7 @@ function moveModel(event: Event, from: number) {
 
 <style scoped>
 .order-step {
-  @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-[var(--kitlane-accent-soft)] disabled:opacity-30;
+  @apply inline-flex h-9 shrink-0 items-center justify-center rounded-md hover:bg-[var(--kitlane-accent-soft)] disabled:opacity-30;
 }
 
 .move-model { width: 8.5rem; }

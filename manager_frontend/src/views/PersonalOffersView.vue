@@ -321,24 +321,61 @@ async function savePreview() {
   revealResult(previewResult.value, 'start');
 }
 
+async function copyPublishedLink(publication: Promise<PersonalOffer>) {
+  const clipboard = navigator.clipboard;
+  if (!clipboard) return false;
+  try {
+    if (typeof clipboard.write === 'function' && typeof ClipboardItem === 'function') {
+      // Request clipboard access during the click, with data from the successful publication.
+      const data = publication.then(({ published }) => {
+        if (!published?.url) throw new Error('Published URL unavailable');
+        return new Blob([published.url], { type: 'text/plain' });
+      });
+      void data.catch(() => undefined); // Permission may be denied before the browser consumes the data.
+      await clipboard.write([new ClipboardItem({ 'text/plain': data })]);
+    } else {
+      const url = (await publication).published?.url;
+      if (!url) return false;
+      await clipboard.writeText(url);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function publish() {
-  if (!preview.value || !offer.value || dirty.value || busy.value) return;
-  if (offerActive(offer.value) && !await confirmDialog({
-    title: 'Заменить ссылку?',
-    description: 'Предыдущая ссылка перестанет работать.',
-    confirmText: 'Заменить ссылку',
-  })) return;
-  if (!await perform('publish', async () => {
-    if (!offer.value || dirty.value || !preview.value) return false;
-    publicationStatus.value = '';
-    const { id, version } = offer.value;
-    if (publicationRequest?.version !== version) publicationRequest = { version, id: crypto.randomUUID() };
-    offer.value = await personalOffersApi.publish(id, version, publicationRequest.id);
-    publicationRequest = undefined;
-    publicationStatus.value = 'Предложение опубликовано. Ссылку можно отправить клиенту.';
-  })) return;
+  if (!preview.value || !offer.value || dirty.value || busy.value || readOnly.value) return;
+  let publishing: Promise<boolean> | undefined;
+  const startPublication = () => {
+    publishing = perform('publish', async () => {
+      if (!offer.value || dirty.value || !preview.value) return false;
+      publicationStatus.value = '';
+      const { id, version } = offer.value;
+      if (publicationRequest?.version !== version) publicationRequest = { version, id: crypto.randomUUID() };
+      const publication = personalOffersApi.publish(id, version, publicationRequest.id);
+      const copying = copyPublishedLink(publication);
+      offer.value = await publication;
+      publicationRequest = undefined;
+      const copied = await copying;
+      await nextTick();
+      manualCopy.value = !copied;
+      publicationStatus.value = copied ? 'Предложение опубликовано. Ссылка скопирована.' : 'Предложение опубликовано.';
+    });
+  };
+  if (offerActive(offer.value)) {
+    if (!await confirmDialog({
+      title: 'Заменить ссылку?',
+      description: 'Предыдущая ссылка перестанет работать. Новая ссылка скопируется после публикации.',
+      confirmText: 'Заменить ссылку',
+      onConfirm: startPublication,
+    })) return;
+  } else {
+    startPublication();
+  }
+  if (!await publishing) return;
   await nextTick();
-  revealResult(copyLinkButton.value, 'nearest');
+  revealResult(manualCopy.value ? linkField.value : copyLinkButton.value, 'nearest');
 }
 
 async function revoke() {
@@ -462,7 +499,7 @@ onMounted(load);
             <p v-if="!preview || preview.expires_at !== offer.published.expires_at || !offerActive(offer)" class="text-sm text-[var(--mv-text-muted)]">{{ offerActive(offer) ? 'Действует до' : 'Срок истёк' }} {{ formatOfferDate(offer.published.expires_at) }}</p>
             <div class="flex flex-wrap gap-2">
               <input id="offer-link" ref="linkField" readonly :value="publicationUrl" aria-label="Ссылка на предложение" class="field-input min-w-0 basis-full sm:flex-1" @focus="($event.target as HTMLInputElement).select()" />
-              <button ref="copyLinkButton" type="button" class="scroll-mt-24 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="!offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
+              <button ref="copyLinkButton" type="button" class="scroll-mt-24 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || !offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
             </div>
             <p v-if="manualCopy" role="status" class="text-sm">Скопируйте выделенную ссылку вручную.</p>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -473,7 +510,7 @@ onMounted(load);
               </template>
             </div>
           </template>
-          <button v-if="preview && offer && !offerActive(offer)" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Опубликовать' }}</button>
+          <button v-if="preview && offer && !offerActive(offer)" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">{{ pendingAction === 'publish' ? 'Публикуем…' : 'Опубликовать и скопировать' }}</button>
           <p v-if="actionError?.action === 'publish' || actionError?.action === 'revoke'" ref="actionErrorMessage" role="alert" tabindex="-1" class="scroll-mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
         </div>
         <PersonalOfferPreviewPanel v-if="preview" :offer="preview" />

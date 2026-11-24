@@ -140,7 +140,10 @@ function mockOfferApi() {
     revision += 1;
     return response();
   });
-  const confirm = vi.spyOn(feedback, 'confirmDialog').mockResolvedValue(true);
+  const confirm = vi.spyOn(feedback, 'confirmDialog').mockImplementation(async options => {
+    await options.onConfirm?.();
+    return true;
+  });
   return { create, update, publish, revoke, confirm, snapshot: () => publicSnapshot };
 }
 
@@ -163,8 +166,7 @@ it('groups models, previews editable room names and all installation modes, then
   const modelPrice = model.get<HTMLInputElement>('input[inputmode=decimal]');
   expect(Number(modelPrice.element.value)).toBe(1570);
   await modelPrice.setValue('1520,00');
-  expect(model.get('details').element.open).toBe(false);
-  model.get('details').element.open = true;
+  expect(model.get('textarea').attributes('rows')).toBe('1');
   await model.get('textarea').setValue('Короткое пояснение клиенту');
 
   await button(wrapper, 'Добавить помещение').trigger('click');
@@ -201,13 +203,13 @@ it('groups models, previews editable room names and all installation modes, then
   expect(roomNamesInPreview(wrapper)).toEqual(['Зал', 'Помещение 2', 'Баня']);
   expect(api.update).toHaveBeenCalledTimes(1);
 
-  await button(wrapper, 'Опубликовать').trigger('click');
+  await button(wrapper, 'Опубликовать и скопировать').trigger('click');
   await flushPromises();
   const link = (view: VueWrapper) => view.get<HTMLInputElement>('input[aria-label="Ссылка на предложение"]');
   expect(link(wrapper).element.value).toBe(shareUrl('1'));
   expect(api.snapshot()!.rooms.map(room => room.title)).toEqual(roomNamesInPreview(wrapper));
 
-  const writeText = vi.fn().mockRejectedValueOnce(new Error('clipboard denied')).mockResolvedValueOnce(undefined);
+  const writeText = vi.fn().mockResolvedValue(undefined).mockRejectedValueOnce(new Error('clipboard denied'));
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   await button(wrapper, 'Скопировать ссылку').trigger('click');
   await flushPromises();
@@ -226,6 +228,7 @@ it('groups models, previews editable room names and all installation modes, then
   await flushPromises();
   expect(api.confirm).toHaveBeenCalledTimes(1);
   expect(link(wrapper).element.value).toBe(shareUrl('2'));
+  expect(writeText).toHaveBeenLastCalledWith(shareUrl('2'));
 
   mounted?.unmount();
   const reopened = await openEditor('?orderId=212&offerId=7');
@@ -293,6 +296,8 @@ it('starts from the real catalog basket and retains the negotiating order and se
 
 it('moves focus from the editor to the preview and then to the published link action', async () => {
   mockOfferApi();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const wrapper = await openEditor('?products=41,42');
   await savePreview(wrapper);
   const previewHeading = wrapper.get('#offer-preview-heading').element;
@@ -300,24 +305,24 @@ it('moves focus from the editor to the preview and then to the published link ac
   expect(document.activeElement?.contains(previewHeading)).toBe(true);
 
   const publication = wrapper.get('#offer-publication');
-  expect(publication.element.contains(button(wrapper, 'Опубликовать').element)).toBe(true);
+  expect(publication.element.contains(button(wrapper, 'Опубликовать и скопировать').element)).toBe(true);
   expect(publication.element.nextElementSibling?.querySelector('h3')).not.toBeNull();
-  await button(publication, 'Опубликовать').trigger('click');
+  await button(publication, 'Опубликовать и скопировать').trigger('click');
   await flushPromises();
   expect(document.activeElement).toBe(button(publication, 'Скопировать ссылку').element);
-  expect(publication.get('[role="status"]').text()).toBe('Предложение опубликовано. Ссылку можно отправить клиенту.');
+  expect(publication.get('[role="status"]').text()).toBe('Предложение опубликовано. Ссылка скопирована.');
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(shareUrl('1'));
   expect(publication.findAll('button').map(element => element.text())).toEqual([
     'Скопировать ссылку', 'Заменить ссылку', 'Отозвать',
   ]);
 });
 
-it('keeps a model photo, price and expanded note with the row when ordering the offer', async () => {
+it('keeps a model photo, price and note with the row when ordering the offer', async () => {
   const api = mockOfferApi();
   const wrapper = await openEditor('?products=41,42,43');
   const first = modelInRoom(wrapper, 0, products[0].title);
   expect(first.get('img').attributes('src')).toBe(products[0].main_image);
   await first.get('input').setValue('1530');
-  first.get('details').element.open = true;
   await first.get('textarea').setValue('Для гостиной');
 
   const last = modelInRoom(wrapper, 0, products[2].title);
@@ -329,7 +334,7 @@ it('keeps a model photo, price and expanded note with the row when ordering the 
 
   await first.get('[aria-label="Поднять Air 07 Бюджет"]').trigger('click');
   expect(roomsInEditor(wrapper)[0].findAll('li')[1].element).toBe(first.element);
-  expect(first.get('details').element.open).toBe(true);
+  expect(first.get('textarea').element.value).toBe('Для гостиной');
   await savePreview(wrapper);
   const previewOptions = wrapper.get('#offer-publication').element.nextElementSibling!.querySelectorAll('li');
   expect(Array.from(previewOptions, row => row.querySelector('p')?.textContent)).toEqual([
@@ -340,7 +345,7 @@ it('keeps a model photo, price and expanded note with the row when ordering the 
     { product_id: 41, price_byn: '1530', note: 'Для гостиной' },
     { product_id: 43, price_byn: '1910', note: null },
   ]);
-  await button(wrapper, 'Опубликовать').trigger('click');
+  await button(wrapper, 'Опубликовать и скопировать').trigger('click');
   await flushPromises();
   expect(api.snapshot()!.rooms[0].options.map(option => option.title)).toEqual([
     products[1].title, products[0].title, products[2].title,
@@ -380,6 +385,8 @@ it('uses a single proposal mode and opts into the total separately for each pack
 
 it('shows save and publish failures at their actions and allows retry', async () => {
   const api = mockOfferApi();
+  const writeText = vi.fn().mockRejectedValue(new Error('clipboard denied'));
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   api.create.mockRejectedValueOnce(new Error('Черновик не сохранён'));
   api.publish.mockRejectedValueOnce(new Error('Ссылка не опубликована'));
   const wrapper = await openEditor('?products=41,42');
@@ -390,16 +397,21 @@ it('shows save and publish failures at their actions and allows retry', async ()
   await savePreview(wrapper);
   expect(wrapper.find('form [role="alert"]').exists()).toBe(false);
 
-  await button(wrapper, 'Опубликовать').trigger('click');
+  await button(wrapper, 'Опубликовать и скопировать').trigger('click');
   await flushPromises();
-  expect(button(wrapper, 'Опубликовать').element.parentElement?.querySelector('[role="alert"]')?.textContent)
+  expect(button(wrapper, 'Опубликовать и скопировать').element.parentElement?.querySelector('[role="alert"]')?.textContent)
     .toBe('Ссылка не опубликована');
   expect(wrapper.find('input[aria-label="Ссылка на предложение"]').exists()).toBe(false);
+  expect(writeText).not.toHaveBeenCalled();
 
-  await button(wrapper, 'Опубликовать').trigger('click');
+  await button(wrapper, 'Опубликовать и скопировать').trigger('click');
   await flushPromises();
   expect(wrapper.find('[role="alert"]').exists()).toBe(false);
-  expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+  const link = wrapper.get<HTMLInputElement>('input[aria-label="Ссылка на предложение"]').element;
+  expect(link.value).toBe(shareUrl('1'));
+  expect(document.activeElement).toBe(link);
+  expect([link.selectionStart, link.selectionEnd]).toEqual([0, link.value.length]);
+  expect(wrapper.text()).toContain('Скопируйте выделенную ссылку вручную.');
 });
 
 it('reuses catalog filters by room and adds verified models without changing the draft terms or catalog basket', async () => {
