@@ -243,9 +243,12 @@ it('groups models, previews editable room names and all installation modes, then
 it('creates an offer before an order with a named or unnamed single room', async () => {
   const api = mockOfferApi();
   const wrapper = await openEditor('?products=44');
+  const title = wrapper.findAll('label').find(label => label.text() === 'Название в Manager');
+  await title!.get('input').setValue('  Кабинет — варианты  ');
   await savePreview(wrapper);
   expect(roomNamesInPreview(wrapper)).toEqual(['Подбор кондиционера']);
   expect(api.create.mock.calls[0][0].order_id).toBeNull();
+  expect(api.create.mock.calls[0][0].title).toBe('Кабинет — варианты');
 
   await roomNameInputs(wrapper)[0].setValue('Магазин и склад');
   await savePreview(wrapper);

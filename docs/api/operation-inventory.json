@@ -880,6 +880,18 @@
         38
       ],
       [
+        "PATCH /api/manager/personal-offers/{offer_id}",
+        "rename_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "DELETE /api/manager/personal-offers/{offer_id}",
+        "delete_manager_personal_offer",
+        false,
+        38
+      ],
+      [
         "POST /api/manager/personal-offers/{offer_id}/preview",
         "preview_manager_personal_offer",
         false,

@@ -842,6 +842,7 @@ export type { PersonalOfferInstallationInput_Output } from './models/PersonalOff
 export type { PersonalOfferOptionInput_Input } from './models/PersonalOfferOptionInput_Input';
 export type { PersonalOfferOptionInput_Output } from './models/PersonalOfferOptionInput_Output';
 export type { PersonalOfferPublishInput } from './models/PersonalOfferPublishInput';
+export type { PersonalOfferRenameInput } from './models/PersonalOfferRenameInput';
 export type { PersonalOfferRoomInput_Input } from './models/PersonalOfferRoomInput_Input';
 export type { PersonalOfferRoomInput_Output } from './models/PersonalOfferRoomInput_Output';
 export type { PersonalOfferUpdateInput } from './models/PersonalOfferUpdateInput';

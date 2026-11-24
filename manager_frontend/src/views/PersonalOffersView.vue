@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 import PersonalOfferRoomEditor from '../components/personal-offers/PersonalOfferRoomEditor.vue';
 import PersonalOfferPreviewPanel from '../components/personal-offers/PersonalOfferPreview.vue';
+import PersonalOffersList from '../components/personal-offers/PersonalOffersList.vue';
 import CatalogDecisionWorkspaceView from './CatalogDecisionWorkspaceView.vue';
 import { catalogDecisionApi, type CatalogDecisionItem } from '../services/catalog-decision-api';
 import { readCatalogDecisionQuery, writeCatalogDecisionQuery } from '../services/catalog-decision-query';
@@ -11,8 +12,10 @@ import {
   formatOfferDate,
   localOfferDate,
   newPersonalOfferRoom,
+  personalOfferActive as offerActive,
   personalOfferMoney,
   personalOfferRoomName,
+  personalOfferSelectionUrl,
   personalOffersApi,
   personalOffersPath,
   positiveId,
@@ -32,12 +35,10 @@ const offerId = positiveId(query.get('offerId'));
 const selectedIds = [...new Set((query.get('products') ?? '').split(',').flatMap(item => positiveId(item) ?? []))].slice(0, 24);
 const editing = Boolean(offerId || selectedIds.length || query.get('new') === '1');
 const readOnly = computed(() => Boolean(managerSession.auth.value?.demo_read_only));
-const offers = ref<PersonalOffer[]>([]);
-const hasMore = ref(false);
-const loadingMore = ref(false);
 const offer = ref<PersonalOffer | null>(null);
 const preview = ref<PersonalOfferPreview | null>(null);
 const rooms = ref<DraftRoom[]>([newPersonalOfferRoom()]);
+const draftTitle = ref('');
 const draftExpiry = ref(localOfferDate(new Date(Date.now() + 7 * 86_400_000)));
 const choices = ref<CatalogDecisionItem[]>([]);
 const roomKeys = ref([0]);
@@ -60,7 +61,7 @@ const pendingAction = ref<OfferAction | null>(null);
 const busy = computed(() => pendingAction.value !== null);
 const actionError = ref<{ action: OfferAction; message: string } | null>(null);
 const actionErrorMessage = ref<HTMLElement | null>(null);
-const loading = ref(true);
+const loading = ref(editing);
 const initialized = ref(false);
 const error = ref('');
 const status = ref('');
@@ -70,7 +71,7 @@ const linkField = ref<HTMLInputElement | null>(null);
 const copyLinkButton = ref<HTMLButtonElement | null>(null);
 const previewResult = ref<HTMLElement | null>(null);
 const savedForm = ref('');
-const signature = computed(() => JSON.stringify([rooms.value, draftExpiry.value]));
+const signature = computed(() => JSON.stringify([rooms.value, draftExpiry.value, draftTitle.value]));
 const dirty = computed(() => editing && !readOnly.value && initialized.value && signature.value !== savedForm.value);
 let publicationRequest: { version: number; id: string } | undefined;
 
@@ -82,10 +83,9 @@ onScopeDispose(registerUnsavedNavigationGuard(async () => !busy.value && (!dirty
 
 const currentOrderId = computed(() => offer.value?.order_id ?? orderId);
 const listUrl = orderId ? personalOffersPath + '?orderId=' + orderId : personalOffersPath;
+const newOfferUrl = personalOfferSelectionUrl([], orderId);
 const detailUrl = (id: number) => listUrl + (orderId ? '&' : '?') + 'offerId=' + id;
 const publicationUrl = computed(() => offer.value?.published?.url ?? '');
-const offerActive = (item: PersonalOffer) =>
-  Boolean(item.published && new Date(item.published.expires_at).getTime() > Date.now());
 
 watch(signature, () => {
   preview.value = null;
@@ -117,6 +117,7 @@ async function load() {
       offer.value = await personalOffersApi.get(offerId);
       rooms.value = offer.value.rooms;
       roomKeys.value = rooms.value.map(() => nextRoomKey++);
+      draftTitle.value = offer.value.title ?? '';
       draftExpiry.value = localOfferDate(new Date(offer.value.expires_at));
       await getProducts(rooms.value.flatMap(room => room.options.map(option => option.product_id)));
     } else if (selectedIds.length) {
@@ -128,10 +129,6 @@ async function load() {
       });
       rooms.value = [room];
       if (room.options.length !== selectedIds.length) status.value = 'Часть выбранных моделей больше недоступна в подборе.';
-    } else if (!editing) {
-      const result = await personalOffersApi.list(orderId);
-      offers.value = result.items;
-      hasMore.value = result.has_more;
     }
     savedForm.value = signature.value;
     initialized.value = true;
@@ -139,22 +136,6 @@ async function load() {
     error.value = getApiErrorMessage(err);
   } finally {
     loading.value = false;
-  }
-}
-
-async function loadMore() {
-  const last = offers.value[offers.value.length - 1];
-  if (!last || loadingMore.value) return;
-  loadingMore.value = true;
-  error.value = '';
-  try {
-    const result = await personalOffersApi.list(orderId, last.id);
-    offers.value.push(...result.items);
-    hasMore.value = result.has_more;
-  } catch (err) {
-    error.value = getApiErrorMessage(err);
-  } finally {
-    loadingMore.value = false;
   }
 }
 
@@ -277,7 +258,10 @@ function draftFromForm(): Draft {
       options,
     };
   });
-  return { order_id: currentOrderId.value ?? null, expires_at: expiry.toISOString(), rooms: normalizedRooms };
+  return {
+    order_id: currentOrderId.value ?? null, title: draftTitle.value.trim() || null,
+    expires_at: expiry.toISOString(), rooms: normalizedRooms,
+  };
 }
 
 function revealResult(element: HTMLElement | null, block: ScrollLogicalPosition) {
@@ -406,7 +390,7 @@ async function copyLink() {
   }
 }
 
-onMounted(load);
+onMounted(() => { if (editing) void load(); });
 </script>
 
 <template>
@@ -422,7 +406,10 @@ onMounted(load);
         <a v-if="publicationUrl && initialized" href="#offer-publication" class="underline" @click.prevent="revealResult(copyLinkButton && !copyLinkButton.disabled ? copyLinkButton : previewResult, 'start')">К опубликованной ссылке</a>
         <a :href="listUrl" class="underline" @click.prevent="navigateManager(listUrl)">Все предложения</a>
       </div>
-      <a v-else href="/manager/catalog-decision" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">Перейти к подбору</a>
+      <div v-else class="flex flex-wrap items-center gap-3 text-sm font-semibold">
+        <a href="/manager/catalog-decision" class="underline">Перейти к подбору</a>
+        <a v-if="!readOnly" :href="newOfferUrl" class="rounded-lg bg-brand-600 px-3 py-2 text-white" @click.prevent="navigateManager(newOfferUrl)">Новое предложение</a>
+      </div>
     </header>
 
     <p v-if="loading" role="status" class="text-sm text-[var(--mv-text-muted)]">Загрузка…</p>
@@ -432,28 +419,19 @@ onMounted(load);
     </p>
     <p v-if="status" role="status" class="rounded-lg border border-[var(--mv-border)] p-3 text-sm">{{ status }}</p>
 
-    <template v-if="initialized && !editing">
-      <p v-if="!offers.length" class="rounded-lg border border-dashed border-[var(--mv-border)] p-4 text-sm">Здесь будут черновики и ссылки. Начните с подбора оборудования.</p>
-      <ul v-else class="space-y-2">
-        <li v-for="item in offers" :key="item.id" class="rounded-xl border border-[var(--mv-border)] p-3">
-          <a :href="detailUrl(item.id)" class="block focus-visible:outline" @click.prevent="navigateManager(detailUrl(item.id))">
-            <div class="flex flex-wrap justify-between gap-2">
-              <strong>Предложение №{{ item.id }}<span v-if="item.order_id"> · Заказ №{{ item.order_id }}</span></strong>
-              <span class="text-sm">{{ offerActive(item) ? 'Опубликовано' : item.published ? 'Срок истёк' : 'Черновик' }}</span>
-            </div>
-            <p class="mt-1 break-words text-sm text-[var(--mv-text-muted)]">{{ item.rooms.map((room, index) => room.title || personalOfferRoomName(index, item.rooms.length, room.selection_mode)).join(' · ') }}</p>
-          </a>
-        </li>
-      </ul>
-      <button v-if="hasMore" type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? 'Загрузка…' : 'Показать ещё' }}</button>
-    </template>
+    <PersonalOffersList v-if="!editing" :order-id="orderId" :detail-url="detailUrl" :read-only="readOnly" />
 
     <template v-else-if="initialized && editing">
       <form class="space-y-4" @submit.prevent="savePreview">
         <fieldset class="space-y-4" :disabled="busy || readOnly">
-          <label class="block max-w-sm text-sm font-medium">Действует до
-            <input v-model="draftExpiry" type="datetime-local" required class="field-input mt-1 w-full" />
-          </label>
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
+            <label class="block text-sm font-medium">Название в Manager
+              <input v-model="draftTitle" type="text" maxlength="100" class="field-input mt-1 w-full" />
+            </label>
+            <label class="block text-sm font-medium">Действует до
+              <input v-model="draftExpiry" type="datetime-local" required class="field-input mt-1 w-full" />
+            </label>
+          </div>
           <div>
             <label class="block max-w-sm text-sm font-medium">Как клиент выбирает
               <select :value="selectionMode" class="field-input mt-1 w-full" @change="changeSelectionMode">

@@ -98,7 +98,7 @@ def _draft_response(
             expires_at=_with_timezone(publication.expires_at),
         )
     return ManagerPersonalOfferResponse(
-        id=offer.id, version=offer.version, order_id=offer.order_id,
+        id=offer.id, version=offer.version, order_id=offer.order_id, title=offer.title,
         expires_at=_with_timezone(offer.expires_at), rooms=_draft_rooms(offer), published=published,
     )
 
@@ -149,6 +149,7 @@ class PersonalOfferService:
                 tenant_id=scope.tenant_id,
                 storefront_id=scope.storefront_id,
                 order_id=draft.order_id,
+                title=draft.title or None,
                 expires_at=draft.expires_at,
                 rooms=[room.model_dump(mode="json") for room in draft.rooms],
             )
@@ -173,9 +174,38 @@ class PersonalOfferService:
             await PersonalOfferProjection.visible_products(session, draft.rooms, scope)
             offer.rooms = [room.model_dump(mode="json") for room in draft.rooms]
             offer.expires_at = draft.expires_at
+            if "title" in draft.model_fields_set:
+                offer.title = draft.title or None
             offer.updated_at = utc_now()
             offer.version += 1
             return _draft_response(offer, await PersonalOfferDAO.current(session, offer_id))
+
+    @classmethod
+    async def rename(
+        cls, session: AsyncSession, offer_id: int, scope: TenantScope, title: str | None, expected_version: int,
+    ) -> ManagerPersonalOfferResponse:
+        async with command_transaction(session):
+            offer = await cls._get(session, offer_id, scope, lock=True)
+            _require_expected_version(offer, expected_version)
+            title = title or None
+            if title != offer.title:
+                offer.title = title
+                offer.updated_at = utc_now()
+                offer.version += 1
+            return _draft_response(offer, await PersonalOfferDAO.current(session, offer_id))
+
+    @classmethod
+    async def delete(cls, session: AsyncSession, offer_id: int, scope: TenantScope, expected_version: int) -> None:
+        async with command_transaction(session):
+            offer = await cls._get(session, offer_id, scope, lock=True)
+            _require_expected_version(offer, expected_version)
+            now = utc_now()
+            publication = await PersonalOfferDAO.current(session, offer_id)
+            if publication is not None:
+                publication.revoked_at = now
+            offer.deleted_at = now
+            offer.updated_at = now
+            offer.version += 1
 
     @staticmethod
     async def _project(
