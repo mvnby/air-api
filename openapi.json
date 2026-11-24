@@ -96484,6 +96484,20 @@
             ],
             "title": "Title"
           },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "show_total": {
+            "type": "boolean",
+            "title": "Show Total",
+            "default": false
+          },
           "installation": {
             "$ref": "#/components/schemas/PersonalOfferInstallationInput-Input"
           },
@@ -96518,6 +96532,20 @@
               }
             ],
             "title": "Title"
+          },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "show_total": {
+            "type": "boolean",
+            "title": "Show Total",
+            "default": false
           },
           "installation": {
             "$ref": "#/components/schemas/PersonalOfferInstallationInput-Output"
@@ -101845,6 +101873,39 @@
           "title": {
             "type": "string",
             "title": "Title"
+          },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "equipment_total_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Total Byn"
+          },
+          "total_with_installation_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total With Installation Byn"
           },
           "installation": {
             "$ref": "#/components/schemas/PublicPersonalOfferInstallation"

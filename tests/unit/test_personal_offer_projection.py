@@ -4,7 +4,7 @@ import logging
 import pytest
 from pydantic import ValidationError
 
-from api_contracts.personal_offers import PersonalOfferRoomInput
+from api_contracts.personal_offers import PersonalOfferDraftInput, PersonalOfferRoomInput, PublicPersonalOfferResponse
 from core.app_observability import _PersonalOfferAccessLogFilter, _scrub_sentry_event
 from models import Product
 from services.personal_offer_projection import PersonalOfferProjection, display_room_title
@@ -42,6 +42,58 @@ def test_empty_titles_use_current_position_and_single_room_fallback():
     assert display_room_title(None, 1, 1) == "Подбор кондиционера"
     assert display_room_title("  ", 3, 3) == "Помещение 3"
     assert display_room_title("  Склад  ", 1, 1) == "Склад"
+
+
+def test_legacy_snapshot_defaults_to_choice_without_a_total():
+    projection = PublicPersonalOfferResponse.model_validate({
+        "expires_at": "2035-01-01T00:00:00Z",
+        "rooms": [{"title": "Зал", "installation": {"mode": "none", "price_byn": None, "description": None}, "options": []}],
+    })
+    room = projection.rooms[0]
+    assert room.selection_mode == "choice"
+    assert room.equipment_total_byn is None
+    assert room.total_with_installation_byn is None
+
+
+def test_alternatives_cannot_have_a_total_and_offer_modes_cannot_be_mixed():
+    room = {"installation": {"mode": "none"}, "options": [{"product_id": 1, "price_byn": "1520.10"}]}
+    with pytest.raises(ValidationError, match="Итог можно показать только для комплекта"):
+        PersonalOfferRoomInput.model_validate({**room, "show_total": True})
+    with pytest.raises(ValidationError, match="Выберите один режим для всего предложения"):
+        PersonalOfferDraftInput.model_validate({
+            "expires_at": "2035-01-01T00:00:00Z",
+            "rooms": [room, {**room, "selection_mode": "package"}],
+        })
+
+
+@pytest.mark.parametrize(("mode", "show_total", "equipment", "with_installation"), [
+    ("none", True, "3040.30", None),
+    ("unknown", True, "3040.30", None),
+    ("fixed", True, "3040.30", "3540.55"),
+    ("fixed", False, None, None),
+])
+def test_package_adds_equipment_and_installation_once(mode, show_total, equipment, with_installation):
+    product = Product(id=1, title="Sample model", slug="sample-model", price=1570)
+    products = {1: PublicProductProjection(product, 1570, None, CANONICAL_PUBLIC_DISCLOSURE)}
+    room = PersonalOfferRoomInput.model_validate({
+        "selection_mode": "package",
+        "show_total": show_total,
+        "installation": {"mode": mode, "price_byn": "500.25" if mode == "fixed" else None},
+        "options": [
+            {"product_id": 1, "price_byn": "1520.10", "note": "Гостиная"},
+            {"product_id": 1, "price_byn": "1520.20", "note": "Спальня"},
+        ],
+    })
+    snapshot = PersonalOfferProjection.build(
+        [room], datetime.now(timezone.utc) + timedelta(days=7), products,
+    ).model_dump(mode="json")["rooms"][0]
+    assert snapshot["title"] == "Комплект оборудования"
+    assert snapshot["selection_mode"] == "package"
+    assert snapshot["equipment_total_byn"] == equipment
+    assert snapshot["total_with_installation_byn"] == with_installation
+    assert [(item["note"], item["total_price_byn"]) for item in snapshot["options"]] == [
+        ("Гостиная", None), ("Спальня", None),
+    ]
 
 
 @pytest.mark.parametrize("installation", [

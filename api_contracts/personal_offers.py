@@ -10,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, FiniteFloat, m
 
 
 InstallationMode = Literal["none", "unknown", "fixed"]
+OfferSelectionMode = Literal["choice", "package"]
 OfferWifi = Literal["builtin", "ready", "none"]
 Price = Annotated[Decimal, Field(gt=0, max_digits=10, decimal_places=2)]
 InstallationPrice = Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)]
@@ -43,13 +44,18 @@ class PersonalOfferRoomInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     title: OfferTitle | None = None
+    selection_mode: OfferSelectionMode = "choice"
+    show_total: bool = False
     installation: PersonalOfferInstallationInput
     options: list[PersonalOfferOptionInput] = Field(min_length=1, max_length=24)
 
     @model_validator(mode="after")
-    def distinct_options(self) -> PersonalOfferRoomInput:
-        if len({option.product_id for option in self.options}) != len(self.options):
-            raise ValueError("В одном помещении каждая модель может быть указана только один раз.")
+    def validate_selection(self) -> PersonalOfferRoomInput:
+        if self.selection_mode == "choice":
+            if self.show_total:
+                raise ValueError("Итог можно показать только для комплекта.")
+            if len({option.product_id for option in self.options}) != len(self.options):
+                raise ValueError("В группе с выбором каждая модель может быть указана только один раз.")
         return self
 
 
@@ -61,7 +67,9 @@ class PersonalOfferDraftInput(BaseModel):
     rooms: list[PersonalOfferRoomInput] = Field(min_length=1, max_length=24)
 
     @model_validator(mode="after")
-    def limit_total_options(self) -> PersonalOfferDraftInput:
+    def validate_rooms(self) -> PersonalOfferDraftInput:
+        if len({room.selection_mode for room in self.rooms}) > 1:
+            raise ValueError("Выберите один режим для всего предложения: подбор по помещениям или готовые комплекты.")
         if sum(len(room.options) for room in self.rooms) > 48:
             raise ValueError("В одном предложении можно указать до 48 вариантов.")
         return self
@@ -119,6 +127,9 @@ class PublicPersonalOfferOption(BaseModel):
 
 class PublicPersonalOfferRoom(BaseModel):
     title: str
+    selection_mode: OfferSelectionMode = "choice"
+    equipment_total_byn: Decimal | None = None
+    total_with_installation_byn: Decimal | None = None
     installation: PublicPersonalOfferInstallation
     options: list[PublicPersonalOfferOption]
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 import PersonalOfferRoomEditor from '../components/personal-offers/PersonalOfferRoomEditor.vue';
 import PersonalOfferPreviewPanel from '../components/personal-offers/PersonalOfferPreview.vue';
 import { catalogDecisionApi, type CatalogDecisionItem } from '../services/catalog-decision-api';
@@ -16,6 +16,7 @@ import {
   positiveId,
   type Draft,
   type DraftRoom,
+  type OfferSelectionMode,
   type PersonalOffer,
   type PersonalOfferPreview,
 } from '../services/personal-offers';
@@ -38,10 +39,15 @@ const rooms = ref<DraftRoom[]>([newPersonalOfferRoom()]);
 const draftExpiry = ref(localOfferDate(new Date(Date.now() + 7 * 86_400_000)));
 const choices = ref<CatalogDecisionItem[]>([]);
 const roomKeys = ref([0]);
-const roomNames = computed(() => rooms.value.map((room, index) => room.title?.trim() || personalOfferRoomName(index, rooms.value.length)));
+const selectionMode = computed(() => rooms.value[0]?.selection_mode ?? 'choice');
+const roomNames = computed(() => rooms.value.map((room, index) => room.title?.trim() || personalOfferRoomName(index, rooms.value.length, selectionMode.value)));
 const optionCount = computed(() => rooms.value.reduce((count, room) => count + room.options.length, 0));
 let nextRoomKey = 1;
-const busy = ref(false);
+type OfferAction = 'preview' | 'publish' | 'revoke';
+const pendingAction = ref<OfferAction | null>(null);
+const busy = computed(() => pendingAction.value !== null);
+const actionError = ref<{ action: OfferAction; message: string } | null>(null);
+const actionErrorMessage = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const initialized = ref(false);
 const searching = ref(false);
@@ -50,6 +56,8 @@ const searchStatus = ref('');
 const status = ref('');
 const manualCopy = ref(false);
 const linkField = ref<HTMLInputElement | null>(null);
+const copyLinkButton = ref<HTMLButtonElement | null>(null);
+const previewResult = ref<HTMLElement | null>(null);
 const savedForm = ref('');
 const signature = computed(() => JSON.stringify([rooms.value, draftExpiry.value]));
 const dirty = computed(() => editing && !readOnly.value && initialized.value && signature.value !== savedForm.value);
@@ -68,7 +76,10 @@ const publicationUrl = computed(() => offer.value?.published?.url ?? '');
 const offerActive = (item: PersonalOffer) =>
   Boolean(item.published && new Date(item.published.expires_at).getTime() > Date.now());
 
-watch(signature, () => { preview.value = null; });
+watch(signature, () => {
+  preview.value = null;
+  actionError.value = null;
+});
 watch(publicationUrl, () => { manualCopy.value = false; });
 
 const remember = (items: CatalogDecisionItem[]) => {
@@ -151,9 +162,17 @@ async function searchModels(search: string) {
   }
 }
 
+function changeSelectionMode(event: Event) {
+  const mode = (event.target as HTMLSelectElement).value as OfferSelectionMode;
+  for (const room of rooms.value) {
+    room.selection_mode = mode;
+    if (mode === 'choice') room.show_total = false;
+  }
+}
+
 function addRoom() {
   if (rooms.value.length >= 24) return;
-  rooms.value.push(newPersonalOfferRoom());
+  rooms.value.push({ ...newPersonalOfferRoom(), selection_mode: selectionMode.value });
   roomKeys.value.push(nextRoomKey++);
 }
 
@@ -161,7 +180,9 @@ function removeRoom(index: number) {
   const removed = rooms.value[index];
   const destination = rooms.value[index === 0 ? 1 : 0];
   if (!removed || !destination) return;
-  const remaining = removed.options.filter(option => !destination.options.some(item => item.product_id === option.product_id));
+  const remaining = selectionMode.value === 'choice'
+    ? removed.options.filter(option => !destination.options.some(item => item.product_id === option.product_id))
+    : [];
   if (destination.options.length + remaining.length > 24) {
     error.value = 'Перенесите часть моделей в другие помещения перед удалением.';
     return;
@@ -174,9 +195,10 @@ function removeRoom(index: number) {
 function addOption(roomIndex: number, productId: number) {
   const product = choices.value.find(item => item.id === productId);
   const room = rooms.value[roomIndex];
-  if (!product || !room || room.options.some(option => option.product_id === productId)) return;
+  if (!product || !room) return;
+  if (selectionMode.value === 'choice' && room.options.some(option => option.product_id === productId)) return;
   if (room.options.length >= 24 || optionCount.value >= 48) {
-    error.value = 'Можно добавить до 24 вариантов в помещение и до 48 в предложение.';
+    error.value = 'Можно добавить до 24 моделей в одну группу и до 48 в предложение.';
     return;
   }
   error.value = '';
@@ -189,10 +211,10 @@ function moveOption(roomIndex: number, optionIndex: number, destination: number)
   const nextRoom = rooms.value[destination];
   if (!room || !option || !nextRoom) return;
   if (nextRoom.options.length >= 24) {
-    error.value = 'В помещении может быть до 24 вариантов.';
+    error.value = 'В группе может быть до 24 моделей.';
     return;
   }
-  if (nextRoom.options.some(item => item.product_id === option.product_id)) {
+  if (selectionMode.value === 'choice' && nextRoom.options.some(item => item.product_id === option.product_id)) {
     error.value = 'В этом помещении уже есть такая модель.';
     return;
   }
@@ -206,8 +228,11 @@ function draftFromForm(): Draft {
   if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now()) throw new Error('Укажите будущую дату окончания предложения.');
   const normalizedRooms = rooms.value.map((room, index) => {
     const title = room.title?.trim() || null;
-    const label = title ?? personalOfferRoomName(index, rooms.value.length);
+    const label = title ?? personalOfferRoomName(index, rooms.value.length, selectionMode.value);
     if (!room.options.length) throw new Error(label + ': добавьте хотя бы одну модель.');
+    if (selectionMode.value === 'choice' && new Set(room.options.map(option => option.product_id)).size !== room.options.length) {
+      throw new Error(label + ': уберите повторяющиеся модели.');
+    }
     const fixed = room.installation.mode === 'fixed';
     const installationPrice = fixed ? personalOfferMoney(room.installation.price_byn) : null;
     if (fixed && installationPrice === null) throw new Error(label + ': укажите цену монтажа в BYN.');
@@ -218,6 +243,8 @@ function draftFromForm(): Draft {
     });
     return {
       title,
+      selection_mode: selectionMode.value,
+      show_total: selectionMode.value === 'package' && Boolean(room.show_total),
       installation: {
         mode: room.installation.mode,
         price_byn: installationPrice,
@@ -229,18 +256,31 @@ function draftFromForm(): Draft {
   return { order_id: currentOrderId.value ?? null, expires_at: expiry.toISOString(), rooms: normalizedRooms };
 }
 
-async function perform(action: () => Promise<void>) {
-  if (busy.value || readOnly.value) return;
-  busy.value = true;
+function revealResult(element: HTMLElement | null, block: ScrollLogicalPosition) {
+  element?.focus({ preventScroll: true });
+  element?.scrollIntoView?.({ block, behavior: 'instant' });
+}
+
+async function perform(action: OfferAction, run: () => Promise<boolean | void>) {
+  if (busy.value || readOnly.value) return false;
+  pendingAction.value = action;
+  actionError.value = null;
   error.value = '';
   status.value = '';
-  try { await action(); }
-  catch (err) { error.value = getApiErrorMessage(err); }
-  finally { busy.value = false; }
+  try {
+    return (await run()) !== false;
+  } catch (err) {
+    actionError.value = { action, message: getApiErrorMessage(err) };
+    await nextTick();
+    revealResult(actionErrorMessage.value, 'nearest');
+    return false;
+  } finally {
+    pendingAction.value = null;
+  }
 }
 
 async function savePreview() {
-  await perform(async () => {
+  if (!await perform('preview', async () => {
     const draft = draftFromForm();
     if (!offer.value || dirty.value) {
       offer.value = offer.value
@@ -250,7 +290,9 @@ async function savePreview() {
       if (!offerId) replaceManagerLocation(detailUrl(offer.value.id));
     }
     preview.value = await personalOffersApi.preview(offer.value.id);
-  });
+  })) return;
+  await nextTick();
+  revealResult(previewResult.value, 'start');
 }
 
 async function publish() {
@@ -260,14 +302,16 @@ async function publish() {
     description: 'Предыдущая ссылка перестанет работать.',
     confirmText: 'Опубликовать',
   })) return;
-  await perform(async () => {
-    if (!offer.value || dirty.value || !preview.value) return;
+  if (!await perform('publish', async () => {
+    if (!offer.value || dirty.value || !preview.value) return false;
     const { id, version } = offer.value;
     if (publicationRequest?.version !== version) publicationRequest = { version, id: crypto.randomUUID() };
     offer.value = await personalOffersApi.publish(id, version, publicationRequest.id);
     publicationRequest = undefined;
     status.value = 'Предложение опубликовано. Ссылку можно отправить клиенту.';
-  });
+  })) return;
+  await nextTick();
+  revealResult(copyLinkButton.value, 'center');
 }
 
 async function revoke() {
@@ -276,7 +320,7 @@ async function revoke() {
     description: 'Клиент больше не сможет открыть предложение по этой ссылке.',
     confirmText: 'Отозвать',
   })) return;
-  await perform(async () => {
+  await perform('revoke', async () => {
     if (!offer.value) return;
     offer.value = await personalOffersApi.revoke(offer.value.id, offer.value.version);
     status.value = 'Ссылка отозвана.';
@@ -325,7 +369,7 @@ onMounted(load);
               <strong>Предложение №{{ item.id }}<span v-if="item.order_id"> · Заказ №{{ item.order_id }}</span></strong>
               <span class="text-sm">{{ offerActive(item) ? 'Опубликовано' : item.published ? 'Срок истёк' : 'Черновик' }}</span>
             </div>
-            <p class="mt-1 break-words text-sm text-[var(--mv-text-muted)]">{{ item.rooms.map((room, index) => room.title || personalOfferRoomName(index, item.rooms.length)).join(' · ') }}</p>
+            <p class="mt-1 break-words text-sm text-[var(--mv-text-muted)]">{{ item.rooms.map((room, index) => room.title || personalOfferRoomName(index, item.rooms.length, room.selection_mode)).join(' · ') }}</p>
           </a>
         </li>
       </ul>
@@ -338,11 +382,12 @@ onMounted(load);
         <p class="text-sm">{{ offerActive(offer) ? 'Действует до' : 'Срок истёк' }} {{ formatOfferDate(offer.published.expires_at) }}</p>
         <div class="flex flex-wrap gap-2">
           <input ref="linkField" readonly :value="publicationUrl" aria-label="Ссылка на предложение" class="field-input min-w-0 flex-1" @focus="($event.target as HTMLInputElement).select()" />
-          <button type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white" :disabled="!offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
+          <button ref="copyLinkButton" type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white" :disabled="!offerActive(offer)" @click="copyLink">Скопировать ссылку</button>
           <button v-if="offerActive(offer) && !readOnly" type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm" :disabled="busy" @click="revoke">Отозвать</button>
         </div>
         <a :href="publicationUrl" target="_blank" rel="noopener noreferrer" class="text-sm underline">Открыть клиентскую страницу</a>
         <p v-if="manualCopy" role="status" class="text-sm">Скопируйте выделенную ссылку вручную.</p>
+        <p v-if="actionError?.action === 'revoke'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
       </section>
 
       <form class="space-y-4" @submit.prevent="savePreview">
@@ -350,6 +395,17 @@ onMounted(load);
           <label class="block max-w-sm text-sm font-medium">Действует до
             <input v-model="draftExpiry" type="datetime-local" required class="field-input mt-1 w-full" />
           </label>
+          <div>
+            <label class="block max-w-sm text-sm font-medium">Как клиент выбирает
+              <select :value="selectionMode" class="field-input mt-1 w-full" @change="changeSelectionMode">
+                <option value="choice">Подбор по помещениям</option>
+                <option value="package">Готовые комплекты</option>
+              </select>
+            </label>
+            <p class="mt-1 text-sm text-[var(--mv-text-muted)]">{{ selectionMode === 'package'
+              ? 'Клиент выбирает один комплект целиком. Добавьте в каждый комплект все нужные модели.'
+              : 'Клиент выбирает по одной модели для каждого помещения.' }}</p>
+          </div>
           <PersonalOfferRoomEditor
             v-for="(room, index) in rooms"
             :key="roomKeys[index]"
@@ -365,15 +421,23 @@ onMounted(load);
             @search="searchModels"
           />
           <p v-if="searchStatus" role="status" class="text-sm">{{ searchStatus }}</p>
+          <p v-if="actionError?.action === 'preview'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
           <div class="flex flex-wrap gap-2">
-            <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">Добавить помещение</button>
-            <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">{{ busy ? 'Сохраняем…' : 'Сохранить и открыть предпросмотр' }}</button>
+            <button type="button" class="rounded-lg border border-[var(--mv-border)] px-3 py-2 text-sm disabled:opacity-50" :disabled="rooms.length >= 24" @click="addRoom">{{ selectionMode === 'package' ? 'Добавить комплект' : 'Добавить помещение' }}</button>
+            <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">{{ pendingAction === 'preview' ? 'Сохраняем…' : 'Сохранить и открыть предпросмотр' }}</button>
           </div>
         </fieldset>
       </form>
       <template v-if="preview">
-        <PersonalOfferPreviewPanel :offer="preview" />
-        <button type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">{{ offer && offerActive(offer) ? 'Опубликовать новую ссылку' : 'Опубликовать' }}</button>
+        <div ref="previewResult" role="group" tabindex="-1" aria-labelledby="offer-preview-heading" class="scroll-mt-24">
+          <PersonalOfferPreviewPanel :offer="preview" />
+        </div>
+        <div class="space-y-2">
+          <p v-if="actionError?.action === 'publish'" ref="actionErrorMessage" role="alert" tabindex="-1" class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{{ actionError.message }}</p>
+          <button type="button" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || dirty || readOnly" @click="publish">
+            {{ pendingAction === 'publish' ? 'Публикуем…' : offer && offerActive(offer) ? 'Опубликовать новую ссылку' : 'Опубликовать' }}
+          </button>
+        </div>
       </template>
     </template>
   </section>

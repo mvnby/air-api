@@ -163,6 +163,11 @@ class PersonalOfferService:
         async with command_transaction(session):
             offer = await cls._get(session, offer_id, scope, lock=True)
             _require_expected_version(offer, draft.expected_version)
+            if (
+                offer.rooms and offer.rooms[0].get("selection_mode") == "package"
+                and any("selection_mode" not in room.model_fields_set for room in draft.rooms)
+            ):
+                raise HTTPException(409, "Обновите страницу Manager перед сохранением комплектов.")
             if "order_id" in draft.model_fields_set and draft.order_id != offer.order_id:
                 raise HTTPException(409, "Связь предложения с заказом задаётся при создании.")
             await PersonalOfferProjection.visible_products(session, draft.rooms, scope)

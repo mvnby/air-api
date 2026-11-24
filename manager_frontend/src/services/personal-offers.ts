@@ -3,9 +3,16 @@ import { request } from '../client/core/request';
 
 export const personalOffersPath = '/manager/personal-offers';
 export type InstallationMode = 'none' | 'unknown' | 'fixed';
+export type OfferSelectionMode = 'choice' | 'package';
 export type Installation = { mode: InstallationMode; price_byn: string | null; description: string | null };
 export type DraftOption = { product_id: number; price_byn: string; note: string | null };
-export type DraftRoom = { title: string | null; installation: Installation; options: DraftOption[] };
+export type DraftRoom = {
+  title: string | null;
+  selection_mode?: OfferSelectionMode;
+  show_total?: boolean;
+  installation: Installation;
+  options: DraftOption[];
+};
 export type Draft = { order_id: number | null; expires_at: string; rooms: DraftRoom[] };
 
 export type PersonalOffer = Draft & {
@@ -30,7 +37,14 @@ export type PublicOption = {
 
 export type PersonalOfferPreview = {
   expires_at: string;
-  rooms: Array<{ title: string; installation: Installation; options: PublicOption[] }>;
+  rooms: Array<{
+    title: string;
+    selection_mode?: OfferSelectionMode;
+    equipment_total_byn?: string | null;
+    total_with_installation_byn?: string | null;
+    installation: Installation;
+    options: PublicOption[];
+  }>;
 };
 
 const apiPath = '/api/manager/personal-offers';
@@ -52,12 +66,16 @@ export const personalOffersApi = {
 
 export const newPersonalOfferRoom = (): DraftRoom => ({
   title: null,
+  selection_mode: 'choice',
+  show_total: false,
   installation: { mode: 'none', price_byn: null, description: null },
   options: [],
 });
 
-export const personalOfferRoomName = (index: number, count: number) =>
-  count > 1 ? 'Помещение ' + (index + 1) : 'Подбор кондиционера';
+export function personalOfferRoomName(index: number, count: number, mode?: OfferSelectionMode) {
+  if (mode === 'package') return count > 1 ? 'Комплект ' + (index + 1) : 'Комплект оборудования';
+  return count > 1 ? 'Помещение ' + (index + 1) : 'Подбор кондиционера';
+}
 
 export function personalOfferSelectionUrl(productIds: number[], orderId?: number) {
   const query = new URLSearchParams({ products: productIds.join(',') });
