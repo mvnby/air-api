@@ -62,7 +62,7 @@ describe('order-bound equipment selection', () => {
       await table.get('tbody button[aria-pressed]').trigger('click');
       await flushPromises();
       const expectedLocation = location.pathname + location.search;
-      const desktopCopy = table.get('tbody tr').findAll('button').find(button => button.text() === 'Копировать ссылку на сайте')!;
+      const desktopCopy = table.get('tbody button[aria-label="Копировать ссылку на сайте"]');
       await desktopCopy.trigger('click');
       await flushPromises();
       expect(table.get('tbody [role="status"]').text()).toBe('Ссылка скопирована');
@@ -211,7 +211,10 @@ describe('catalog workspace usability', () => {
     expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { ...technicalCriteria, search: undefined, wifi: undefined, includeOrderable: true }, 'recommended', 'asc');
     expect(new URLSearchParams(location.search).get('heating')).toBe('-25');
     expect(new URLSearchParams(location.search).get('form')).toBe('cassette');
-    await wrapper.findAll('button').find(button => button.text() === 'Сбросить фильтры')!.trigger('click');
+    const resultsControls = wrapper.get('[aria-label="Управление результатами подбора"]');
+    expect(resultsControls.find('[aria-label="Сортировка каталога"]').exists()).toBe(true);
+    expect(resultsControls.find('[aria-label="Выбранные фильтры"]').exists()).toBe(true);
+    await resultsControls.findAll('button').find(button => button.text() === 'Сбросить всё')!.trigger('click');
     await flushPromises();
     expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { isPublished: true }, 'recommended', 'asc');
   });
