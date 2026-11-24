@@ -276,3 +276,40 @@ it('starts from the real catalog basket and retains the negotiating order and se
   expect(query.get('products')).toBe('41,44');
   expect(tray.props('items')).toHaveLength(2);
 });
+
+it('moves focus from the editor to the preview and then to the published link action', async () => {
+  mockOfferApi();
+  const wrapper = await openEditor('?products=41,42');
+  await savePreview(wrapper);
+  const previewHeading = wrapper.get('#offer-preview-heading').element;
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement?.contains(previewHeading)).toBe(true);
+
+  await button(wrapper, 'Опубликовать').trigger('click');
+  await flushPromises();
+  expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+});
+
+it('shows save and publish failures at their actions and allows retry', async () => {
+  const api = mockOfferApi();
+  api.create.mockRejectedValueOnce(new Error('Черновик не сохранён'));
+  api.publish.mockRejectedValueOnce(new Error('Ссылка не опубликована'));
+  const wrapper = await openEditor('?products=41,42');
+
+  await savePreview(wrapper);
+  expect(wrapper.get('form [role="alert"]').text()).toBe('Черновик не сохранён');
+  expect(wrapper.find('#offer-preview-heading').exists()).toBe(false);
+  await savePreview(wrapper);
+  expect(wrapper.find('form [role="alert"]').exists()).toBe(false);
+
+  await button(wrapper, 'Опубликовать').trigger('click');
+  await flushPromises();
+  expect(button(wrapper, 'Опубликовать').element.parentElement?.querySelector('[role="alert"]')?.textContent)
+    .toBe('Ссылка не опубликована');
+  expect(wrapper.find('input[aria-label="Ссылка на предложение"]').exists()).toBe(false);
+
+  await button(wrapper, 'Опубликовать').trigger('click');
+  await flushPromises();
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  expect(document.activeElement).toBe(button(wrapper, 'Скопировать ссылку').element);
+});
