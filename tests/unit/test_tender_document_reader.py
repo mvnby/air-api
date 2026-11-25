@@ -104,6 +104,22 @@ def test_xlsx_sheet_limit_does_not_claim_full_coverage(monkeypatch, tmp_path):
     assert "до 3 строк" in limited["diagnostics"][0]
 
 
+def test_long_archive_member_leaves_budget_for_spreadsheet(monkeypatch, tmp_path):
+    source = Document()
+    source.add_paragraph("Длинная спецификация " * 50)
+    output = BytesIO()
+    source.save(output)
+    archive_bytes = BytesIO()
+    with ZipFile(archive_bytes, "w") as archive:
+        archive.writestr("Проект.docx", output.getvalue())
+        archive.writestr("Смета.xlsx", _xlsx())
+    monkeypatch.setattr(reader, "MAX_TEXT_CHARS", 100)
+    result = reader._extract_original(archive_bytes.getvalue(), "zip", tmp_path)
+    assert result["status"] == "partial"
+    assert result["total_chars"] <= reader.MAX_TEXT_CHARS
+    assert result["fragments"][-1]["section"] == "Смета.xlsx · Лист «Смета», строка 3"
+
+
 @pytest.mark.asyncio
 async def test_reads_original_docx_in_order_and_reassembles_pages(monkeypatch):
     original = _docx()

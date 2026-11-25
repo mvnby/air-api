@@ -70,11 +70,13 @@ WORD_BLOCK_WRAPPERS = WORD_WRAPPERS | {WORD_NS + tag for tag in ("body", "footno
 
 
 class _Extraction:
-    def __init__(self) -> None:
+    def __init__(self, *, max_chars: int | None = None, max_fragments: int | None = None) -> None:
         self.fragments: list[TenderDocumentFragment] = []
         self.diagnostics: list[str] = []
         self.total_chars = 0
         self.ocr_pages = 0
+        self.max_chars = MAX_TEXT_CHARS if max_chars is None else max_chars
+        self.max_fragments = MAX_FRAGMENTS if max_fragments is None else max_fragments
 
     def add(
         self, text: str, method: str, *, page: int | None = None, section: str | None = None,
@@ -87,9 +89,9 @@ class _Extraction:
         # the text exactly across boundaries inside a paragraph, row or page.
         if self.fragments:
             text = "\n\n" + text
-        remaining = MAX_TEXT_CHARS - self.total_chars
-        if len(self.fragments) == MAX_FRAGMENTS:
-            self.diagnostics.append(f"Достигнут лимит фрагментов ({MAX_FRAGMENTS}).")
+        remaining = self.max_chars - self.total_chars
+        if len(self.fragments) == self.max_fragments:
+            self.diagnostics.append(f"Достигнут лимит фрагментов ({self.max_fragments}).")
             return False
         if remaining > 0:
             self.fragments.append(TenderDocumentFragment(
@@ -98,7 +100,7 @@ class _Extraction:
             ))
             self.total_chars += len(self.fragments[-1].text)
         if len(text) > remaining:
-            self.diagnostics.append(f"Достигнут лимит текста ({MAX_TEXT_CHARS} символов).")
+            self.diagnostics.append(f"Достигнут лимит текста ({self.max_chars} символов).")
             return False
         return True
 
@@ -375,13 +377,20 @@ def _extract_archive(content: bytes, extraction: _Extraction, directory: Path) -
             extraction.diagnostics.append(f"Обработано до {MAX_ARCHIVE_MEMBERS} из {len(members)} файлов ZIP.")
         if len({entry.filename for entry in members}) != len(members):
             raise ValueError("ZIP contains ambiguous file names")
+        selected = [
+            (entry, re.sub(r"[\x00-\x1f\x7f]", " ", entry.filename)[-230:], _format_for(entry.filename, ""))
+            for entry in members[:MAX_ARCHIVE_MEMBERS]
+        ]
+        supported_left = sum(kind not in {None, "zip"} for _, _, kind in selected)
         remaining = MAX_ARCHIVE_EXPANDED_BYTES
-        for member in members[:MAX_ARCHIVE_MEMBERS]:
-            name = re.sub(r"[\x00-\x1f\x7f]", " ", member.filename)[-230:]
-            kind = _format_for(name, "")
+        for member, name, kind in selected:
             if kind is None or kind == "zip":
                 extraction.diagnostics.append(f"{name}: формат файла внутри ZIP не поддерживается.")
                 continue
+            # A long design PDF must leave some capacity for the specification and estimate.
+            chars = (extraction.max_chars - extraction.total_chars) // supported_left
+            fragments = (extraction.max_fragments - len(extraction.fragments)) // supported_left
+            supported_left -= 1
             if member.file_size > min(MAX_ORIGINAL_BYTES, remaining):
                 extraction.diagnostics.append(f"{name}: превышен лимит распаковки.")
                 continue
@@ -394,7 +403,7 @@ def _extract_archive(content: bytes, extraction: _Extraction, directory: Path) -
             except (BadZipFile, OSError, RuntimeError, ValueError, NotImplementedError):
                 extraction.diagnostics.append(f"{name}: не удалось открыть файл внутри ZIP.")
                 continue
-            member_result = _Extraction()
+            member_result = _Extraction(max_chars=max(0, chars - 2), max_fragments=fragments)
             member_result.ocr_pages = extraction.ocr_pages
             try:
                 _extract_supported(raw, kind, member_result, directory)
