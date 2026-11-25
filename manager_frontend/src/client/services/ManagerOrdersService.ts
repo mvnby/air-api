@@ -1127,7 +1127,12 @@ export class ManagerOrdersService {
     }
     /**
      * Start Manager Order Source Evidence Job
-     * Start a read-only verification of the selected originals for a scoped order.
+     * Start read-only verification of up to eight originals from the verified source inventory.
+     *
+     * Requires the live platform owner in the system company and an order in the
+     * selected storefront. Returns 202 with a job ID. Identical selections share
+     * an active job. Returns 404 for an inaccessible order and 429 when both
+     * workers are busy. Verification does not save or apply CRM data.
      * @param orderId
      * @param requestBody
      * @returns ManagerTenderEvidenceJob Successful Response
@@ -1152,7 +1157,11 @@ export class ManagerOrdersService {
     }
     /**
      * Get Manager Order Source Evidence Job
-     * Read progress or evidence from a live Manager job in the same company and order.
+     * Read progress or original evidence for a verification job in the same scope.
+     *
+     * The live platform owner must still have access to the order. A missing,
+     * expired or out-of-scope job returns 404. Finished reports expire after
+     * 30 minutes, subject to the active process cache limit. Polling is read-only.
      * @param orderId
      * @param jobId
      * @returns ManagerTenderEvidenceJob Successful Response

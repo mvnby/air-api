@@ -190,7 +190,13 @@ async def start_manager_order_source_evidence_job(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    """Start a read-only verification of the selected originals for a scoped order."""
+    """Start read-only verification of up to eight originals from the verified source inventory.
+
+    Requires the live platform owner in the system company and an order in the
+    selected storefront. Returns 202 with a job ID. Identical selections share
+    an active job. Returns 404 for an inaccessible order and 429 when both
+    workers are busy. Verification does not save or apply CRM data.
+    """
     try:
         await BelzakupkiEnrichmentService._order(session, order_id, tenant_scope)
         job = ManagerTenderEvidenceService.start(
@@ -214,7 +220,12 @@ async def get_manager_order_source_evidence_job(
     session: AsyncSession = Depends(get_session),
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
-    """Read progress or evidence from a live Manager job in the same company and order."""
+    """Read progress or original evidence for a verification job in the same scope.
+
+    The live platform owner must still have access to the order. A missing,
+    expired or out-of-scope job returns 404. Finished reports expire after
+    30 minutes, subject to the active process cache limit. Polling is read-only.
+    """
     job = ManagerTenderEvidenceService.get(order_id=order_id, scope=tenant_scope, job_id=job_id)
     if job is None:
         raise HTTPException(404, "Проверка оригиналов больше недоступна. Запустите её ещё раз.")
