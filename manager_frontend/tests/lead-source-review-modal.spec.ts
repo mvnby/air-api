@@ -37,6 +37,36 @@ describe('LeadSourceReviewModal', () => {
     ] });
   });
 
+  it('automatically shows the work from the linked Goszakupki documents', async () => {
+    const sourceUrl = 'https://goszakupki.by/single-source/view/3876716';
+    const mirror = { ...preview, source_code: 'gias_by', documents_source_url: sourceUrl };
+    const work = 'Демонтировать исправную сплит-систему и установить оба блока на новом месте.';
+    sourceApi.preview.mockResolvedValue(mirror);
+    let finishAnalysis!: (result: unknown) => void;
+    sourceApi.analyze.mockReturnValue(new Promise((resolve) => { finishAnalysis = resolve; }));
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1']);
+    expect(wrapper.get('a[href="' + sourceUrl + '"]').text()).toBe('ТЗ с Госзакупок');
+    expect(wrapper.get('[role="status"]').text()).toContain('Читаем выбранные документы');
+    finishAnalysis({ ...mirror, work_summary: work, analysis_source: 'ai' });
+    await flushPromises();
+    expect(wrapper.get('#source-work-heading').text()).toBe('Что хочет заказчик');
+    expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe(work);
+    expect(sourceApi.apply).not.toHaveBeenCalled();
+  });
+
+  it('keeps confirmed work when the linked originals are available on reopening', async () => {
+    sourceApi.preview.mockResolvedValue({
+      ...preview, documents_source_url: 'https://goszakupki.by/single-source/view/3876716',
+      analysis_source: 'reviewed', work_summary: 'Состав подтверждён менеджером',
+    });
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41 } });
+    await flushPromises();
+    expect(sourceApi.analyze).not.toHaveBeenCalled();
+    expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe('Состав подтверждён менеджером');
+  });
+
   it('requires explicit confirmation and sends reviewed data without a price', async () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();

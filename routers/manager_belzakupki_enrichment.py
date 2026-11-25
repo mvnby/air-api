@@ -58,7 +58,9 @@ async def get_manager_order_source_card(
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        return await BelzakupkiSourceEquipmentService.card(session, order_id=order_id, scope=tenant_scope)
+        return await BelzakupkiSourceEquipmentService.card(
+            session, order_id=order_id, scope=tenant_scope, include_review_documents=True,
+        )
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
 
@@ -224,7 +226,7 @@ async def download_manager_order_source_document(
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        content, filename, mime_type = await BelzakupkiEnrichmentService.document(
+        content, filename, mime_type = await BelzakupkiEnrichmentService.review_document(
             session, order_id=order_id, document_id=document_id, scope=tenant_scope,
         )
     except (LookupError, ValueError, RuntimeError, httpx.HTTPError) as exc:

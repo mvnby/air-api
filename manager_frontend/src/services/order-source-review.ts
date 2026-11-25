@@ -62,6 +62,7 @@ export type OrderSourcePreview = {
   work_summary?: string | null;
   equipment_details?: string | null;
   objects: SourceObject[];
+  documents_source_url?: string | null;
   documents: Array<{
     id: string;
     name: string;

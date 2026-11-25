@@ -82407,6 +82407,17 @@
             "type": "array",
             "title": "Documents"
           },
+          "documents_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documents Source Url"
+          },
           "field_sources": {
             "additionalProperties": {
               "type": "string"
