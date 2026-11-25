@@ -1,0 +1,57 @@
+x-clamav: &clamav
+  image: docker.io/clamav/clamav@sha256:9b2f34be1f8be02f58edb1c8868dca99d6e04f8f8daf191f8448c762f563dde3
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 64
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,size=192m,mode=1777
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  clamd:
+    <<: *clamav
+    user: '${DOCSCAN_UID:?Set the scanner UID}:${DOCSCAN_GID:?Set the scanner GID}'
+    entrypoint: [clamd]
+    command: [--config-file=/etc/clamav/mvn-clamd.conf]
+    network_mode: none
+    cpus: 1.0
+    mem_limit: 3g
+    memswap_limit: 3g
+    volumes:
+      - signatures:/var/lib/clamav:ro
+      - ./clamd.conf:/etc/clamav/mvn-clamd.conf:ro
+      - type: bind
+        source: /opt/air-api/document-scanner
+        target: /run/clamav
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: [CMD, clamdscan, '--config-file=/etc/clamav/mvn-clamd.conf', '--ping=1:1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  freshclam:
+    <<: *clamav
+    user: clamav
+    entrypoint: [freshclam]
+    command: [--config-file=/etc/clamav/mvn-freshclam.conf, --daemon, --foreground]
+    cpus: 0.5
+    mem_limit: 1200m
+    memswap_limit: 1200m
+    healthcheck:
+      disable: true
+    volumes:
+      - signatures:/var/lib/clamav
+      - ./freshclam.conf:/etc/clamav/mvn-freshclam.conf:ro
+
+volumes:
+  signatures:
