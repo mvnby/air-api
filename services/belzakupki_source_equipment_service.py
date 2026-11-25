@@ -14,7 +14,7 @@ from schemas_belzakupki_enrichment import (
     SourceEquipmentCandidateItem, SourceObjectDraft, SourceOriginalFile, SourceEquipmentPrefillResult,
     SourceSubmissionDraft,
 )
-from services.tender_source_reference import resolve_source_reference, tender_snapshot_for_reference
+from services.tender_source_reference import goszakupki_document_reference, resolve_source_reference, tender_snapshot_for_reference
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, _source_identity, _text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.belzakupki_installation_facts import installation_facts
@@ -35,9 +35,12 @@ class BelzakupkiSourceEquipmentService:
 
     @classmethod
     async def card(cls, session: AsyncSession, *, order_id: int, scope: TenantScope,
-                   source_reference: str | None = None) -> ManagerOrderSourceCard:
+                   source_reference: str | None = None, include_review_documents: bool = False) -> ManagerOrderSourceCard:
         order = await BelzakupkiEnrichmentService._order(session, order_id, scope)
         source, external_id = resolve_source_reference(order, source_reference)
+        document_identities = {(source, external_id)}
+        if include_review_documents and (mirror := goszakupki_document_reference(order)):
+            document_identities.add(resolve_source_reference(order, mirror[0]))
         meta = (order.technical_meta or {}).get("belzakupki") or {}
         tender = tender_snapshot_for_reference(order, (source, external_id))
         enrichment = meta.get("enrichment") or {}
@@ -52,8 +55,9 @@ class BelzakupkiSourceEquipmentService:
         originals = [SourceOriginalFile(
             attachment_id=int(row.id), name=row.original_filename,
             document_id=(row.source_meta or {}).get("belzakupki_document_id"), mime_type=row.mime_type,
-        ) for row in rows if (row.source_meta or {}).get("external_id") == external_id
-                     and (row.source_meta or {}).get("source") == source]
+        ) for row in rows if (
+            (row.source_meta or {}).get("source"), (row.source_meta or {}).get("external_id"),
+        ) in document_identities]
         return ManagerOrderSourceCard(
             order_id=order_id, source=source, external_id=external_id,
             submission=SourceSubmissionDraft.model_validate(enrichment.get("submission") or {}),

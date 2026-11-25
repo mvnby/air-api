@@ -167,6 +167,7 @@ class ManagerOrderSourcePreview(BaseModel):
     equipment_details: str | None = None
     objects: list[SourceObjectDraft] = Field(default_factory=list)
     documents: list[SourceDocumentPreview] = Field(default_factory=list)
+    documents_source_url: str | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     analysis_source: str = "source"

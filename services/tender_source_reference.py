@@ -1,7 +1,22 @@
 """Resolve native source references recorded by intake on an already scoped order."""
 
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from models import Order
+from services.belzakupki_canonical_identity import canonical_procurement_url, original_native_identities
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, _source_identity
 from services.belzakupki_import_service import BelzakupkiImportService
+
+
+@dataclass(frozen=True)
+class TenderReviewSource:
+    detail: dict[str, Any]
+    document_identity: tuple[str, str]
+    documents_source_url: str | None = None
+    warning: str | None = None
 
 
 def resolve_source_reference(order, reference):
@@ -29,6 +44,52 @@ async def detail_for_reference(order, reference):
     if not isinstance(data, dict) or data.get("source") != source or str(data.get("external_id")) != external_id:
         raise ValueError("Belzakupki detail identity mismatch")
     return data
+
+
+def goszakupki_document_reference(order: Order) -> tuple[str, str] | None:
+    """Find the recorded native Goszakupki publication for a GIAS order."""
+    if _source_identity(order)[0] not in {"gias_by", "gias"}:
+        return None
+    provider = (order.technical_meta or {}).get("belzakupki") or {}
+    tender = provider.get("tender") or {}
+    url = canonical_procurement_url(provider.get("canonical_url"))
+    if not url or not url.startswith("https://goszakupki.by/") or tender.get("claimed_canonical_url"):
+        return None
+    refs = provider.get("source_references")
+    if not isinstance(refs, dict):
+        return None
+    for source, external_id in original_native_identities(url):
+        reference = BelzakupkiImportService._order_fingerprint(source=source, external_id=external_id)
+        entry = refs.get(reference)
+        if not isinstance(entry, dict) or canonical_procurement_url(entry.get("url")) != url:
+            continue
+        try:
+            if resolve_source_reference(order, reference) == (source, external_id):
+                return reference, url
+        except LookupError:
+            continue
+    return None
+
+
+async def source_for_manager_review(order: Order) -> TenderReviewSource:
+    primary = await BelzakupkiEnrichmentService._detail(order)
+    identity = _source_identity(order)
+    mirror = None if BelzakupkiEnrichmentService._documents(primary) else goszakupki_document_reference(order)
+    if mirror is None:
+        return TenderReviewSource(primary, identity)
+    reference, url = mirror
+    try:
+        detail = await detail_for_reference(order, reference)
+    except (httpx.HTTPError, RuntimeError, ValueError):
+        return TenderReviewSource(primary, identity, warning="Не удалось получить вложения с Госзакупок.")
+    if canonical_procurement_url(detail.get("source_url")) != url:
+        return TenderReviewSource(primary, identity, warning="Не удалось сверить публикацию Госзакупок.")
+    documents = BelzakupkiEnrichmentService._documents(detail)
+    if not documents:
+        return TenderReviewSource(primary, identity)
+    return TenderReviewSource(
+        {**primary, "documents": documents}, resolve_source_reference(order, reference), documents_source_url=url,
+    )
 
 
 def tender_snapshot_for_reference(order, identity):

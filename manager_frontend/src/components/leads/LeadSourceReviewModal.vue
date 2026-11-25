@@ -45,6 +45,7 @@ const analyzedDocumentIds = ref<string[]>([]);
 const selectedExistingCustomer = ref<ManagerCatalogCustomerItemResponse | null>(null);
 const expandedDocuments = ref<Record<string, boolean>>({});
 const analyzing = ref(false);
+const analysisError = ref('');
 const draftsChanged = ref(false);
 const analysisOverwriteConfirmed = ref(false);
 const confirmed = ref(false);
@@ -76,14 +77,15 @@ const customerInnError = computed(() => {
 });
 const canApply = computed(() => confirmed.value && !loading.value && !analyzing.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && !customerInnError.value && (!isNewLead.value || customerAction.value !== 'skip'));
 const chooseScenario = () => { scenarioChangedByManager.value = true; confirmed.value = false; };
-const safeSourceUrl = computed(() => {
-  const value = preview.value?.source_url;
+const safeExternalUrl = (value?: string | null) => {
   if (!value) return null;
   try {
     const url = new URL(value);
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
   } catch { return null; }
-});
+};
+const safeSourceUrl = computed(() => safeExternalUrl(preview.value?.source_url));
+const documentsSourceUrl = computed(() => safeExternalUrl(preview.value?.documents_source_url));
 const safeSubmissionUrl = computed(() => {
   const value = submission.value.url;
   if (!value) return null;
@@ -144,19 +146,19 @@ const addObject = () => { objects.value.push({ address: '', equipment: [] }); ma
 const removeObject = (index: number) => { objects.value.splice(index, 1); markObjectsChanged(); };
 const addEquipment = (object: SourceObject) => { object.equipment.push({ brand: '', model: '', quantity: 1 }); markObjectsChanged(); };
 const removeEquipment = (object: SourceObject, index: number) => { object.equipment.splice(index, 1); markObjectsChanged(); };
-const analyze = async () => {
+const analyze = async (automatic = false) => {
   if (!selectedDocumentIds.value.length || analyzing.value || applying.value) return;
   if (draftsChanged.value && !analysisOverwriteConfirmed.value) {
     analysisOverwriteConfirmed.value = true;
-    error.value = 'Черновик уже редактировался. Нажмите «Заменить черновик ИИ», если хотите заменить состав работ и объекты.';
+    analysisError.value = 'Черновик уже редактировался. Нажмите «Заменить черновик ИИ», если хотите заменить состав работ и объекты.';
     return;
   }
   analyzing.value = true;
-  error.value = '';
+  analysisError.value = '';
   const orderId = props.orderId; const version = scopeVersion;
   try {
     const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value);
-    if (!sameScope(orderId, version)) return;
+    if (!sameScope(orderId, version) || (automatic && draftsChanged.value)) return;
     const customerKeys = ['name', 'inn', 'type', 'phone', 'email', 'legal_address', 'bank_name', 'bic', 'iban'] as const;
     for (const key of relatedCustomerSelected.value ? [] : customerKeys) {
       const fieldKey = `customer.${key}`;
@@ -189,7 +191,7 @@ const analyze = async () => {
     ) };
     analysisSource.value = analyzed.analysis_source || 'ai';
     analyzedDocumentIds.value = analyzed.analyzed_document_ids || [...selectedDocumentIds.value];
-  } catch (reason) { if (sameScope(orderId, version)) error.value = getApiErrorMessage(reason); }
+  } catch (reason) { if (sameScope(orderId, version)) analysisError.value = getApiErrorMessage(reason); }
   finally { if (sameScope(orderId, version)) analyzing.value = false; }
 };
 
@@ -225,6 +227,7 @@ const load = async () => {
   const orderId = props.orderId; const version = scopeVersion;
   loading.value = true;
   error.value = '';
+  analysisError.value = '';
   preview.value = null;
   scenarioOptions.value = [];
   try {
@@ -236,6 +239,10 @@ const load = async () => {
     resetFromPreview(source.value);
     if (scenarios.status === 'fulfilled') scenarioOptions.value = scenarios.value.items;
     else error.value = 'Не удалось загрузить сценарии заказов. Повторно откройте проработку.';
+    if (source.value.documents_source_url && source.value.analysis_source !== 'reviewed'
+      && source.value.documents.length > 0 && source.value.documents.length <= 8) {
+      void analyze(true);
+    }
   } catch (reason) {
     if (sameScope(orderId, version)) error.value = getApiErrorMessage(reason);
   } finally {
@@ -319,8 +326,19 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
         <p v-if="loading" class="text-sm text-slate-500">Загружаем исходные данные…</p>
         <div v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ error }}</div>
         <template v-if="preview">
-          <div class="flex flex-wrap gap-3 text-sm"><a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">Открыть источник</a><span v-if="preview.deadline_at">Срок: {{ new Date(preview.deadline_at).toLocaleDateString('ru-RU') }}</span></div>
+          <div class="flex flex-wrap gap-3 text-sm">
+            <a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">Открыть источник</a>
+            <a v-if="documentsSourceUrl" :href="documentsSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">ТЗ с Госзакупок</a>
+            <span v-if="preview.deadline_at">Срок: {{ new Date(preview.deadline_at).toLocaleDateString('ru-RU') }}</span>
+          </div>
           <p v-if="preview.title" class="mt-2 font-semibold">{{ preview.title }}</p>
+          <section class="mt-4" aria-labelledby="source-work-heading">
+            <h3 id="source-work-heading" class="text-sm font-semibold">Что хочет заказчик</h3>
+            <p v-if="analyzing" role="status" class="mt-2 text-xs text-slate-500">Читаем выбранные документы и готовим черновик требований.</p>
+            <p v-if="analysisError" role="alert" class="mt-2 text-sm text-red-700">{{ analysisError }}</p>
+            <label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label>
+            <label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label>
+          </section>
           <div v-if="preview.warnings.length" class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{{ preview.warnings.join(' ') }}</div>
           <div v-if="preview.equipment_prefill" class="mt-3 text-sm" aria-label="Результат переноса оборудования">
             <p class="font-semibold">Последний перенос оборудования</p>
@@ -370,7 +388,6 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
             </div>
           </section>
 
-          <section class="mt-4"><h3 class="text-sm font-semibold">Работы</h3><label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label><label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label></section>
           <section class="mt-4">
             <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold">Объекты</h3><button type="button" class="btn-mini-outline text-xs" @click="addObject">Добавить объект</button></div>
             <div v-for="(object, index) in objects" :key="index" class="mt-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
@@ -388,7 +405,7 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
             <p v-if="!objects.length" class="mt-2 text-sm text-slate-500">Объекты не извлечены из источника.</p>
           </section>
           <section class="mt-4"><h3 class="text-sm font-semibold">Исходные документы</h3><label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"><input v-model="selectedDocumentIds" type="checkbox" :value="document.id" /><span class="min-w-0"><button v-if="safeDocumentUrl(document.download_url)" type="button" :disabled="Boolean(downloadingDocumentId)" class="break-all text-left font-semibold text-brand-700 underline" @click.prevent="downloadDocument(document)">{{ downloadingDocumentId === document.id ? 'Скачиваем…' : document.name }}</button><span v-else class="font-semibold">{{ document.name }}</span><span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span><button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button></span></label></section>
-          <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || analyzing" @click="analyze">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных.</label>
+          <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || selectedDocumentIds.length > 8 || analyzing" @click="analyze()">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button><p v-if="selectedDocumentIds.length > 8" class="mt-1 text-xs text-slate-500">Выберите до восьми документов для разбора.</p></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных.</label>
         </template>
       </div>
       <footer class="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700"><button type="button" class="btn-mini-outline" @click="emit('close')">Отмена</button><button type="button" class="btn-mini" :disabled="!canApply" @click="apply">{{ applying ? 'Применяем…' : 'Применить' }}</button></footer>
