@@ -197,8 +197,11 @@ confirmed original attachments retain the native Goszakupki document identity.
 When Manager loads these attachments, it automatically analyzes up to eight
 documents and shows an editable draft under **Что хочет заказчик**. Previously
 reviewed drafts open with their saved data. **Обработать ИИ** remains available
-to analyze a selected set of documents. The order scenario is suggested from the
-procurement title or AI work summary; ambiguous text requires a manual choice.
+to run a new analysis of a selected set of documents. Automatic analysis reuses
+the draft for the same order, tenant, storefront, model and input text for up to
+30 minutes in the active API process. Identical concurrent requests share a call,
+and at most two automatic calls can run in that process. The order scenario is suggested from the
+procurement title or AI work summary. Ambiguous text requires a manual choice.
 The manager can change the suggestion before saving. It does not set a proposal
 price from the procurement's estimated value.
 

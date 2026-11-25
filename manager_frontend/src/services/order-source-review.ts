@@ -187,10 +187,12 @@ export const orderSourceReviewApi = {
       errors: { 409: 'Conflict', 422: 'Validation Error' },
     });
   },
-  analyze(orderId: number, documentIds: string[]): CancelablePromise<OrderSourcePreview> {
+  analyze(orderId: number, documentIds: string[], reuseResult = false): CancelablePromise<OrderSourcePreview> {
     return request(OpenAPI, {
       method: 'POST', url: '/api/manager/orders/{order_id}/source-analyze', path: { order_id: orderId },
-      mediaType: 'application/json', body: { document_ids: documentIds }, errors: { 422: 'Validation Error' },
+      mediaType: 'application/json',
+      body: { document_ids: documentIds, ...(reuseResult ? { reuse_result: true } : {}) },
+      errors: { 422: 'Validation Error' },
     });
   },
 };

@@ -46,7 +46,7 @@ describe('LeadSourceReviewModal', () => {
     sourceApi.analyze.mockReturnValue(new Promise((resolve) => { finishAnalysis = resolve; }));
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
-    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1']);
+    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1'], true);
     expect(wrapper.get('a[href="' + sourceUrl + '"]').text()).toBe('ТЗ с Госзакупок');
     expect(wrapper.get('[role="status"]').text()).toContain('Читаем выбранные документы');
     finishAnalysis({ ...mirror, work_summary: work, analysis_source: 'ai' });
@@ -277,6 +277,7 @@ describe('LeadSourceReviewModal', () => {
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
     await flushPromises();
+    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1'], false);
     expect(wrapper.text()).toContain('AI unavailable');
     expect(wrapper.text()).toContain('ТЗ.pdf');
     expect(wrapper.find('input[placeholder="Название или имя"]').exists()).toBe(true);

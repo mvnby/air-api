@@ -22,6 +22,7 @@ from services.belzakupki_enrichment_service import (
 )
 from services.belzakupki_import_service import BelzakupkiImportService
 from services.belzakupki_source_equipment_service import BelzakupkiSourceEquipmentService
+from services.belzakupki_source_analysis import TenderAnalysisReuse
 
 
 @pytest.fixture(autouse=True)
@@ -156,6 +157,34 @@ async def test_manager_review_downloads_analyzes_and_attaches_goszakupki_origina
     assert [doc.attachment_id for doc in manager_card.originals] == [601]
     assert primary_card.originals == []
     assert [doc.attachment_id for doc in original_card.originals] == [601]
+
+
+@pytest.mark.asyncio
+async def test_manager_reopening_the_same_documents_reuses_the_automatic_draft(monkeypatch):
+    detail = _detail()
+    detail["documents"].append({"id": "32", "name": "Приложение", "extracted_text": "Перечень работ"})
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=_order()))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=detail))
+    provider = AsyncMock(return_value=("Обслуживание", None, []))
+    monkeypatch.setattr("services.belzakupki_source_analysis.analyze_tender_text", provider)
+    monkeypatch.setattr("services.belzakupki_enrichment_service.analyze_tender_text", provider)
+    monkeypatch.setattr("services.belzakupki_enrichment_service.automatic_tender_analysis", TenderAnalysisReuse())
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock())
+    session.execute.return_value.scalars.return_value.all.return_value = []
+    scope = TenantScope(tenant_id=1, storefront_id=1)
+    for ids in (["32", "31"], ["31", "32"]):
+        preview = await BelzakupkiEnrichmentService.analyze(
+            session, order_id=455, scope=scope,
+            payload=ManagerOrderSourceAnalyze(document_ids=ids, reuse_result=True),
+        )
+        assert preview.work_summary == "Обслуживание"
+        assert preview.analyzed_document_ids == ["31", "32"]
+    assert provider.await_count == 1
+    await BelzakupkiEnrichmentService.analyze(
+        session, order_id=455, scope=scope, payload=ManagerOrderSourceAnalyze(document_ids=["31", "32"]),
+    )
+    assert provider.await_count == 2
 
 
 @pytest.mark.asyncio

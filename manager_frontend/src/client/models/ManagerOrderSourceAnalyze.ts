@@ -4,5 +4,6 @@
 /* eslint-disable */
 export type ManagerOrderSourceAnalyze = {
     document_ids: Array<string>;
+    reuse_result?: boolean;
 };
 

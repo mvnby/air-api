@@ -157,7 +157,7 @@ const analyze = async (automatic = false) => {
   analysisError.value = '';
   const orderId = props.orderId; const version = scopeVersion;
   try {
-    const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value);
+    const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value, automatic);
     if (!sameScope(orderId, version) || (automatic && draftsChanged.value)) return;
     const customerKeys = ['name', 'inn', 'type', 'phone', 'email', 'legal_address', 'bank_name', 'bic', 'iban'] as const;
     for (const key of relatedCustomerSelected.value ? [] : customerKeys) {

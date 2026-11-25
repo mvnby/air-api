@@ -177,6 +177,7 @@ class ManagerOrderSourcePreview(BaseModel):
 
 class ManagerOrderSourceAnalyze(BaseModel):
     document_ids: list[str] = Field(min_length=1, max_length=8)
+    reuse_result: bool = False
 
 
 class ManagerOrderSourceApply(BaseModel):
