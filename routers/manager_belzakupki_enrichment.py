@@ -14,7 +14,9 @@ from routers.manager_operation_ids import (
     ANALYZE_MANAGER_ORDER_SOURCE,
     APPLY_MANAGER_ORDER_SOURCE,
     DOWNLOAD_MANAGER_ORDER_SOURCE_DOCUMENT,
+    GET_MANAGER_ORDER_SOURCE_EVIDENCE_JOB,
     GET_MANAGER_ORDER_SOURCE_PREVIEW,
+    START_MANAGER_ORDER_SOURCE_EVIDENCE_JOB,
 )
 from schemas_belzakupki_enrichment import (
     ManagerOrderSourceCard, ManagerOrderSourceEquipmentAdd, ManagerOrderSourceEquipmentPreview, SourceEquipmentPrefillResult,
@@ -23,9 +25,11 @@ from schemas_belzakupki_enrichment import (
     ManagerOrderSourceAnalyze,
     ManagerOrderSourcePreview,
 )
+from schemas_manager_tender_evidence import ManagerTenderEvidenceInput, ManagerTenderEvidenceJob
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
 from services.belzakupki_source_analysis import TenderAnalysisBusy
 from services.belzakupki_source_equipment_service import BelzakupkiSourceEquipmentService, SourceEquipmentPreviewChangedError
+from services.manager_tender_evidence_service import ManagerTenderEvidenceService
 
 
 router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
@@ -172,6 +176,54 @@ async def analyze_manager_order_source(
         )
     except (LookupError, ValueError, RuntimeError, httpx.HTTPError) as exc:
         raise _error(exc) from exc
+
+
+@router.post(
+    "/{order_id}/source-evidence-jobs", response_model=ManagerTenderEvidenceJob, status_code=202,
+    operation_id=START_MANAGER_ORDER_SOURCE_EVIDENCE_JOB,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
+)
+async def start_manager_order_source_evidence_job(
+    order_id: int,
+    payload: ManagerTenderEvidenceInput,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    """Start a read-only verification of the selected originals for a scoped order."""
+    try:
+        await BelzakupkiEnrichmentService._order(session, order_id, tenant_scope)
+        job = ManagerTenderEvidenceService.start(
+            order_id=order_id, scope=tenant_scope, document_ids=payload.document_ids,
+        )
+    except (LookupError, ValueError, TenderAnalysisBusy) as exc:
+        raise _error(exc) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return job
+
+
+@router.get(
+    "/{order_id}/source-evidence-jobs/{job_id}", response_model=ManagerTenderEvidenceJob,
+    operation_id=GET_MANAGER_ORDER_SOURCE_EVIDENCE_JOB,
+    dependencies=[Depends(require_system_manager_tenant_scope)],
+)
+async def get_manager_order_source_evidence_job(
+    order_id: int,
+    job_id: str,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
+):
+    """Read progress or evidence from a live Manager job in the same company and order."""
+    job = ManagerTenderEvidenceService.get(order_id=order_id, scope=tenant_scope, job_id=job_id)
+    if job is None:
+        raise HTTPException(404, "Проверка оригиналов больше недоступна. Запустите её ещё раз.")
+    try:
+        await BelzakupkiEnrichmentService._order(session, order_id, tenant_scope)
+    except (LookupError, ValueError) as exc:
+        raise _error(exc) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return job
 
 
 @router.post(

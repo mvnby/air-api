@@ -9,6 +9,7 @@ from zipfile import ZipFile
 import httpx
 import pytest
 from docx import Document
+from openpyxl import Workbook
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import ValidationError
 from reportlab.lib.utils import ImageReader
@@ -55,6 +56,52 @@ def _pdf(*, raster: bool) -> bytes:
     pdf.showPage()
     pdf.save()
     return output.getvalue()
+
+
+def _xlsx(*, with_formula: bool = False) -> bytes:
+    book = Workbook()
+    book.active.title = "Смета"
+    book.active["B3"] = "Монтаж сплит-системы"
+    book.active["C3"] = 2
+    if with_formula:
+        book.active["D3"] = "=C3*100"
+    output = BytesIO()
+    book.save(output)
+    book.close()
+    return output.getvalue()
+
+
+def test_archive_keeps_sheet_rows_word_sections_and_unreadable_members(tmp_path):
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        archive.writestr("Документы/ТЗ.docx", _docx())
+        archive.writestr("Смета.xlsx", _xlsx(with_formula=True))
+        archive.writestr("Чертёж.dwg", b"unsupported")
+    result = reader._extract_original(output.getvalue(), "zip", tmp_path)
+    assert result["status"] == "partial"
+    assert any("Чертёж.dwg" in line for line in result["diagnostics"])
+    assert any("значения формул" in line for line in result["diagnostics"])
+    parts = result["fragments"]
+    assert parts[0]["section"] == "Документы/ТЗ.docx · word/document.xml"
+    assert parts[-1]["section"] == "Смета.xlsx · Лист «Смета», строка 3"
+    assert parts[-1]["text"].strip() == "Монтаж сплит-системы | 2"
+    assert parts[-1]["offset"] == sum(len(part["text"]) for part in parts[:-1])
+
+
+def test_xlsx_sheet_limit_does_not_claim_full_coverage(monkeypatch, tmp_path):
+    normal = reader._extract_original(_xlsx(), "xlsx", tmp_path)
+    assert normal["status"] == "complete"
+    monkeypatch.setattr(reader, "MAX_WORKBOOK_ROWS", 3)
+    book = Workbook()
+    book.active["B3"] = "Монтаж"
+    book.active["B4"] = "Демонтаж"
+    output = BytesIO()
+    book.save(output)
+    book.close()
+    limited = reader._extract_original(output.getvalue(), "xlsx", tmp_path)
+    assert limited["status"] == "partial"
+    assert [fragment["text"] for fragment in limited["fragments"]] == ["Монтаж"]
+    assert "до 3 строк" in limited["diagnostics"][0]
 
 
 @pytest.mark.asyncio

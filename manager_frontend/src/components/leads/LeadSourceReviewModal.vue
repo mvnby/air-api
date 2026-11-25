@@ -14,6 +14,7 @@ import {
 } from '../../services/order-source-review';
 import { normalizeUnp } from '../../utils/legal-requisites';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
+import TenderOriginalEvidencePanel from './TenderOriginalEvidencePanel.vue';
 import type { ManagerCatalogCustomerItemResponse } from '../../client';
 import type { OrderScenarioOption } from '../orders/OrderScenarioSelector.vue';
 
@@ -60,6 +61,10 @@ const downloadDocument = async (document: OrderSourcePreview['documents'][number
   try { await downloadSourceOriginal(orderId, document.id, document.name, () => props.orderId === orderId && props.open); }
   catch (reason) { if (props.orderId === orderId) error.value = getApiErrorMessage(reason); }
   finally { if (props.orderId === orderId) downloadingDocumentId.value = null; }
+};
+const downloadEvidenceOriginal = (documentId: string) => {
+  const document = preview.value?.documents.find((item) => item.id === documentId);
+  if (document) void downloadDocument(document);
 };
 const isNewLead = computed(() => props.leadStatus === 'new_lead');
 const keyForScenario = (value: { workflow_type: string; service_type?: string | null }) => `${value.workflow_type}:${value.service_type || ''}`;
@@ -338,6 +343,15 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
             <p v-if="analysisError" role="alert" class="mt-2 text-sm text-red-700">{{ analysisError }}</p>
             <label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label>
             <label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label>
+            <TenderOriginalEvidencePanel
+              v-if="preview.documents.length"
+              :order-id="orderId"
+              :document-ids="selectedDocumentIds"
+              :disabled="analyzing || applying"
+              :downloading="Boolean(downloadingDocumentId)"
+              @download="downloadEvidenceOriginal"
+            />
+            <p v-else class="mt-2 text-xs text-slate-500">Перечень оригиналов в источнике пуст. Полнота ТЗ неизвестна.</p>
           </section>
           <div v-if="preview.warnings.length" class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{{ preview.warnings.join(' ') }}</div>
           <div v-if="preview.equipment_prefill" class="mt-3 text-sm" aria-label="Результат переноса оборудования">

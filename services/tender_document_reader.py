@@ -12,9 +12,12 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
+from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
+from weakref import WeakValueDictionary
 from zipfile import BadZipFile, ZipFile
 
 import httpx
@@ -25,6 +28,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from models.tenancy import TenantScope
+    from services.tender_source_reference import TenderReviewSource
 
 MAX_ORIGINAL_BYTES = 12 * 1024 * 1024
 MAX_TEXT_CHARS = 180000
@@ -35,10 +39,28 @@ MAX_OCR_PAGES = 6
 MIN_OCR_WORD_CONFIDENCE = 55
 MAX_WORD_ENTRIES = 500
 MAX_WORD_EXPANDED_BYTES = 48 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 24
+MAX_ARCHIVE_EXPANDED_BYTES = 48 * 1024 * 1024
+MAX_WORKBOOK_SHEETS = 12
+MAX_WORKBOOK_ROWS = 1200
+MAX_WORKBOOK_COLUMNS = 80
 MAX_PARSER_SECONDS = 45
+EXTRACTION_CACHE_TTL_SECONDS = 30 * 60
+EXTRACTION_CACHE_ENTRIES = 16
 _parser_slots = asyncio.Semaphore(2)
+_extraction_cache: OrderedDict[tuple[int, int, str, str], tuple[float, dict]] = OrderedDict()
+_extraction_locks: WeakValueDictionary = WeakValueDictionary()
 
 WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOCUMENT_MIME_TYPES = {
+    "application/pdf": "pdf",
+    WORD_MIME: "docx",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+    "application/zip": "zip",
+    "application/x-zip-compressed": "zip",
+}
 WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 DRAWING_EXTENT = "{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}extent"
 DRAWING_IMAGE = "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"
@@ -52,8 +74,12 @@ class _Extraction:
         self.fragments: list[TenderDocumentFragment] = []
         self.diagnostics: list[str] = []
         self.total_chars = 0
+        self.ocr_pages = 0
 
-    def add(self, text: str, method: str, *, page: int | None = None, section: str | None = None) -> bool:
+    def add(
+        self, text: str, method: str, *, page: int | None = None, section: str | None = None,
+        ocr_reliable: bool | None = None,
+    ) -> bool:
         text = text.strip()
         if not text:
             return True
@@ -68,7 +94,7 @@ class _Extraction:
         if remaining > 0:
             self.fragments.append(TenderDocumentFragment(
                 page=page, section=section, fragment=len(self.fragments) + 1,
-                offset=self.total_chars, text=text[:remaining], method=method,
+                offset=self.total_chars, text=text[:remaining], method=method, ocr_reliable=ocr_reliable,
             ))
             self.total_chars += len(self.fragments[-1].text)
         if len(text) > remaining:
@@ -147,7 +173,6 @@ def _extract_pdf(content: bytes, extraction: _Extraction, directory: Path) -> No
     page_count = len(reader.pages)
     if page_count > MAX_PDF_PAGES:
         extraction.diagnostics.append(f"Обработано до {MAX_PDF_PAGES} из {page_count} страниц PDF.")
-    ocr_pages = 0
     for index in range(min(page_count, MAX_PDF_PAGES)):
         page_number = index + 1
         embedded = ""
@@ -161,10 +186,10 @@ def _extract_pdf(content: bytes, extraction: _Extraction, directory: Path) -> No
             break
         if not raster and any(character.isalnum() for character in embedded):
             continue
-        if ocr_pages == MAX_OCR_PAGES:
+        if extraction.ocr_pages == MAX_OCR_PAGES:
             extraction.diagnostics.append(f"Страница {page_number}: достигнут лимит страниц OCR ({MAX_OCR_PAGES}).")
             continue
-        ocr_pages += 1
+        extraction.ocr_pages += 1
         try:
             recognized, reliable = _recognize_pdf_page(source, page_number)
         except (OSError, UnicodeError, subprocess.SubprocessError):
@@ -178,7 +203,7 @@ def _extract_pdf(content: bytes, extraction: _Extraction, directory: Path) -> No
         # normalizing layout whitespace. The remaining scan evidence is independent.
         embedded_lines = {" ".join(line.split()) for line in embedded.splitlines() if line.strip()}
         extra_lines = [line for line in recognized.splitlines() if " ".join(line.split()) not in embedded_lines]
-        if not extraction.add("\n".join(extra_lines), "ocr", page=page_number):
+        if not extraction.add("\n".join(extra_lines), "ocr", page=page_number, ocr_reliable=reliable):
             break
 
 
@@ -268,23 +293,156 @@ def _extract_doc(content: bytes, extraction: _Extraction, directory: Path) -> No
         extraction.diagnostics.append("Не удалось прочитать DOC с помощью antiword.")
 
 
-def _extract_original(content: bytes, document_format: str, directory: Path) -> dict:
+def _add_sheet_row(extraction: _Extraction, values, sheet: str, row: int, kind: str) -> bool:
+    text = " | ".join(str(value) if value is not None else "" for value in values).strip(" |")
+    return extraction.add(text, kind, section=f"Лист «{sheet}», строка {row}")
+
+
+def _extract_xlsx(content: bytes, extraction: _Extraction) -> None:
+    from openpyxl import load_workbook
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    with ZipFile(BytesIO(content)) as archive:
+        entries = archive.infolist()
+        if len(entries) > MAX_WORD_ENTRIES or sum(entry.file_size for entry in entries) > MAX_WORD_EXPANDED_BYTES:
+            raise _DocumentLimit("XLSX превышает лимит распаковки.")
+        if any(entry.filename.startswith(("xl/media/", "xl/embeddings/", "xl/chartsheets/")) for entry in entries):
+            extraction.diagnostics.append("В XLSX есть вставки или диаграммы, которые нужно проверить в оригинале.")
+    try:
+        book = load_workbook(BytesIO(content), read_only=True, keep_links=False)
+    except InvalidFileException as exc:
+        raise ValueError("Invalid workbook") from exc
+    try:
+        if len(book.worksheets) > MAX_WORKBOOK_SHEETS:
+            extraction.diagnostics.append(f"Обработано до {MAX_WORKBOOK_SHEETS} листов XLSX.")
+        for sheet in book.worksheets[:MAX_WORKBOOK_SHEETS]:
+            # Some producers set an incorrect dimension such as A1:A1.
+            sheet.reset_dimensions()
+            has_formulas = wide = False
+            text_limit_reached = False
+            for row, cells in enumerate(sheet.iter_rows(), 1):
+                if row > MAX_WORKBOOK_ROWS:
+                    extraction.diagnostics.append(f"Лист «{sheet.title}»: обработано до {MAX_WORKBOOK_ROWS} строк.")
+                    break
+                wide |= len(cells) > MAX_WORKBOOK_COLUMNS
+                selected = cells[:MAX_WORKBOOK_COLUMNS]
+                has_formulas |= any(cell.data_type == "f" for cell in selected)
+                values = (None if cell.data_type == "f" else cell.value for cell in selected)
+                if not _add_sheet_row(extraction, values, sheet.title, row, "xlsx"):
+                    text_limit_reached = True
+                    break
+            if wide:
+                extraction.diagnostics.append(f"Лист «{sheet.title}»: обработано до {MAX_WORKBOOK_COLUMNS} столбцов.")
+            if has_formulas:
+                extraction.diagnostics.append(f"Лист «{sheet.title}»: значения формул нужно сверить в оригинале.")
+            if text_limit_reached:
+                break
+    finally:
+        book.close()
+
+
+def _extract_xls(content: bytes, extraction: _Extraction) -> None:
+    from xlrd import XLRDError, open_workbook
+
+    try:
+        book = open_workbook(file_contents=content, on_demand=True)
+        try:
+            if book.nsheets > MAX_WORKBOOK_SHEETS:
+                extraction.diagnostics.append(f"Обработано до {MAX_WORKBOOK_SHEETS} листов XLS.")
+            for index in range(min(book.nsheets, MAX_WORKBOOK_SHEETS)):
+                sheet = book.sheet_by_index(index)
+                if sheet.nrows > MAX_WORKBOOK_ROWS or sheet.ncols > MAX_WORKBOOK_COLUMNS:
+                    extraction.diagnostics.append(
+                        f"Лист «{sheet.name}»: обработано до {MAX_WORKBOOK_ROWS} строк и {MAX_WORKBOOK_COLUMNS} столбцов."
+                    )
+                for row in range(min(sheet.nrows, MAX_WORKBOOK_ROWS)):
+                    if not _add_sheet_row(extraction, sheet.row_values(row, end_colx=MAX_WORKBOOK_COLUMNS),
+                                          sheet.name, row + 1, "xls"):
+                        return
+                book.unload_sheet(index)
+        finally:
+            book.release_resources()
+    except XLRDError as exc:
+        raise ValueError("Invalid workbook") from exc
+    if extraction.fragments:
+        extraction.diagnostics.append("Из XLS прочитаны значения ячеек. Вставки нужно сверить в оригинале.")
+
+
+def _extract_archive(content: bytes, extraction: _Extraction, directory: Path) -> None:
+    with ZipFile(BytesIO(content), metadata_encoding="cp866") as archive:
+        members = [entry for entry in archive.infolist() if not entry.is_dir()]
+        if len(members) > MAX_ARCHIVE_MEMBERS:
+            extraction.diagnostics.append(f"Обработано до {MAX_ARCHIVE_MEMBERS} из {len(members)} файлов ZIP.")
+        if len({entry.filename for entry in members}) != len(members):
+            raise ValueError("ZIP contains ambiguous file names")
+        remaining = MAX_ARCHIVE_EXPANDED_BYTES
+        for member in members[:MAX_ARCHIVE_MEMBERS]:
+            name = re.sub(r"[\x00-\x1f\x7f]", " ", member.filename)[-230:]
+            kind = _format_for(name, "")
+            if kind is None or kind == "zip":
+                extraction.diagnostics.append(f"{name}: формат файла внутри ZIP не поддерживается.")
+                continue
+            if member.file_size > min(MAX_ORIGINAL_BYTES, remaining):
+                extraction.diagnostics.append(f"{name}: превышен лимит распаковки.")
+                continue
+            remaining -= member.file_size
+            try:
+                with archive.open(member) as stream:
+                    raw = stream.read(member.file_size + 1)
+                if len(raw) != member.file_size:
+                    raise ValueError("ZIP member size mismatch")
+            except (BadZipFile, OSError, RuntimeError, ValueError, NotImplementedError):
+                extraction.diagnostics.append(f"{name}: не удалось открыть файл внутри ZIP.")
+                continue
+            member_result = _Extraction()
+            member_result.ocr_pages = extraction.ocr_pages
+            try:
+                _extract_supported(raw, kind, member_result, directory)
+            except _DocumentLimit as exc:
+                extraction.diagnostics.append(f"{name}: {exc}")
+                continue
+            extraction.ocr_pages = member_result.ocr_pages
+            extraction.diagnostics.extend(f"{name}: {message}" for message in member_result.diagnostics)
+            if not member_result.fragments and not member_result.diagnostics:
+                extraction.diagnostics.append(f"{name}: читаемый текст не найден.")
+            for fragment in member_result.fragments:
+                section = " · ".join(value for value in (name, fragment.section) if value)
+                if not extraction.add(fragment.text, fragment.method, page=fragment.page, section=section,
+                                      ocr_reliable=fragment.ocr_reliable):
+                    return
+
+
+def _extract_supported(content: bytes, document_format: str, extraction: _Extraction, directory: Path) -> None:
     from defusedxml.common import DefusedXmlException
     from pypdf.errors import PyPdfError
     from xml.etree.ElementTree import ParseError
 
-    extraction = _Extraction()
     try:
         if document_format == "pdf":
             _extract_pdf(content, extraction, directory)
         elif document_format == "docx":
             _extract_docx(content, extraction)
-        else:
+        elif document_format == "doc":
             _extract_doc(content, extraction, directory)
+        elif document_format == "xlsx":
+            _extract_xlsx(content, extraction)
+        elif document_format == "xls":
+            _extract_xls(content, extraction)
+        elif document_format == "zip":
+            _extract_archive(content, extraction, directory)
+    except _DocumentLimit:
+        raise
+    except (BadZipFile, DefusedXmlException, IndexError, KeyError, OSError, ParseError,
+            PyPdfError, RecursionError, RuntimeError, ValueError):
+        extraction.diagnostics.append("Не удалось разобрать файл. Проверьте оригинал документа.")
+
+
+def _extract_original(content: bytes, document_format: str, directory: Path) -> dict:
+    extraction = _Extraction()
+    try:
+        _extract_supported(content, document_format, extraction, directory)
     except _DocumentLimit as exc:
         return {"status": "oversized", "diagnostics": [str(exc)]}
-    except (BadZipFile, DefusedXmlException, KeyError, OSError, ParseError, PyPdfError, RecursionError, RuntimeError, ValueError):
-        extraction.diagnostics.append("Не удалось разобрать файл. Проверьте оригинал документа.")
     if not extraction.fragments and not extraction.diagnostics:
         extraction.diagnostics.append("В оригинале не удалось найти читаемый текст.")
     status = "complete"
@@ -338,14 +496,34 @@ async def _extract_in_worker(content: bytes, document_format: str) -> dict:
 
 
 def _format_for(filename: str, mime_type: str) -> str | None:
-    suffix = Path(filename.lower()).suffix
-    if mime_type == "application/pdf" or suffix == ".pdf":
-        return "pdf"
-    if mime_type == WORD_MIME or suffix == ".docx":
-        return "docx"
-    if mime_type == "application/msword" or suffix == ".doc":
-        return "doc"
-    return None
+    if mime_type in DOCUMENT_MIME_TYPES:
+        return DOCUMENT_MIME_TYPES[mime_type]
+    suffix = Path(filename.lower()).suffix.lstrip(".")
+    return suffix if suffix in DOCUMENT_MIME_TYPES.values() else None
+
+
+def fragment_location(fragment: TenderDocumentFragment) -> str:
+    position = f"стр. {fragment.page}, фрагмент {fragment.fragment}" if fragment.page else f"фрагмент {fragment.fragment}"
+    if fragment.method == "ocr":
+        position += ", OCR"
+    return f"{fragment.section[:260]} · {position}" if fragment.section else position
+
+
+async def _cached_extraction(content: bytes, document_format: str, sha256: str, scope: TenantScope) -> dict:
+    key = (scope.tenant_id, scope.storefront_id, document_format, sha256)
+    lock = _extraction_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        cached = _extraction_cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            _extraction_cache.move_to_end(key)
+            return cached[1]
+        _extraction_cache.pop(key, None)
+        extraction = await _extract_in_worker(content, document_format)
+        if extraction["status"] in {"complete", "partial"}:
+            _extraction_cache[key] = (time.monotonic() + EXTRACTION_CACHE_TTL_SECONDS, extraction)
+            if len(_extraction_cache) > EXTRACTION_CACHE_ENTRIES:
+                _extraction_cache.popitem(last=False)
+        return extraction
 
 
 async def _read_saved_original(
@@ -400,11 +578,14 @@ async def _read_saved_original(
 
 async def load_tender_document(
     session: AsyncSession, scope: TenantScope, *, order_id: int, document_id: str, source_reference: str | None = None,
+    review: TenderReviewSource | None = None,
 ) -> TenderDocumentReadResult:
     from services.belzakupki_enrichment_service import (
         BelzakupkiEnrichmentService, SourceDocumentInventoryUnavailable, SourceDocumentNotFound, SourceDocumentTooLarge,
     )
 
+    if review is not None:
+        source_reference = review.document_reference
     identity = {"order_id": order_id, "document_id": document_id, "source_reference": source_reference}
     reference_options = {} if source_reference is None else {"source_reference": source_reference}
     try:
@@ -417,9 +598,15 @@ async def load_tender_document(
     try:
         try:
             try:
-                content, filename, mime_type = await BelzakupkiEnrichmentService.document(
-                    session, order_id=order_id, document_id=document_id, scope=scope, max_bytes=MAX_ORIGINAL_BYTES, **reference_options,
-                )
+                if review is None:
+                    content, filename, mime_type = await BelzakupkiEnrichmentService.document(
+                        session, order_id=order_id, document_id=document_id, scope=scope, max_bytes=MAX_ORIGINAL_BYTES,
+                        **reference_options,
+                    )
+                else:
+                    content, filename, mime_type = await BelzakupkiEnrichmentService._download_document(
+                        review.detail, review.document_identity, document_id, max_bytes=MAX_ORIGINAL_BYTES,
+                    )
                 identity["origin"] = "source"
             except (SourceDocumentInventoryUnavailable, SourceDocumentNotFound, httpx.HTTPError, RuntimeError):
                 saved = await _read_saved_original(session, scope, **identity)
@@ -433,14 +620,15 @@ async def load_tender_document(
             return TenderDocumentReadResult(
                 **identity, status="oversized", diagnostics=["Ответ источника превышает лимит размера."],
             )
-        identity.update(filename=filename, mime_type=mime_type, sha256=hashlib.sha256(content).hexdigest())
+        sha256 = await asyncio.to_thread(lambda: hashlib.sha256(content).hexdigest())
+        identity.update(filename=filename, mime_type=mime_type, sha256=sha256)
         document_format = _format_for(filename, mime_type)
         if not document_format:
             return TenderDocumentReadResult(
-                **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC и DOCX."],
+                **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC, DOCX, XLS, XLSX и ZIP."],
             )
         try:
-            extraction = await _extract_in_worker(content, document_format)
+            extraction = await _cached_extraction(content, document_format, sha256, scope)
         except (OSError, TimeoutError, UnicodeError, json.JSONDecodeError):
             extraction = {"status": "unreadable", "diagnostics": ["Чтение остановлено из-за ошибки или лимита времени."]}
         return TenderDocumentReadResult(**identity, **extraction)

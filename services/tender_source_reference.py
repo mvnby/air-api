@@ -17,6 +17,7 @@ class TenderReviewSource:
     document_identity: tuple[str, str]
     documents_source_url: str | None = None
     warning: str | None = None
+    document_reference: str | None = None
 
 
 def resolve_source_reference(order, reference):
@@ -89,6 +90,7 @@ async def source_for_manager_review(order: Order) -> TenderReviewSource:
         return TenderReviewSource(primary, identity)
     return TenderReviewSource(
         {**primary, "documents": documents}, resolve_source_reference(order, reference), documents_source_url=url,
+        document_reference=reference,
     )
 
 

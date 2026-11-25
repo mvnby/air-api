@@ -205,6 +205,15 @@ procurement title or AI work summary. Ambiguous text requires a manual choice.
 The manager can change the suggestion before saving. It does not set a proposal
 price from the procurement's estimated value.
 
+**Проверить оригиналы** downloads the selected originals from the same verified
+publication. Manager shows per-file completeness and document quotes with page,
+Word fragment, spreadsheet row or ZIP member. Missing PDFs, pages with low OCR
+confidence, skipped archive members and analysis limits keep coverage partial.
+Provider failures can still return literal evidence extracted locally. The
+verification runs in the background and uses system-company owner access.
+Unchanged hashes reuse recent extraction and completed analysis in the active
+API process. Jobs expire after 30 minutes and can be restarted after a release.
+
 Customer drafts carry source-backed requisites. The collector reads the buyer
 UNP and address
 from explicitly labelled rows, excluding platform operator details. The preview

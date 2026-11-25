@@ -113,6 +113,8 @@ def _original_file_type(content: bytes, filename: str, supplied_type: str) -> tu
     if mime == "application/octet-stream":
         mime = guessed or ""
     if content.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        if filename.lower().endswith(".xls") or mime == "application/vnd.ms-excel":
+            return filename if filename.lower().endswith(".xls") else filename + ".xls", "application/vnd.ms-excel"
         return filename if filename.lower().endswith(".doc") else filename + ".doc", "application/msword"
     if content.startswith(b"%PDF-"):
         return filename if filename.lower().endswith(".pdf") else filename + ".pdf", "application/pdf"
@@ -123,6 +125,8 @@ def _original_file_type(content: bytes, filename: str, supplied_type: str) -> tu
                     return filename if filename.lower().endswith(".docx") else filename + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 if "xl/workbook.xml" in archive.NameToInfo:
                     return filename if filename.lower().endswith(".xlsx") else filename + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                if mime in {"", "application/zip", "application/x-zip-compressed"}:
+                    return filename if filename.lower().endswith(".zip") else filename + ".zip", "application/zip"
         except BadZipFile:
             pass
     if mime in ServiceAttachmentService.SAFE_MIME_TYPES:

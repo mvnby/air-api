@@ -24122,6 +24122,121 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/source-evidence-jobs": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Start Manager Order Source Evidence Job",
+        "description": "Start a read-only verification of the selected originals for a scoped order.",
+        "operationId": "start_manager_order_source_evidence_job",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerTenderEvidenceInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTenderEvidenceJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/orders/{order_id}/source-evidence-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Get Manager Order Source Evidence Job",
+        "description": "Read progress or evidence from a live Manager job in the same company and order.",
+        "operationId": "get_manager_order_source_evidence_job",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerTenderEvidenceJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/{order_id}/source-apply": {
       "post": {
         "tags": [
@@ -43311,6 +43426,65 @@
           "items"
         ],
         "title": "AnalyticsConnectionListResponse"
+      },
+      "AnalyzedTenderFile": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "diagnostics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Diagnostics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "filename",
+          "status"
+        ],
+        "title": "AnalyzedTenderFile"
       },
       "ArticleResponse": {
         "properties": {
@@ -90099,6 +90273,126 @@
         ],
         "title": "ManagerTenantOfferUpsert"
       },
+      "ManagerTenderEvidenceInput": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string",
+              "maxLength": 300,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Document Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_ids"
+        ],
+        "title": "ManagerTenderEvidenceInput"
+      },
+      "ManagerTenderEvidenceJob": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "reading",
+              "analyzing",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "processed": {
+            "type": "integer",
+            "title": "Processed"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTenderEvidenceReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "processed",
+          "total"
+        ],
+        "title": "ManagerTenderEvidenceJob"
+      },
+      "ManagerTenderEvidenceReport": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyzedTenderFile"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "unselected_count": {
+            "type": "integer",
+            "title": "Unselected Count"
+          },
+          "document_coverage_complete": {
+            "type": "boolean",
+            "title": "Document Coverage Complete"
+          },
+          "analysis_status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "local_evidence_only",
+              "not_requested"
+            ],
+            "title": "Analysis Status"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/TenderQualificationFact"
+            },
+            "type": "array",
+            "title": "Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "documents",
+          "unselected_count",
+          "document_coverage_complete",
+          "analysis_status",
+          "findings"
+        ],
+        "title": "ManagerTenderEvidenceReport"
+      },
       "ManagerWarrantyDecisionPayload": {
         "properties": {
           "action": {
@@ -109632,6 +109926,61 @@
         ],
         "title": "TemplateExternalEditSyncResponse"
       },
+      "TenderEvidence": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "document_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Sha256"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "filename",
+          "quote",
+          "start",
+          "end"
+        ],
+        "title": "TenderEvidence"
+      },
       "TenderLeadPushResult": {
         "properties": {
           "order_id": {
@@ -109695,6 +110044,138 @@
           "name"
         ],
         "title": "TenderProfile"
+      },
+      "TenderQualificationFact": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "work_scope",
+              "equipment_count",
+              "equipment_models",
+              "maintenance_frequency",
+              "maintenance_period",
+              "execution_address",
+              "installation_lines",
+              "installation_access",
+              "materials",
+              "sole_proprietor_eligibility",
+              "requirements",
+              "estimated_budget",
+              "offer_price",
+              "submission_method",
+              "submission_deadline",
+              "procedure_type",
+              "logistics"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenderEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "document",
+              "procedure_metadata"
+            ],
+            "title": "Source",
+            "default": "document"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence"
+          },
+          "work_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "maintenance",
+                  "diagnostics",
+                  "repair",
+                  "installation",
+                  "supply_with_installation",
+                  "supply_only",
+                  "ventilation"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Type"
+          },
+          "work_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Required"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "value",
+          "confidence"
+        ],
+        "title": "TenderQualificationFact"
       },
       "TenderWorkflowIdentity": {
         "properties": {

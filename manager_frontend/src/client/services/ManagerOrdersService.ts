@@ -32,6 +32,8 @@ import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayl
 import type { ManagerOrderWaitingCommand } from '../models/ManagerOrderWaitingCommand';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
 import type { ManagerStaleWorkStageListResponse } from '../models/ManagerStaleWorkStageListResponse';
+import type { ManagerTenderEvidenceInput } from '../models/ManagerTenderEvidenceInput';
+import type { ManagerTenderEvidenceJob } from '../models/ManagerTenderEvidenceJob';
 import type { OrderProposalCreatePayload } from '../models/OrderProposalCreatePayload';
 import type { OrderProposalUpdatePayload } from '../models/OrderProposalUpdatePayload';
 import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreatePayload';
@@ -1118,6 +1120,55 @@ export class ManagerOrdersService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Manager Order Source Evidence Job
+     * Start a read-only verification of the selected originals for a scoped order.
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerTenderEvidenceJob Successful Response
+     * @throws ApiError
+     */
+    public static startManagerOrderSourceEvidenceJob(
+        orderId: number,
+        requestBody: ManagerTenderEvidenceInput,
+    ): CancelablePromise<ManagerTenderEvidenceJob> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/source-evidence-jobs',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Source Evidence Job
+     * Read progress or evidence from a live Manager job in the same company and order.
+     * @param orderId
+     * @param jobId
+     * @returns ManagerTenderEvidenceJob Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderSourceEvidenceJob(
+        orderId: number,
+        jobId: string,
+    ): CancelablePromise<ManagerTenderEvidenceJob> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-evidence-jobs/{job_id}',
+            path: {
+                'order_id': orderId,
+                'job_id': jobId,
+            },
             errors: {
                 422: `Validation Error`,
             },
