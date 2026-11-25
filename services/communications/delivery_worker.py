@@ -46,7 +46,7 @@ from services.communications.template_registry import (
     TELEGRAM_CANARY_TEMPLATE_KEY,
     WebsiteTemplateRegistry,
 )
-from services.communications.telegram_cards import TenderCardPending, incoming_card, site_contact_options
+from services.communications.telegram_cards import TenderCardPending, TenderCardUnavailable, incoming_card, site_contact_options
 from services.communications.tenant_website_events import TENANT_WEBSITE_CONTACT_TEMPLATE_KEY
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,15 @@ class CommunicationDeliveryWorker:
         except TenderCardPending:
             result = ProviderDeliveryResult.transient_failure(
                 category="template", code="tender_card_pending",
-                message="Original tender card is still queued", retry_after_seconds=10,
+                message="An earlier tender card revision is still queued", retry_after_seconds=10,
+            )
+            return await self._finish_terminal_despite_cancellation(
+                self._record_failure(claim, result, recovery), delivery_id=claim.delivery_id,
+            )
+        except TenderCardUnavailable:
+            result = ProviderDeliveryResult.permanent_failure(
+                category="template", code="tender_card_unavailable",
+                message="A silent tender update has no original message to edit",
             )
             return await self._finish_terminal_despite_cancellation(
                 self._record_failure(claim, result, recovery), delivery_id=claim.delivery_id,

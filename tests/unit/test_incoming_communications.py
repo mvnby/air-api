@@ -239,12 +239,50 @@ def test_mail_tender_uses_attachment_and_ignores_buyers_address_and_contract_dea
     assert card.deadline_at.hour == 12
 
 
+def test_mobile_tender_card_leads_with_work_and_groups_contact_and_terms():
+    from services.communications.templates.incoming import render_tenant_incoming_v1
+
+    payload = {
+        "tenant_id": 1, "storefront_id": 1, "entity_type": "order", "entity_id": 699,
+        "source": "belzakupki", "name": "ГУ «Центр & партнёры»", "request_text": "",
+        "email": "office@example.test",
+        "tender": {
+            "title": "Текущий ремонт помещений в Лепеле (перенос кондиционера)",
+            "source_label": "Госзакупки", "reference": "3876716",
+            "deadline_at": "2026-11-27T20:59:00Z", "budget_amount": "2450.30", "budget_currency": "BYN",
+            "status": "review", "reason": "Часть ТЗ требует сверки с оригиналом",
+        },
+    }
+    result = render_tenant_incoming_v1(payload, text_link=False)
+    assert result.split("\n\n") == [
+        "📌 <b>Перенос кондиционера</b>",
+        "👤 Заказчик: ГУ «Центр &amp; партнёры»\n📧 Почта: office@example.test",
+        "⏳ Подать до 27.11.2026, 23:59\n💰 Оценочный бюджет: 2\u202f450,30 BYN",
+        "🟡 На проверку · Часть ТЗ требует сверки с оригиналом\nТендер №699 · Госзакупки · 3876716",
+    ]
+
+    payload.update(name=None, email=None)
+    payload["tender"] = {
+        "title": "Монтаж кондиционеров (демонтаж старого оборудования)",
+        "source_label": "БЕЛОРУССКАЯ УНИВЕРСАЛЬНАЯ ТОВАРНАЯ БИРЖА",
+        "reference": "33445199-067e-491b-b604-5b966d2cd3dc",
+        "status": "review", "reason": "Нужно проверить ТЗ",
+    }
+    result = render_tenant_incoming_v1(payload, text_link=False)
+    assert result.split("\n\n") == [
+        "📌 <b>Монтаж кондиционеров (демонтаж старого оборудования)</b>",
+        "🟡 На проверку · Нужно проверить ТЗ\nТендер №699 · БУТБ",
+    ]
+
+
 async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_original(
     db_engine, monkeypatch,
 ):
     from datetime import timedelta
+    import httpx
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from models import StaffUser
+    from schemas_tender_document_reader import TenderDocumentReadResult, TenderDocumentFragment
     from services.communications import tender_document_updates
     from services.communications.delivery_worker import CommunicationDeliveryWorker
     from services.communications.dispatcher import CommunicationOutboxDispatcher
@@ -256,17 +294,41 @@ async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_
     monkeypatch.setattr(tender_document_updates, "async_session_maker", session_factory)
     now = datetime.now(timezone.utc)
     deadline = now + timedelta(days=7)
-    item = _item(deadline_at=deadline.isoformat())
-    item["tender"].update(title="Услуги по закупке", source="goszakupki_by",
-                          url="https://goszakupki.by/marketing/view/1234567")
+    url = "https://goszakupki.by/marketing/view/1234567"
+    item = _item(deadline_at=deadline.isoformat(), external_id="gias-1")
+    item["tender"].update(title="Услуги по закупке", source="gias_by",
+                          url="https://gias.by/tenders/gias-1", canonical_url=url)
+    mirror = _item(deadline_at=deadline.isoformat(), match_id=11, external_id="1234567")
+    mirror["updated_at"] = "2026-09-19T09:00:00Z"
+    mirror["tender"].update(title="Услуги по закупке", source="goszakupki_by", url=url)
     seen = []
+    complete = False
 
     async def read_detail(order):
-        seen.append(order.id)
-        return {"documents": [{"id": 1, "extracted_text":
-            "Ремонт кондиционеров\nМесто выполнения работ: г. Витебск\nКоличество: 12 кондиционеров"}]}
+        assert order.technical_meta["belzakupki"]["source"] == "gias_by"
+        return {"documents": []}
 
-    monkeypatch.setattr(tender_document_updates.BelzakupkiEnrichmentService, "_detail", read_detail)
+    async def fetch(source, external_id):
+        assert (source, external_id) == ("goszakupki_by", "1234567")
+        return httpx.Response(200, json={
+            "source": source, "external_id": external_id,
+            "documents": [{"id": "pdf", "name": "Смета.pdf", "extracted_text": "я" * 16_606}],
+        })
+
+    async def read_original(session, scope, *, order_id, document_id, source_reference):
+        assert scope == SCOPE and document_id == "pdf" and source_reference
+        seen.append(order_id)
+        return TenderDocumentReadResult(
+            order_id=order_id, document_id=document_id, status="complete" if complete else "partial",
+            fragments=[TenderDocumentFragment(fragment=1, offset=0, method="embedded",
+                text="Ремонт кондиционеров\nМесто выполнения работ: г. Витебск\nКоличество: 12 кондиционеров\n"
+                + "Примечание к смете.\n" * 900)],
+        )
+
+    source_service = tender_document_updates.BelzakupkiEnrichmentService
+    monkeypatch.setattr(source_service, "_detail", read_detail)
+    monkeypatch.setattr(source_service, "_fetch", fetch)
+    monkeypatch.setattr(tender_document_updates, "load_tender_document", read_original)
     async with session_factory() as session:
         await add_tenant_members(session, StaffUser(display_name="Owner", status="active", roles=["owner"],
                                                     primary_role="owner", telegram_id=101))
@@ -275,6 +337,11 @@ async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_
             session, tenant_scope=SCOPE, page={"items": [item], "next_cursor": None, "has_more": False},
             cursor_before=None, now=now,
         )
+        other = await BelzakupkiImportService.import_page(
+            session, tenant_scope=SCOPE, page={"items": [mirror], "next_cursor": None, "has_more": False},
+            cursor_before=None, now=now,
+        )
+        assert other.order_id == result.order_id
         initial, = await _events(session)
         initial_id = initial.event_id
         assert initial.payload["tender"]["status"] == "review"
@@ -282,17 +349,32 @@ async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_
     await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
     await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
     async with session_factory() as session:
-        initial, promotion = sorted(await _events(session), key=lambda event: event.aggregate_version)
+        initial, review = sorted(await _events(session), key=lambda event: event.aggregate_version)
+        assert review.payload["tender"]["reason"] == tender_document_updates.PARTIAL_ATTACHMENTS
+        assert review.payload["tender"]["status"] == "review"
+        assert review.payload["tender"]["prior_event_id"] == initial_id
+        order = await session.get(Order, result.order_id)
+        order.technical_meta = {key: value for key, value in order.technical_meta.items()
+                                if key != tender_document_updates.CHECKED_AT}
+        await session.commit()
+
+    complete = True
+    await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
+    await tender_document_updates.refresh_tender_cards(tenant_scope=SCOPE)
+    async with session_factory() as session:
+        initial, promotion, review = sorted(await _events(session), key=lambda event: event.aggregate_version)
         assert initial.payload["tender"]["status"] == "review"
         assert promotion.payload["tender"]["status"] == "recommend"
         assert promotion.payload["tender"]["prior_event_id"] == initial_id
         assert promotion.payload["tender"]["location"] == "г. Витебск"
         assert "12 кондиционеров" in promotion.payload["tender"]["quantity"]
-        assert seen == [result.order_id]
+        assert seen == [result.order_id, result.order_id]
+        assert all(event.payload["name"] == "ОАО Заказчик" for event in (initial, review, promotion))
+        assert all(event.payload["email"] == "contact@example.test" for event in (initial, review, promotion))
 
     scope = CommunicationProcessingScope.all(control_revision=1,
         event_created_at_watermark=now - timedelta(minutes=1))
-    for _ in range(2):
+    for _ in range(3):
         async with session_factory() as session:
             dispatched = await CommunicationOutboxDispatcher.dispatch_next(session, dispatcher_id="tender-cards", scope=scope)
             assert dispatched is not None and dispatched.delivery_count == 1
@@ -314,9 +396,13 @@ async def test_source_attachment_refresh_emits_one_recommendation_and_preserves_
                                          worker_id="tender-cards", scope=scope, provider_boundary_authorizer=authorize)
     assert (await worker.run_once()).outcome == "sent"
     assert (await worker.run_once()).outcome == "sent"
+    assert (await worker.run_once()).outcome == "sent"
     assert (await worker.run_once()).outcome == "idle"
-    first, updated = provider.messages
+    first, edited, updated = provider.messages
     assert first[0] == updated[0] == "101"
     assert first[2].silent and first[2].tender_topic
+    assert edited[2].silent and edited[2].edit_only and edited[2].edit_message_id == 1001
+    assert "Часть ТЗ требует сверки" in edited[1]
+    assert "👤 Заказчик: ОАО Заказчик" in updated[1]
     assert not updated[2].silent and updated[2].edit_message_id == 1001
-    assert updated[2].buttons[1] == ("На площадку", item["tender"]["url"])
+    assert updated[2].buttons[1] == ("На площадку", url)

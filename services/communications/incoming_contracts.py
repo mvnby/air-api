@@ -10,6 +10,9 @@ from services.belzakupki_canonical_identity import canonical_procurement_url
 
 TENANT_INCOMING_CREATED_EVENT = "tenant.incoming.created"
 TENANT_INCOMING_TEMPLATE_KEY = "telegram.tenant_incoming_created"
+# Keep version 2 reserved for the existing recommendation deduplication key.
+TENDER_RECOMMENDATION_VERSION = 2
+TENDER_REVIEW_VERSION = 3
 
 
 class TenderCard(BaseModel):
@@ -32,8 +35,8 @@ class TenderCard(BaseModel):
     def validate_links(self):
         if self.source_url and canonical_procurement_url(self.source_url) != self.source_url:
             raise ValueError("Tender source must be a canonical procurement URL")
-        if self.prior_event_id and self.status != "recommend":
-            raise ValueError("Only a recommendation can update a tender card")
+        if self.prior_event_id and self.status == "skip":
+            raise ValueError("A skipped tender cannot update a tender card")
         return self
 
 
