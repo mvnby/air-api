@@ -148,6 +148,7 @@ class ManagerTenderEvidenceService:
         coverage = (
             unselected == 0 and evidence.all_documents_complete
             and len(rows) == len(inventory) == len(review.detail["documents"])
+            and review.detail.get("document_inventory_complete") is not False
         )
         job.snapshot.status = "analyzing"
         key = None

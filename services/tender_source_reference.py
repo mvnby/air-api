@@ -89,7 +89,8 @@ async def source_for_manager_review(order: Order) -> TenderReviewSource:
     if not documents:
         return TenderReviewSource(primary, identity)
     return TenderReviewSource(
-        {**primary, "documents": documents}, resolve_source_reference(order, reference), documents_source_url=url,
+        {**primary, "documents": documents, "document_inventory_complete": detail.get("document_inventory_complete", True)},
+        resolve_source_reference(order, reference), documents_source_url=url,
         document_reference=reference,
     )
 

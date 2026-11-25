@@ -145,6 +145,24 @@ async def test_missing_original_and_changed_inventory_do_not_hide_other_results(
 
 
 @pytest.mark.asyncio
+async def test_mirror_inventory_gap_keeps_report_partial_even_if_all_listed_files_are_read(tender):
+    fetch, _, _, _, _ = tender
+    normal = fetch.side_effect
+
+    async def incomplete(source, external_id, document_id=None, *, max_bytes=None):
+        response = await normal(source, external_id, document_id, max_bytes=max_bytes)
+        if document_id is None:
+            return httpx.Response(200, json={**response.json(), "document_inventory_complete": False})
+        return response
+
+    fetch.side_effect = incomplete
+    done = await _finish(Evidence.start(order_id=699, scope=SCOPE, document_ids=["a", "b"]))
+    assert done.report.unselected_count == 0
+    assert all(file.status == "complete" for file in done.report.documents)
+    assert not done.report.document_coverage_complete
+
+
+@pytest.mark.asyncio
 async def test_relocation_and_source_table_addresses_are_found_without_ai():
     fragments = [
         "Место нахождения (для юридического лица) | Витебская область, г. Лепель, пл. Свободы, 11/2",
