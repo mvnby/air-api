@@ -1,17 +1,27 @@
 """Bounded escaped Telegram rendering for tenant incoming snapshots."""
 
+import re
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from core.config import settings
-from services.communications.incoming_contracts import TenderCard, TenantIncomingCreatedPayloadV1
-from services.communications.templates.website import _escape_bounded, _ensure_telegram_length, _format_amount
+from services.communications.incoming_contracts import TenantIncomingCreatedPayloadV1
+from services.communications.templates.website import _escape_bounded, _ensure_telegram_length
 
 SOURCE_LABELS = {
     "phone": "Телефон", "bot": "Telegram", "email": "Почта",
     "manager": "Менеджер", "referral": "Рекомендация",
     "belzakupki": "Белзакупки", "other": "Другое", "site": "Сайт",
 }
-STATUS_LABELS = {"recommend": "Можно рассмотреть", "review": "На проверку", "skip": "Мимо"}
+STATUS_LABELS = {"recommend": "🟢 Можно рассмотреть", "review": "🟡 На проверку", "skip": "⚪ Мимо"}
+GENERAL_PROJECT = re.compile(
+    r"^(?:(?:текущий |капитальный )?ремонт|реконструкция|модернизация)"
+    r"\s+(?:помещен|здани|объект|сооружен)", re.IGNORECASE,
+)
+WORK_SUBTITLE = re.compile(
+    r"\((?P<work>(?:перенос|демонтаж|монтаж|установка|ремонт|диагностика|обслуживание)"
+    r"\s+[^()]{1,80})\)\s*$", re.IGNORECASE,
+)
 MINSK = ZoneInfo("Europe/Minsk")
 
 
@@ -20,33 +30,69 @@ def manager_incoming_url(entity_type: str, entity_id: int) -> str:
     return f"{settings.MANAGER_BASE_URL.rstrip('/')}/{route}"
 
 
-def _tender_lines(card: TenderCard, entity_id: int) -> list[str]:
+def tender_heading(title: str) -> str:
+    subtitle = WORK_SUBTITLE.search(title)
+    if subtitle and GENERAL_PROJECT.match(title):
+        work = subtitle["work"]
+        return work[0].upper() + work[1:]
+    if len(title) > 145:
+        return (title[:145].rsplit(" ", 1)[0] or title[:145]) + "…"
+    return title
+
+
+def _visible_reference(reference: str | None) -> str:
+    if not reference:
+        return ""
+    try:
+        UUID(reference)
+    except ValueError:
+        return f" · {_escape_bounded(reference, max_length=80)}"
+    return ""
+
+
+def _tender_lines(payload: TenantIncomingCreatedPayloadV1) -> list[str]:
+    card = payload.tender
+    assert card is not None
+    heading = _escape_bounded(tender_heading(card.title), max_length=146)
     source = _escape_bounded(card.source_label, max_length=80)
-    reference = f" · {_escape_bounded(card.reference, max_length=80)}" if card.reference else ""
-    heading = _escape_bounded(card.title, max_length=300)
-    reason = _escape_bounded(card.reason, max_length=180)
-    lines = [
-        f"<b>Тендер №{entity_id} · {source}</b>{reference}",
-        f"<b>{heading}</b>",
-        f"{STATUS_LABELS[card.status]} · {reason}",
+    if source.casefold() == "белорусская универсальная товарная биржа":
+        source = "БУТБ"
+    contact = [
+        f"{label}: {_escape_bounded(value, max_length=limit)}"
+        for label, value, limit in (
+            ("👤 Заказчик", payload.name, 180),
+            ("📍 Место работ", card.location, 200),
+            ("📱 Телефон", payload.phone, 80),
+            ("📧 Почта", payload.email, 160),
+        )
+        if value
     ]
-    if card.location:
-        lines.append(f"Место работ: {_escape_bounded(card.location, max_length=200)}")
+    details = []
     if card.deadline_at:
         local = card.deadline_at.astimezone(MINSK)
-        lines.append(f"<b>Подать до {local:%d.%m.%Y, %H:%M}</b>")
+        details.append(f"⏳ Подать до {local:%d.%m.%Y, %H:%M}")
     if card.quantity:
-        lines.append(f"Объём: {_escape_bounded(card.quantity, max_length=80)}")
+        details.append(f"📋 Объём: {_escape_bounded(card.quantity, max_length=80)}")
     if card.budget_amount is not None and card.budget_currency:
         currency = _escape_bounded(card.budget_currency, max_length=12)
-        lines.append(f"Бюджет: {_format_amount(card.budget_amount)} {currency}")
+        amount = f"{card.budget_amount:,.2f}".replace(",", "\u202f").replace(".", ",")
+        details.append(f"💰 Оценочный бюджет: {amount} {currency}")
+    reason = _escape_bounded(card.reason, max_length=180)
+    lines = [f"📌 <b>{heading}</b>"]
+    for section in (contact, details):
+        if section:
+            lines.extend(["", *section])
+    lines.extend([
+        "", f"{STATUS_LABELS[card.status]} · {reason}",
+        f"Тендер №{payload.entity_id} · {source}{_visible_reference(card.reference)}",
+    ])
     return lines
 
 
 def render_tenant_incoming_v1(context, *, text_link: bool = True) -> str:
     payload = TenantIncomingCreatedPayloadV1.model_validate(context)
     if payload.tender:
-        lines = _tender_lines(payload.tender, payload.entity_id)
+        lines = _tender_lines(payload)
     else:
         source = _escape_bounded(SOURCE_LABELS.get(payload.source, payload.source), max_length=100)
         lines = [f"<b>Обращение №{payload.entity_id} · {source}</b>"]

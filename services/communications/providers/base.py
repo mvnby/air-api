@@ -20,6 +20,7 @@ class TelegramMessageOptions:
     tender_topic: bool = False
     edit_message_id: int | None = None
     alert_text: str | None = None
+    edit_only: bool = False
 
 
 @dataclass(frozen=True)

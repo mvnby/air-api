@@ -1,7 +1,8 @@
-"""Recheck quiet Belzakupki cards against available source attachment text."""
+"""Recheck quiet Belzakupki cards against scoped source attachments."""
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -13,30 +14,90 @@ from sqlmodel import select
 from core.database import async_session_maker
 from models import IntegrationOutboxEvent, LeadSource, Order, OrderStatus
 from models.leads_inbox import InboxTriageState
-from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
-from services.communications.incoming_contracts import TENANT_INCOMING_CREATED_EVENT
+from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, _source_identity
+from services.communications.incoming_contracts import TENANT_INCOMING_CREATED_EVENT, TENDER_RECOMMENDATION_VERSION
 from services.communications.incoming_events import IncomingEventService
+from services.communications.tender_cards import MAX_TENDER_CARD_TEXT
+from services.tender_document_reader import load_tender_document
+from services.tender_source_reference import detail_for_reference, resolve_source_reference
 
 logger = logging.getLogger(__name__)
 CHECKED_AT = "telegram_tender_documents_checked_at"
+NO_ATTACHMENTS = "Вложения пока недоступны"
+PARTIAL_ATTACHMENTS = "Часть ТЗ требует сверки с оригиналом"
+ATTACHMENT_LIMIT = "Вложения превышают лимит автопроверки"
 
 
-async def _read_documents(order: Order) -> tuple[str, ...]:
+@dataclass(frozen=True)
+class TenderAttachmentCheck:
+    texts: tuple[str, ...] = ()
+    reason: str | None = None
+
+
+def _source_references(order: Order) -> list[str | None]:
+    provider = (order.technical_meta or {}).get("belzakupki") or {}
+    entries = provider.get("source_references")
+    if not isinstance(entries, dict):
+        return [None]
+    primary = _source_identity(order)
+    canonical = provider.get("canonical_url")
+    preferred, mirrors = [], []
+    for key, entry in entries.items():
+        try:
+            if resolve_source_reference(order, key) == primary:
+                continue
+        except LookupError:
+            continue
+        (preferred if canonical and entry.get("url") == canonical else mirrors).append(key)
+    return [*preferred, None, *mirrors]
+
+
+async def _attachment_text(doc, *, order_id, scope, reference) -> str | None:
+    text = doc.get("extracted_text")
+    name = str(doc.get("name") or "")
+    # PDF text from the source can omit scanned pages alongside a native text layer.
+    if (not name.casefold().endswith(".pdf") and isinstance(text, str) and text.strip()
+            and not doc.get("extracted_text_truncated")):
+        return text
+    async with async_session_maker() as session:
+        result = await load_tender_document(
+            session, scope, order_id=order_id, document_id=str(doc["id"]), source_reference=reference,
+        )
+    if result.status == "complete":
+        return "".join(fragment.text for fragment in result.fragments)
+    return None
+
+
+async def _read_documents(order: Order, *, tenant_scope) -> TenderAttachmentCheck:
     try:
-        detail = await BelzakupkiEnrichmentService._detail(order)
-        documents = BelzakupkiEnrichmentService._documents(detail)
-        if not 1 <= len(documents) <= 8:
-            return ()
-        if any(
-            not isinstance(doc.get("extracted_text"), str) or not doc["extracted_text"].strip()
-            or len(doc["extracted_text"]) > 16000 or doc.get("extracted_text_truncated")
-            for doc in documents
-        ):
-            return ()
-        return tuple(doc["extracted_text"] for doc in documents)
-    except (httpx.HTTPError, ValueError) as exc:
-        logger.info("Tender attachment check deferred order_id=%s error_type=%s", order.id, type(exc).__name__)
-        return ()
+        async with asyncio.timeout(55):
+            originals = {}
+            for reference in _source_references(order):
+                try:
+                    detail = await detail_for_reference(order, reference)
+                except (httpx.HTTPError, ValueError) as exc:
+                    logger.info("Tender attachment check deferred order_id=%s error_type=%s", order.id, type(exc).__name__)
+                    continue
+                for doc in BelzakupkiEnrichmentService._documents(detail):
+                    # The source document ID is derived from the original file name and URL.
+                    originals.setdefault(str(doc["id"]), (reference, doc))
+                if len(originals) > 8:
+                    return TenderAttachmentCheck(reason=ATTACHMENT_LIMIT)
+            if not originals:
+                return TenderAttachmentCheck(reason=NO_ATTACHMENTS)
+            texts = []
+            used_chars = 0
+            for reference, doc in originals.values():
+                value = await _attachment_text(doc, order_id=order.id, scope=tenant_scope, reference=reference)
+                if not value or not value.strip():
+                    return TenderAttachmentCheck(reason=PARTIAL_ATTACHMENTS)
+                used_chars += len(value)
+                if used_chars > MAX_TENDER_CARD_TEXT:
+                    return TenderAttachmentCheck(reason=ATTACHMENT_LIMIT)
+                texts.append(value)
+            return TenderAttachmentCheck(texts=tuple(texts))
+    except TimeoutError:
+        return TenderAttachmentCheck(reason=PARTIAL_ATTACHMENTS)
 
 
 async def refresh_tender_cards(*, tenant_scope) -> None:
@@ -73,13 +134,20 @@ async def refresh_tender_cards(*, tenant_scope) -> None:
                     promoted.event_type == TENANT_INCOMING_CREATED_EVENT,
                     promoted.aggregate_type == "order",
                     promoted.aggregate_id == order_id,
-                    promoted.aggregate_version == 2,
+                    promoted.aggregate_version == TENDER_RECOMMENDATION_VERSION,
                 ),
             ).order_by(checked_at.asc().nulls_first(), IntegrationOutboxEvent.occurred_at.asc()).limit(3)
         )).all()
 
-    texts = await asyncio.gather(*(_read_documents(order) for order in orders))
-    for scanned, documents in zip(orders, texts, strict=True):
+    checks = await asyncio.gather(
+        *(_read_documents(order, tenant_scope=tenant_scope) for order in orders), return_exceptions=True,
+    )
+    for scanned, check in zip(orders, checks, strict=True):
+        if isinstance(check, asyncio.CancelledError):
+            raise check
+        if isinstance(check, BaseException):
+            logger.warning("Tender attachment check failed order_id=%s error_type=%s", scanned.id, type(check).__name__)
+            continue
         async with async_session_maker() as session:
             order = await session.scalar(select(Order).where(*active, Order.id == scanned.id).with_for_update())
             if order is None:
@@ -87,8 +155,9 @@ async def refresh_tender_cards(*, tenant_scope) -> None:
             original_source = (scanned.technical_meta or {}).get("belzakupki")
             if original_source != (order.technical_meta or {}).get("belzakupki"):
                 continue
-            if documents:
-                await IncomingEventService.enqueue_tender_recommendation(session, order, document_texts=documents)
+            await IncomingEventService.enqueue_tender_document_update(
+                session, order, document_texts=check.texts, review_reason=check.reason,
+            )
             order.technical_meta = {**(order.technical_meta or {}), CHECKED_AT: now.isoformat()}
             flag_modified(order, "technical_meta")
             await session.commit()

@@ -34,6 +34,7 @@ SOURCE_LABELS = {
     "zakupki.butb.by": "БЕЛОРУССКАЯ УНИВЕРСАЛЬНАЯ ТОВАРНАЯ БИРЖА",
 }
 EXPLICIT_SUPPLY = re.compile(r"\b(?:только поставк\w*|без (?:выполнения )?монтаж\w*)\b", re.I)
+MAX_TENDER_CARD_TEXT = 120_000
 
 
 def _text(value, limit):
@@ -100,8 +101,8 @@ def _assess(title, facts, location, deadline, *, confirmed):
     return "review", "Нужно проверить ТЗ"
 
 
-def _document_facts_from(texts):
-    if len(texts) > 8 or any(len(value) > 16000 for value in texts):
+def _document_facts_from(texts, *, max_chars=16_000):
+    if len(texts) > 8 or any(len(value) > max_chars for value in texts) or sum(map(len, texts)) > MAX_TENDER_CARD_TEXT:
         return []
     fragments = [
         TenderDocumentFragment(document_id=str(index), filename="Текст вложения", text=value)
@@ -146,7 +147,7 @@ def native_tender_card(provider, order_title, *, document_texts=()):
     if not source_url:
         # Preserve known procurement URLs only; never put an arbitrary email/CRM link in a button.
         source_url = canonical_procurement_url(tender.get("url"))
-    facts = _document_facts_from(document_texts)
+    facts = _document_facts_from(document_texts, max_chars=MAX_TENDER_CARD_TEXT)
     location = _location(facts, tender.get("location"))
     portal_deadline = _date(tender.get("deadline_at")) if tender.get("deadline_kind", "submission") == "submission" else None
     deadline = _submission_deadline(facts, portal_deadline)

@@ -309,3 +309,31 @@ async def test_recommendation_edits_card_and_sends_one_audible_reply(monkeypatch
     assert call["text"] == "Можно рассмотреть"
     assert call["disable_notification"] is False
     assert call["reply_parameters"].message_id == 41
+
+
+@pytest.mark.parametrize("edit_error", [None, "message is not modified", "message to edit not found"])
+async def test_document_review_edits_without_sending_another_telegram_message(monkeypatch, edit_error):
+    from services.communications.providers.base import TelegramMessageOptions
+
+    edits = []
+
+    async def edit_message_text(self, **kwargs):
+        edits.append(kwargs)
+        if edit_error:
+            raise TelegramBadRequest(method=SendMessage(chat_id=101, text="Карточка"), message=edit_error)
+
+    monkeypatch.setattr(FakeBot, "edit_message_text", edit_message_text, raising=False)
+    provider = TelegramDeliveryProvider(token="123456:secret-token")
+    options = TelegramMessageOptions(
+        buttons=(("Открыть в Manager", "https://example.test/order/1"),),
+        edit_message_id=41, silent=True, edit_only=True,
+    )
+    result = await provider.send(destination="101", text="Часть ТЗ требует сверки", delivery_id="review", options=options)
+
+    assert [edit["message_id"] for edit in edits] == [41]
+    assert FakeBot.calls == []
+    if edit_error == "message to edit not found":
+        assert result.disposition == ProviderDeliveryDisposition.PERMANENT_FAILURE
+    else:
+        assert result.disposition == ProviderDeliveryDisposition.SENT
+        assert result.provider_message_id == "41"

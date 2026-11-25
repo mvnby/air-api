@@ -80,8 +80,8 @@ class TelegramDeliveryProvider:
 
         try:
             async with asyncio.timeout(self._request_timeout_seconds):
-                message = await self._deliver(normalized_destination, normalized_text, options)
-            return ProviderDeliveryResult.sent(message.message_id)
+                message_id = await self._deliver(normalized_destination, normalized_text, options)
+            return ProviderDeliveryResult.sent(message_id)
         except TelegramRetryAfter as exc:
             return ProviderDeliveryResult.transient_failure(
                 category="rate_limit",
@@ -163,8 +163,12 @@ class TelegramDeliveryProvider:
                 except TelegramBadRequest as exc:
                     reason = exc.message.casefold()
                     edited = "message is not modified" in reason
-                    if not edited and all(error not in reason for error in ("message to edit not found", "message can't be edited")):
+                    if not edited and (options.edit_only or all(
+                        error not in reason for error in ("message to edit not found", "message can't be edited")
+                    )):
                         raise
+                if options.edit_only:
+                    return options.edit_message_id
                 if edited and options.alert_text:
                     params["text"] = options.alert_text
                     params["reply_parameters"] = ReplyParameters(
@@ -175,10 +179,12 @@ class TelegramDeliveryProvider:
                 thread_id = settings.TELEGRAM_TENDER_TOPIC_IDS.get(chat_id)
         if thread_id:
             try:
-                return await self._bot.send_message(message_thread_id=thread_id, **params)
+                message = await self._bot.send_message(message_thread_id=thread_id, **params)
             except TelegramBadRequest as exc:
                 reason = exc.message.casefold()
                 if not any(error in reason for error in ("message thread not found", "topic_closed", "topic is closed", "chat is not a forum")):
                     raise
                 params.pop("reply_parameters", None)
-        return await self._bot.send_message(**params)
+            else:
+                return message.message_id
+        return (await self._bot.send_message(**params)).message_id
