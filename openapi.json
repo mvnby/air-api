@@ -24070,7 +24070,7 @@
           "manager-orders"
         ],
         "summary": "Analyze Manager Order Source",
-        "description": "Run explicit external AI analysis of selected original source documents for an\naccessible order and return an editable preview. Requires system-tenant Manager access.\nMay fetch originals and extract missing text; does not apply the draft or overwrite\norder/document values. Missing source/order returns 404, unknown/truncated document\ninput 400 and source/provider failure 502. Repeating starts another analysis rather than\nreplaying a receipt. See [source review and equipment\nrules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Run explicit external AI analysis of selected original source documents for an\naccessible order and return an editable preview. Requires system-tenant Manager access.\nMay fetch originals and extract missing text; does not apply the draft or overwrite\norder/document values. Missing source/order returns 404, unknown/truncated document\ninput 400 and source/provider failure 502. With reuse_result, the active API process\ncan reuse a recent draft for identical document text. Returns 429 when the automatic\nanalysis workers are busy. See [source review and equipment\nrules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "analyze_manager_order_source",
         "security": [
           {
@@ -81773,6 +81773,11 @@
             "maxItems": 8,
             "minItems": 1,
             "title": "Document Ids"
+          },
+          "reuse_result": {
+            "type": "boolean",
+            "title": "Reuse Result",
+            "default": false
           }
         },
         "type": "object",

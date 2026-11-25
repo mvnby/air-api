@@ -33,7 +33,7 @@ from services.belzakupki_customer_evidence import extract_customer_evidence
 from services.belzakupki_customer_service import enrich_registry, apply_reviewed_customer
 from services.commercial_terms_extraction import extract_commercial_terms
 from services.order_commercial_terms_service import commercial_terms_response, store_source_terms
-from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
+from services.belzakupki_source_analysis import analyze_tender_text, automatic_tender_analysis, extract_missing_document_text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
 from services.service_attachment_service import ServiceAttachmentService
@@ -379,7 +379,8 @@ class BelzakupkiEnrichmentService:
         payload: ManagerOrderSourceAnalyze,
     ) -> ManagerOrderSourcePreview:
         preview = await cls.preview(session, order_id=order_id, scope=scope)
-        selected = dict.fromkeys(payload.document_ids)
+        document_ids = sorted(payload.document_ids) if payload.reuse_result else payload.document_ids
+        selected = dict.fromkeys(document_ids)
         documents = {doc.id: doc for doc in preview.documents}
         if any(document_id not in documents for document_id in selected):
             raise ValueError("Unknown source document")
@@ -445,7 +446,11 @@ class BelzakupkiEnrichmentService:
             preview.warnings = [warning for warning in preview.warnings if not warning.startswith("УНП заказчика не найден;")]
         if all(doc.extracted_text for doc in preview.documents):
             preview.warnings = [warning for warning in preview.warnings if not warning.startswith("Не все документы имеют извлечённый текст.")]
-        work_summary, equipment_details, objects = await analyze_tender_text("\n\n".join(texts))
+        text = "\n\n".join(texts)
+        if payload.reuse_result:
+            work_summary, equipment_details, objects = await automatic_tender_analysis.analyze(text, scope=scope, order_id=order_id)
+        else:
+            work_summary, equipment_details, objects = await analyze_tender_text(text)
         if work_summary:
             preview.work_summary = work_summary
             preview.field_sources["work_summary"] = "ИИ по выбранным документам"

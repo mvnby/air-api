@@ -4,16 +4,89 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import OrderedDict
+from copy import deepcopy
+from hashlib import sha256
+from time import monotonic
 from typing import Any
 
 import httpx
 
 from core.config import settings
+from models.tenancy import TenantScope
 from schemas_belzakupki_enrichment import SourceObjectDraft
 from services.mail_imap_service import MailImapService
 from services.deepseek_connection_service import resolve_deepseek_token
 
 MAX_TENDER_TEXT_CHARS = 180000
+TenderDraft = tuple[str | None, str | None, list[SourceObjectDraft]]
+AnalysisKey = tuple[int, int, int, str, str, bytes]
+
+
+class TenderAnalysisBusy(RuntimeError):
+    pass
+
+
+class TenderAnalysisReuse:
+    """Bounded reuse of automatic analyses within the active API process."""
+
+    TTL_SECONDS = 30 * 60
+    MAX_DRAFTS = 32
+    MAX_DRAFT_BYTES = 64 * 1024
+    MAX_RUNNING = 2
+    ANALYSIS_TIMEOUT_SECONDS = 45
+
+    def __init__(self) -> None:
+        self._completed: OrderedDict[AnalysisKey, tuple[float, TenderDraft]] = OrderedDict()
+        self._running: dict[AnalysisKey, asyncio.Task[TenderDraft]] = {}
+
+    async def analyze(self, raw_text: str, *, scope: TenantScope, order_id: int) -> TenderDraft:
+        _validate_text_size(raw_text)
+        key = (
+            scope.tenant_id, scope.storefront_id, order_id, settings.DEEPSEEK_API_URL,
+            settings.DEEPSEEK_MODEL, sha256(raw_text.encode()).digest(),
+        )
+        cached = self._completed.get(key)
+        if cached is not None:
+            until, draft = cached
+            if until > monotonic():
+                self._completed.move_to_end(key)
+                return deepcopy(draft)
+            self._completed.pop(key)
+
+        task = self._running.get(key)
+        if task is None:
+            if len(self._running) >= self.MAX_RUNNING:
+                raise TenderAnalysisBusy("Разборы ТЗ заняты. Повторите чуть позже.")
+            task = asyncio.create_task(asyncio.wait_for(
+                analyze_tender_text(raw_text), timeout=self.ANALYSIS_TIMEOUT_SECONDS,
+            ))
+            self._running[key] = task
+            task.add_done_callback(lambda finished: self._remember(key, finished))
+        try:
+            return deepcopy(await asyncio.shield(task))
+        except TimeoutError as exc:
+            raise httpx.ReadTimeout("Automatic tender analysis timed out") from exc
+
+    def _remember(self, key: AnalysisKey, task: asyncio.Task[TenderDraft]) -> None:
+        self._running.pop(key, None)
+        if task.cancelled() or task.exception() is not None:
+            return
+        draft = task.result()
+        summary, equipment, objects = draft
+        size = len((summary or "").encode()) + len((equipment or "").encode())
+        if size > self.MAX_DRAFT_BYTES:
+            return
+        for obj in objects:
+            size += len(obj.model_dump_json().encode())
+            if size > self.MAX_DRAFT_BYTES:
+                return
+        self._completed[key] = (monotonic() + self.TTL_SECONDS, draft)
+        if len(self._completed) > self.MAX_DRAFTS:
+            self._completed.popitem(last=False)
+
+
+automatic_tender_analysis = TenderAnalysisReuse()
 
 
 def _parse_json(content: str) -> dict[str, Any]:
@@ -37,9 +110,13 @@ async def extract_missing_document_text(*, filename: str, mime_type: str, conten
     return result.text or None, result.diagnostic or None
 
 
-async def analyze_tender_text(raw_text: str) -> tuple[str | None, str | None, list[SourceObjectDraft]]:
+def _validate_text_size(raw_text: str) -> None:
     if len(raw_text) > MAX_TENDER_TEXT_CHARS:
         raise ValueError("Выбранные документы превышают лимит анализа. Выберите меньше файлов; текст не будет обрезан.")
+
+
+async def analyze_tender_text(raw_text: str) -> TenderDraft:
+    _validate_text_size(raw_text)
     token = await resolve_deepseek_token()
     if not token:
         raise RuntimeError("AI document analysis is not configured")
