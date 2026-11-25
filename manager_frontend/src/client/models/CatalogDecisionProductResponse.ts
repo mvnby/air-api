@@ -27,5 +27,9 @@ export type CatalogDecisionProductResponse = {
     is_inverter: boolean;
     wifi?: 'builtin' | 'ready' | 'none';
     is_published: boolean;
+    /**
+     * Canonical HTTPS product URL when visible on the selected storefront's verified primary domain.
+     */
+    public_site_url?: (string | null);
 };
 

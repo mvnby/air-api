@@ -51,6 +51,7 @@ from .dashboard_analytics import DashboardAnalyticsSnapshot
 from .leads_inbox import InboxReadState, InboxTriageState, InboxEvent
 from .command_audit import CommandAuditEvent
 from .personal_task import PersonalTask
+from .personal_offer import PersonalOffer, PersonalOfferPublication
 from .connector_auth import (
     ConnectorGrant, ConnectorConsent, ConnectorAuthorizationCode,
     ConnectorToken, ConnectorAuthEvent,
@@ -184,6 +185,8 @@ from .supplier import (
 )
 
 __all__ = [
+    "PersonalOffer",
+    "PersonalOfferPublication",
     "StaffAvatar", "StaffTelegramChallenge", "StaffTelegramRetiredIdentity", "StaffTelegramWidgetReceipt",
     "InboxReadState", "InboxTriageState", "InboxEvent",
     "Article",

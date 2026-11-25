@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { CatalogDecisionSelectionItem } from '../../services/catalog-decision-selection';
-const props = defineProps<{ items: CatalogDecisionSelectionItem[]; invalidIds: number[]; validating: boolean; validationError: string; targetOrderId?: number; targeted?: boolean; busy?: boolean; canAttach?: boolean }>();
-const emit = defineEmits<{ remove: [id: number]; clear: []; compare: []; createCollection: []; attachOrder: []; attachTarget: []; createOrder: [] }>();
+const props = defineProps<{ items: CatalogDecisionSelectionItem[]; invalidIds: number[]; validating: boolean; validationError: string; targetOrderId?: number; targeted?: boolean; busy?: boolean; canAttach?: boolean; canPrepareOffer?: boolean; limit?: number }>();
+const emit = defineEmits<{ remove: [id: number]; clear: []; compare: []; createCollection: []; attachOrder: []; attachTarget: []; createOrder: []; prepareOffer: [] }>();
 const expanded = ref(false);
 const compareAllowed = computed(() => props.items.length >= 2 && props.items.length <= 4);
 const selectionBlocked = computed(() => props.validating || Boolean(props.validationError) || props.invalidIds.length > 0);
@@ -11,9 +11,9 @@ const selectionBlocked = computed(() => props.validating || Boolean(props.valida
 <template>
   <aside v-if="items.length" class="catalog-selection-tray fixed inset-x-3 bottom-3 z-20 mx-auto max-w-5xl rounded-2xl border border-brand-200 bg-white p-3 shadow-lg md:bottom-4" aria-label="Подборка клиента">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <button type="button" class="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-gray-900" :aria-expanded="expanded" aria-controls="catalog-selection-items" @click="expanded = !expanded">Выбрано: {{ items.length }} из 24<span aria-hidden="true">{{ expanded ? '▴' : '▾' }}</span></button>
-      <p class="mr-auto hidden text-xs text-gray-500 sm:block">Сохранится в этом браузере на сутки.</p>
-      <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="ml-auto min-h-9 text-xs text-gray-600 underline underline-offset-2" :disabled="busy" @click="emit('clear')">Начать новый подбор</button>
+      <button type="button" class="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-gray-900" :aria-expanded="expanded" aria-controls="catalog-selection-items" @click="expanded = !expanded">Выбрано: {{ items.length }} из {{ limit ?? 24 }}<span aria-hidden="true">{{ expanded ? '▴' : '▾' }}</span></button>
+      <p v-if="!$slots.actions" class="mr-auto hidden text-xs text-gray-500 sm:block">Сохранится в этом браузере на сутки.</p>
+      <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="ml-auto min-h-9 text-xs text-gray-600 underline underline-offset-2" :disabled="busy" @click="emit('clear')">{{ $slots.actions ? 'Очистить выбор' : 'Начать новый подбор' }}</button>
     </div>
     <div v-if="expanded" id="catalog-selection-items" class="mb-2 flex max-h-24 sm:max-h-32 flex-wrap gap-1.5 overflow-y-auto border-t border-gray-100 pt-2">
       <div v-for="item in items" :key="item.id" class="flex max-w-full items-center gap-1 rounded-lg bg-brand-50 py-1 pl-2 text-xs text-brand-900">
@@ -23,12 +23,15 @@ const selectionBlocked = computed(() => props.validating || Boolean(props.valida
     <p v-if="invalidIds.length || validationError" role="alert" class="mb-2 text-xs text-red-700">{{ validationError || 'Уберите отмеченные позиции: отдельные блоки и другие товары вне этого подбора нельзя переносить в новое предложение.' }}</p>
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50" :disabled="busy || selectionBlocked || !compareAllowed" :title="compareAllowed ? 'Сравнить выбранные модели' : 'Для сравнения выберите от 2 до 4 моделей'" @click="emit('compare')">Сравнить {{ compareAllowed ? `(${items.length})` : '2–4 модели' }}</button>
+      <slot name="actions" :disabled="busy || selectionBlocked">
+      <button v-if="canPrepareOffer" type="button" class="min-h-10 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('prepareOffer')">Подготовить предложение</button>
       <button v-if="targeted" type="button" class="min-h-10 flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || selectionBlocked || !canAttach" @click="emit('attachTarget')">{{ busy ? 'Добавляем…' : `Добавить в вариант заказа #${targetOrderId || '—'}` }}</button>
       <template v-else>
         <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('attachOrder')">В существующий заказ</button>
         <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('createOrder')">Новый заказ</button>
         <button type="button" class="min-h-10 flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('createCollection')">Создать подборку</button>
       </template>
+      </slot>
     </div>
   </aside>
 </template>

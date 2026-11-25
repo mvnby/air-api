@@ -500,6 +500,14 @@ class Settings(BaseSettings):
     COMMUNICATIONS_WORKER_PROVIDER_TIMEOUT_SECONDS: float = 10.0
     COMMUNICATIONS_WORKER_PROVIDER_CLOSE_SECONDS: float = 5.0
     COMMUNICATIONS_WORKER_LEASE_SECONDS: int = 90
+    TELEGRAM_TENDER_TOPIC_IDS: dict[int, int] = Field(default_factory=dict)
+
+    @field_validator("TELEGRAM_TENDER_TOPIC_IDS")
+    @classmethod
+    def _validate_telegram_tender_topics(cls, value: dict[int, int]) -> dict[int, int]:
+        if any(chat <= 0 or topic <= 0 for chat, topic in value.items()):
+            raise ValueError("Telegram tender topics require positive private chat and topic IDs")
+        return value
 
     # Dedicated durable catalog cache invalidation consumer. It is separate
     # from the communications dispatcher and remains inert until enabled on

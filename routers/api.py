@@ -6,6 +6,7 @@ from routers.integrations_tenders import router as integrations_tenders_router
 from routers.api_admin import router as admin_router
 from routers.api_catalog_revision import router as catalog_revision_router
 from routers.api_content import router as content_router
+from routers.api_personal_offers import router as personal_offers_router
 from routers.api_product_collections import router as product_collections_router
 from routers.api_leads import router as leads_router
 from routers.api_orders import router as orders_router
@@ -25,6 +26,7 @@ router.include_router(leads_router)
 router.include_router(orders_router)
 router.include_router(products_router)
 router.include_router(proxy_router)
+router.include_router(personal_offers_router)
 router.include_router(product_collections_router)
 router.include_router(storefront_router)
 router.include_router(storefront_settings_router)

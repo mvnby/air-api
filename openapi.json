@@ -4844,6 +4844,50 @@
         }
       }
     },
+    "/api/v1/personal-offers/{token}": {
+      "get": {
+        "tags": [
+          "api",
+          "api"
+        ],
+        "summary": "Get Public Personal Offer",
+        "description": "Return a published offer only for its exact signed storefront host and active token.",
+        "operationId": "get_public_personal_offer",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/placements/{surface_key}/{slot_key}/collections": {
       "get": {
         "tags": [
@@ -39003,6 +39047,516 @@
         }
       }
     },
+    "/api/manager/personal-offers": {
+      "get": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "List Manager Personal Offers",
+        "description": "List drafts newest-first in the selected storefront, optionally for a CRM order.",
+        "operationId": "list_manager_personal_offers",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Create Manager Personal Offer",
+        "description": "Save an unpublished draft, optionally tied to an in-scope order in negotiation.",
+        "operationId": "create_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalOfferDraftInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/personal-offers/{offer_id}": {
+      "get": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Get Manager Personal Offer",
+        "description": "Read a draft and its current share link, if any.",
+        "operationId": "get_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Update Manager Personal Offer",
+        "description": "Replace editable draft fields using the last-read version. The live link is untouched.",
+        "operationId": "update_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalOfferUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Rename Manager Personal Offer",
+        "description": "Rename a draft in the selected storefront without changing the published link or snapshot.\n\nA stale expected version returns 409. An empty title restores the default number in Manager.",
+        "operationId": "rename_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalOfferRenameInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Delete Manager Personal Offer",
+        "description": "Remove a draft from the selected storefront's Manager list and revoke its link atomically.\n\nThe draft is retained internally. A stale expected version returns 409; a missing, removed or\nout-of-scope draft returns 404, including retries after a successful deletion.",
+        "operationId": "delete_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Expected Version"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/personal-offers/{offer_id}/preview": {
+      "post": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Preview Manager Personal Offer",
+        "description": "Render the saved draft using the same allowlist as the client-facing page.",
+        "operationId": "preview_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/personal-offers/{offer_id}/publish": {
+      "post": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Publish Manager Personal Offer",
+        "description": "Publish a fixed snapshot. Replay the same UUID and version to recover from a lost response.",
+        "operationId": "publish_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalOfferPublishInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/personal-offers/{offer_id}/revoke": {
+      "post": {
+        "tags": [
+          "manager personal offers"
+        ],
+        "summary": "Revoke Manager Personal Offer",
+        "description": "Immediately make the active link unavailable while retaining the draft.",
+        "operationId": "revoke_manager_personal_offer",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Offer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalOfferVersionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/product-collections/product-options": {
       "get": {
         "tags": [
@@ -50150,6 +50704,18 @@
           "is_published": {
             "type": "boolean",
             "title": "Is Published"
+          },
+          "public_site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Site Url",
+            "description": "Canonical HTTPS product URL when visible on the selected storefront's verified primary domain."
           }
         },
         "type": "object",
@@ -84254,6 +84820,117 @@
         ],
         "title": "ManagerPasswordChangePayload"
       },
+      "ManagerPersonalOfferListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagerPersonalOfferResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "ManagerPersonalOfferListResponse"
+      },
+      "ManagerPersonalOfferPublished": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "ManagerPersonalOfferPublished"
+      },
+      "ManagerPersonalOfferResponse": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0434\u043b\u044f \u0441\u043f\u0438\u0441\u043a\u0430 Manager."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalOfferRoomInput-Output"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Rooms"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerPersonalOfferPublished"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expires_at",
+          "rooms",
+          "id",
+          "version",
+          "published"
+        ],
+        "title": "ManagerPersonalOfferResponse"
+      },
       "ManagerProductCollectionCreate": {
         "properties": {
           "internal_name": {
@@ -96233,6 +96910,439 @@
         ],
         "title": "PaymentScheduleItemPayload"
       },
+      "PersonalOfferDraftInput": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0434\u043b\u044f \u0441\u043f\u0438\u0441\u043a\u0430 Manager."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalOfferRoomInput-Input"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Rooms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expires_at",
+          "rooms"
+        ],
+        "title": "PersonalOfferDraftInput"
+      },
+      "PersonalOfferInstallationInput-Input": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "unknown",
+              "fixed"
+            ],
+            "title": "Mode"
+          },
+          "price_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Byn"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "PersonalOfferInstallationInput"
+      },
+      "PersonalOfferInstallationInput-Output": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "unknown",
+              "fixed"
+            ],
+            "title": "Mode"
+          },
+          "price_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Byn"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "PersonalOfferInstallationInput"
+      },
+      "PersonalOfferOptionInput-Input": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "price_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Price Byn"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "price_byn"
+        ],
+        "title": "PersonalOfferOptionInput"
+      },
+      "PersonalOfferOptionInput-Output": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "price_byn": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)",
+            "title": "Price Byn"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "price_byn"
+        ],
+        "title": "PersonalOfferOptionInput"
+      },
+      "PersonalOfferPublishInput": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Version"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "request_id"
+        ],
+        "title": "PersonalOfferPublishInput"
+      },
+      "PersonalOfferRenameInput": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Version"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435. \u041f\u0443\u0441\u0442\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043f\u043e \u043d\u043e\u043c\u0435\u0440\u0443."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "title"
+        ],
+        "title": "PersonalOfferRenameInput"
+      },
+      "PersonalOfferRoomInput-Input": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "show_total": {
+            "type": "boolean",
+            "title": "Show Total",
+            "default": false
+          },
+          "installation": {
+            "$ref": "#/components/schemas/PersonalOfferInstallationInput-Input"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalOfferOptionInput-Input"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "installation",
+          "options"
+        ],
+        "title": "PersonalOfferRoomInput"
+      },
+      "PersonalOfferRoomInput-Output": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "show_total": {
+            "type": "boolean",
+            "title": "Show Total",
+            "default": false
+          },
+          "installation": {
+            "$ref": "#/components/schemas/PersonalOfferInstallationInput-Output"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalOfferOptionInput-Output"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "installation",
+          "options"
+        ],
+        "title": "PersonalOfferRoomInput"
+      },
+      "PersonalOfferUpdateInput": {
+        "properties": {
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0434\u043b\u044f \u0441\u043f\u0438\u0441\u043a\u0430 Manager."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalOfferRoomInput-Input"
+            },
+            "type": "array",
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Rooms"
+          },
+          "expected_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expires_at",
+          "rooms",
+          "expected_version"
+        ],
+        "title": "PersonalOfferUpdateInput"
+      },
+      "PersonalOfferVersionInput": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "PersonalOfferVersionInput"
+      },
       "PersonalTaskAssigneeListResponse": {
         "properties": {
           "items": {
@@ -101275,6 +102385,263 @@
           "detail"
         ],
         "title": "PublicOrderPricingErrorResponse"
+      },
+      "PublicPersonalOfferInstallation": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "unknown",
+              "fixed"
+            ],
+            "title": "Mode"
+          },
+          "price_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Byn"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "price_byn",
+          "description"
+        ],
+        "title": "PublicPersonalOfferInstallation"
+      },
+      "PublicPersonalOfferOption": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "main_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Image"
+          },
+          "price_byn": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price Byn"
+          },
+          "original_price_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Price Byn"
+          },
+          "total_price_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Price Byn"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "cooling_power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Power Kw"
+          },
+          "noise_indoor_min_db": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Noise Indoor Min Db"
+          },
+          "is_inverter": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "ready",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "slug",
+          "main_image",
+          "price_byn",
+          "original_price_byn",
+          "total_price_byn",
+          "note",
+          "cooling_power_kw",
+          "noise_indoor_min_db",
+          "is_inverter",
+          "wifi"
+        ],
+        "title": "PublicPersonalOfferOption"
+      },
+      "PublicPersonalOfferResponse": {
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/PublicPersonalOfferRoom"
+            },
+            "type": "array",
+            "title": "Rooms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expires_at",
+          "rooms"
+        ],
+        "title": "PublicPersonalOfferResponse"
+      },
+      "PublicPersonalOfferRoom": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "selection_mode": {
+            "type": "string",
+            "enum": [
+              "choice",
+              "package"
+            ],
+            "title": "Selection Mode",
+            "default": "choice"
+          },
+          "equipment_total_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equipment Total Byn"
+          },
+          "total_with_installation_byn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total With Installation Byn"
+          },
+          "installation": {
+            "$ref": "#/components/schemas/PublicPersonalOfferInstallation"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicPersonalOfferOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "installation",
+          "options"
+        ],
+        "title": "PublicPersonalOfferRoom"
       },
       "PublicProductCollectionItemResponse": {
         "properties": {

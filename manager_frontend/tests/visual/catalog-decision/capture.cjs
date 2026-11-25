@@ -17,10 +17,21 @@ const models = [
   purchase_cost_byn: 2100, recommended_price_byn: 3500, margin_abs_byn: model.retail_price_byn - 2100,
   margin_pct: (model.retail_price_byn - 2100) / model.retail_price_byn, supplier_name: 'Тестовый поставщик',
   supplier_qty: 5, availability: 'in_stock', heating_min_c: -25, is_inverter: true, wifi: 'builtin', is_published: true,
+  public_site_url: model.id === 11 ? 'https://seller.example.test/product/fixture-11/' : null,
 }));
 let browser;
 async function fixture(width, editable) {
   const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height: 1000 }, isMobile: width < 768, hasTouch: width < 768 });
+  await context.addInitScript(() => {
+    globalThis.copiedProductLinks = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { async writeText(url) {
+        if (globalThis.copiedProductLinks.length) throw new Error('Clipboard permission rejected');
+        globalThis.copiedProductLinks.push(url);
+      } },
+    });
+  });
   const page = await context.newPage();
   page.setDefaultTimeout(7000);
   const errors = [], requests = [], mutations = [];
@@ -114,8 +125,16 @@ const emptyQuery = '?form=floor_ceiling&coolingBtuClasses=36%2C42%2C60&heating=-
       assert.equal(new URL(page.url()).searchParams.has('sort'), false);
       assert.equal(new URL(page.url()).searchParams.has('direction'), false);
       assert.match(await rows.first().innerText(), /Zeta Wall/);
+      if (width < 768) await rows.first().getByText('Действия', { exact: true }).click();
+      await rows.first().getByRole('button', { name: 'Копировать ссылку на сайте' }).click();
+      await rows.first().getByText('Ссылка скопирована', { exact: true }).waitFor();
+      assert.deepEqual(await page.evaluate(() => globalThis.copiedProductLinks), [models[0].public_site_url]);
       await workspace.getByRole('button', { name: 'Открыть карточку Zeta Wall 24' }).filter({ visible: true }).first().click();
-      await page.getByRole('link', { name: 'Редактировать', exact: true }).waitFor();
+      const reader = page.getByRole('dialog');
+      await reader.getByRole('link', { name: 'Редактировать', exact: true }).waitFor();
+      await reader.getByRole('button', { name: 'Копировать ссылку на сайте' }).click();
+      assert.equal(await reader.getByLabel('Скопируйте ссылку вручную').inputValue(), models[0].public_site_url);
+      await f.noOverflow();
       await page.getByRole('button', { name: 'Закрыть карточку товара' }).click();
       await page.goto(base + '/manager/catalog-decision' + emptyQuery); await f.ready();
       await workspace.getByText('Подтверждённых комплектов по этим условиям нет', { exact: true }).waitFor();

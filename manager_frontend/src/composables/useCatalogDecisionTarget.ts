@@ -4,13 +4,13 @@ import { readCatalogDecisionContext, type CatalogDecisionOrderContext } from '..
 import { getApiErrorMessage } from '../utils/api-errors';
 import { isProposalRevisionLocked } from '../components/orders/proposal-lifecycle';
 
-export const useCatalogDecisionTarget = () => {
+export const useCatalogDecisionTarget = (search = window.location.search) => {
   const context = ref<CatalogDecisionOrderContext | null>(null);
   const order = ref<ManagerOrderDetailResponse | null>(null);
   const error = ref('');
   const loading = ref(false);
   const saving = ref(false);
-  try { context.value = readCatalogDecisionContext(window.location.search); }
+  try { context.value = readCatalogDecisionContext(search); }
   catch (err) { error.value = (err as Error).message; }
   const requested = Boolean(context.value || error.value);
   const proposal = computed(() => order.value?.proposals?.find(item => item.id === context.value?.proposalId && !item.is_archived));

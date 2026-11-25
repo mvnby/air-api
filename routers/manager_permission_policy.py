@@ -359,6 +359,18 @@ CATALOG_DECISION_OPERATION_IDS = frozenset({
     operation_ids.CREATE_MANAGER_CATALOG_DECISION_ORDER,
 })
 
+PERSONAL_OFFER_OPERATION_IDS = frozenset({
+    operation_ids.LIST_MANAGER_PERSONAL_OFFERS,
+    operation_ids.GET_MANAGER_PERSONAL_OFFER,
+    operation_ids.CREATE_MANAGER_PERSONAL_OFFER,
+    operation_ids.UPDATE_MANAGER_PERSONAL_OFFER,
+    operation_ids.RENAME_MANAGER_PERSONAL_OFFER,
+    operation_ids.DELETE_MANAGER_PERSONAL_OFFER,
+    operation_ids.PREVIEW_MANAGER_PERSONAL_OFFER,
+    operation_ids.PUBLISH_MANAGER_PERSONAL_OFFER,
+    operation_ids.REVOKE_MANAGER_PERSONAL_OFFER,
+})
+
 SOURCE_EQUIPMENT_OPERATION_IDS = frozenset({
     operation_ids.GET_MANAGER_ORDER_SOURCE_CARD,
     operation_ids.GET_MANAGER_ORDER_SOURCE_EQUIPMENT,
@@ -430,7 +442,7 @@ def required_permission_dependency(operation_id: str | None):
         return require_manager_access
     if operation_id in SOURCE_EQUIPMENT_OPERATION_IDS:
         return require_manager_access
-    if operation_id in CATALOG_DECISION_OPERATION_IDS:
+    if operation_id in CATALOG_DECISION_OPERATION_IDS or operation_id in PERSONAL_OFFER_OPERATION_IDS:
         return require_manager_access
     if operation_id in MULTI_SPLIT_OPERATION_IDS:
         return require_manager_access

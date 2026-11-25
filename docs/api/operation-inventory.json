@@ -9,10 +9,11 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "38": "Personal equipment offers: scoped Manager drafts and replay, immutable published commercial snapshots, token expiry and revocation, exact signed storefront host and allow-listed public data. Reviewed 2026-11-22 for issue 1286",
     "35": "Scoped order sites and equipment: stable customer/branch ownership, bounded lists, durable command replay, exact order storefront and optimistic site versions. Reviewed 2026-11-20 for issue 1278",
     "36": "Diagnostic inspection revisions and native technical act drafts: verified order site/equipment scope, exact inspection versions, immutable document snapshots and explicit contract basis. Reviewed 2026-11-20 for issue 1278",
     "37": "Scoped completion acts: explicit site IDs, current selected proposal revision and contract basis, aggregate line quantity and amount reservations and compatible replacements. Reviewed 2026-11-20 for issue 1278",
-    "38": "Typed external evidence and site correction: scoped private version previews, structural and malware validation, closed-order signed copies, idempotent site changes without rewriting historical snapshots. Reviewed 2026-11-20 for issue 1278",
+    "39": "Typed external evidence and site correction: scoped private version previews, structural and malware validation, closed-order signed copies, idempotent site changes without rewriting historical snapshots. Reviewed 2026-11-20 for issue 1278",
     "34": "Addressed template audits: live company owner/admin, issuer/customer scope, exact immutable source/context/legal evidence hashes, retained decisions, guarded fictional DOCX/PDF previews and separate Manager activation; reviewed 2026-11-10",
     "32": "Versioned physical order equipment: scoped bounded reads, customer/object selection, partial identity saves, durable retries, legacy snapshot adoption through audit provenance and unchanged issued files; reviewed 2026-11-10 for issue 1249",
     "33": "Native additional-work amendments: explicit frozen contract basis, current effective totals, tenant/storefront and revision fence; reviewed 2026-11-10",
@@ -306,6 +307,14 @@
     ],
     "routers/api_orders.py": [
       ["POST /api/v1/orders", "create_order", true, 1]
+    ],
+    "routers/api_personal_offers.py": [
+      [
+        "GET /api/v1/personal-offers/{token}",
+        "get_public_personal_offer",
+        false,
+        38
+      ]
     ],
     "routers/api_product_collections.py": [
       ["GET /api/v1/content/placements/{surface_key}/{slot_key}/collections", "get_public_product_collection_placement", false, 1]
@@ -846,6 +855,62 @@
       ["PUT /api/manager/platform-ai", "put_platform_ai_connection", false, 3],
       ["PUT /api/manager/platform-ai/deepseek", "put_deepseek_connection", false, 3]
     ],
+    "routers/manager_personal_offers.py": [
+      [
+        "GET /api/manager/personal-offers",
+        "list_manager_personal_offers",
+        false,
+        38
+      ],
+      [
+        "POST /api/manager/personal-offers",
+        "create_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "GET /api/manager/personal-offers/{offer_id}",
+        "get_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "PUT /api/manager/personal-offers/{offer_id}",
+        "update_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "PATCH /api/manager/personal-offers/{offer_id}",
+        "rename_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "DELETE /api/manager/personal-offers/{offer_id}",
+        "delete_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "POST /api/manager/personal-offers/{offer_id}/preview",
+        "preview_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "POST /api/manager/personal-offers/{offer_id}/publish",
+        "publish_manager_personal_offer",
+        false,
+        38
+      ],
+      [
+        "POST /api/manager/personal-offers/{offer_id}/revoke",
+        "revoke_manager_personal_offer",
+        false,
+        38
+      ]
+    ],
     "routers/manager_product_collections.py": [
       ["GET /api/manager/product-collections", "list_manager_product_collections", false, 3],
       ["GET /api/manager/product-collections/product-options", "search_manager_product_collection_products", false, 3],
@@ -1026,7 +1091,7 @@
     "routers/manager_order_sites.py": [
       ["GET /api/manager/orders/{order_id}/sites", "manager_list_order_sites", false, 35],
       ["GET /api/manager/orders/{order_id}/sites/{site_id}/equipment", "manager_list_order_site_equipment", false, 35],
-      ["PATCH /api/manager/orders/{order_id}/sites/{site_id}", "manager_update_order_site", false, 38],
+      ["PATCH /api/manager/orders/{order_id}/sites/{site_id}", "manager_update_order_site", false, 39],
       ["POST /api/manager/orders/{order_id}/sites", "manager_add_order_site", false, 35],
       ["POST /api/manager/orders/{order_id}/sites/{site_id}/equipment", "manager_link_order_site_equipment", false, 35]
     ],

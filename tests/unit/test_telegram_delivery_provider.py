@@ -257,3 +257,55 @@ async def test_telegram_provider_does_not_expose_unknown_exception_message(caplo
         == "Telegram provider outcome requires manual reconciliation"
     )
     assert "secret-token" not in caplog.text
+
+
+@pytest.mark.parametrize("topic_available", [True, False])
+async def test_tender_card_uses_buttons_and_silent_topic_or_falls_back(monkeypatch, topic_available):
+    from core.config import settings
+    from services.communications.providers.base import TelegramMessageOptions
+
+    monkeypatch.setattr(settings, "TELEGRAM_TENDER_TOPIC_IDS", {101: 17})
+
+    async def send_message(self, **kwargs):
+        self.calls.append(kwargs)
+        if not topic_available and "message_thread_id" in kwargs:
+            raise TelegramBadRequest(method=SendMessage(chat_id=101, text="test"), message="message thread not found")
+        return SimpleNamespace(message_id=42)
+
+    monkeypatch.setattr(FakeBot, "send_message", send_message)
+    provider = TelegramDeliveryProvider(token="123456:secret-token")
+    options = TelegramMessageOptions(buttons=(("Открыть в Manager", "https://example.test/order/1"),),
+                                     silent=True, tender_topic=True)
+    result = await provider.send(destination="101", text="Карточка", delivery_id="card", options=options)
+
+    assert result.disposition == ProviderDeliveryDisposition.SENT
+    assert FakeBot.calls[0]["message_thread_id"] == 17
+    assert all(call["disable_notification"] for call in FakeBot.calls)
+    assert FakeBot.calls[-1]["reply_markup"].inline_keyboard[0][0].text == "Открыть в Manager"
+    assert len(FakeBot.calls) == (1 if topic_available else 2)
+    if not topic_available:
+        assert "message_thread_id" not in FakeBot.calls[-1]
+
+
+async def test_recommendation_edits_card_and_sends_one_audible_reply(monkeypatch):
+    from services.communications.providers.base import TelegramMessageOptions
+
+    edits = []
+
+    async def edit_message_text(self, **kwargs):
+        edits.append(kwargs)
+
+    monkeypatch.setattr(FakeBot, "edit_message_text", edit_message_text, raising=False)
+    provider = TelegramDeliveryProvider(token="123456:secret-token")
+    options = TelegramMessageOptions(
+        buttons=(("Открыть в Manager", "https://example.test/order/1"),),
+        edit_message_id=41, alert_text="Можно рассмотреть",
+    )
+    result = await provider.send(destination="101", text="Обновлённая карточка", delivery_id="update", options=options)
+
+    assert result.disposition == ProviderDeliveryDisposition.SENT
+    assert [(edit["message_id"], edit["text"]) for edit in edits] == [(41, "Обновлённая карточка")]
+    call, = FakeBot.calls
+    assert call["text"] == "Можно рассмотреть"
+    assert call["disable_notification"] is False
+    assert call["reply_parameters"].message_id == 41

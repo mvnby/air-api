@@ -81,6 +81,7 @@ export const navSections: NavSection[] = [
     label: 'Продажи и витрина',
     items: [
       { path: '/manager/installation-discounts', label: 'Скидки на монтаж', icon: Wallet, match: 'exact', requiredCapability: MANAGER_CAPABILITY.platformManage },
+      { path: '/manager/personal-offers', label: 'Персональные предложения', icon: ReceiptText, match: 'exact', requiredCapability: MANAGER_CAPABILITY.crmManage },
       { path: '/manager/product-collections', label: 'Подборки', icon: GalleryVerticalEnd, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.storefrontCollectionsManage },
       { path: '/manager/supply', label: 'Поставки', icon: Truck, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.platformManage },
     ],

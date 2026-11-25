@@ -1,8 +1,6 @@
 """Explicit, read-only analysis of a scoped order's selected originals."""
 
 import asyncio
-from functools import lru_cache
-from pathlib import Path
 import re
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
@@ -12,20 +10,14 @@ from fastapi import HTTPException
 from core.config import settings
 from models import StaffUser
 from schemas_connector_tender_review import AnalyzedTenderFile, AnalyzeTenderResult
-from schemas_tender_qualification import TenderDocumentFragment, TenderQualificationProfile, TenderQualificationSourceMetadata
+from schemas_tender_qualification import TenderDocumentFragment, TenderQualificationSourceMetadata
 from services.belzakupki_source_analysis import MAX_TENDER_TEXT_CHARS
 from services.connector_tender_preview import _public_url, procedure_type, source_inventory, display
 from services.belzakupki_import_service import BelzakupkiImportService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
 from services.tender_document_reader import load_tender_document
-from services.tender_qualification import MAX_FRAGMENTS, qualify_tender_documents
-
-
-@lru_cache(maxsize=1)
-def _mvn_profile():
-    path = Path(__file__).resolve().parents[1] / "config/tender_profiles/mvn_vitebsk.json"
-    return TenderQualificationProfile.model_validate_json(path.read_bytes())
+from services.tender_qualification import MAX_FRAGMENTS, load_mvn_tender_profile, qualify_tender_documents
 
 
 async def require_analysis_access(session, actor):
@@ -78,7 +70,7 @@ async def analyze_tender_documents(session, actor, inputs):
         raise HTTPException(400, "Выбранный оригинал отсутствует в текущем перечне. Обновите карточку источника.")
     profile = inputs.profile
     if inputs.profile_name == "mvn_vitebsk":
-        profile = await asyncio.to_thread(_mvn_profile)
+        profile = await asyncio.to_thread(load_mvn_tender_profile)
     documents = []
     fragments = []
     used_chars = 0

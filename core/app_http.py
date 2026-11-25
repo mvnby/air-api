@@ -8,6 +8,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.app_constants import (
     INTERNAL_SERVER_ERROR_MESSAGE,
 )
+from core.app_observability import redact_personal_offer_path
 from core.api_write_fence import ApiWriteFenceMiddleware
 from core.config import settings
 from core.logger import logger
@@ -109,7 +110,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(
         "Unhandled request exception method=%s path=%s error_type=%s",
         request.method,
-        request.url.path,
+        redact_personal_offer_path(request.url.path),
         type(exc).__name__,
     )
 
