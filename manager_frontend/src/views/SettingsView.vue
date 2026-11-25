@@ -6,6 +6,7 @@ import {
   type DocumentLegalEntityUpdatePayload,
 } from '../client';
 import DocumentLegalEntitiesPanel from '../features/documents/settings/DocumentLegalEntitiesPanel.vue';
+import TenderModuleSettingsPanel from '../features/tenders/TenderModuleSettingsPanel.vue';
 import KitlanePartnerIdentity from '../components/kitlane/KitlanePartnerIdentity.vue';
 import { refreshKitlaneBrand } from '../composables/useKitlaneIdentity';
 import { legalEntityTypeForName } from '../features/settings/legal-entity-type';
@@ -21,12 +22,13 @@ import { ArrowUpRight, PhoneCall } from 'lucide-vue-next';
 
 defineProps<{ canManageCallRecordings?: boolean }>();
 
-type Tab = 'company' | 'site' | 'services' | 'staff';
+type Tab = 'company' | 'site' | 'services' | 'staff' | 'modules';
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'company', label: 'Компания' },
   { id: 'site', label: 'Сайт' },
   { id: 'services', label: 'Услуги' },
   { id: 'staff', label: 'Сотрудники' },
+  { id: 'modules', label: 'Модули' },
 ];
 const serviceLabels: Record<StorefrontServiceSettings['key'], string> = {
   installation: 'Монтаж', pre_install: 'Предмонтаж', dismantling: 'Демонтаж', maintenance: 'Обслуживание', repair: 'Ремонт',
@@ -183,6 +185,7 @@ onMounted(() => { void Promise.all([load(), loadEntities()]); });
       <section v-if="loading" class="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">Загружаем настройки…</section>
       <template v-else>
         <section v-if="activeTab === 'company'" class="space-y-4"><p class="text-sm text-slate-500">Эти реквизиты используются в ваших документах.</p><DocumentLegalEntitiesPanel :items="entities" :selected-id="selectedEntityId" :loading="entitiesLoading" :saving="entitySaving" @select="selectedEntityId = $event" @create="createEntity" @update="updateEntity" /></section>
+        <TenderModuleSettingsPanel v-else-if="activeTab === 'modules'" />
         <section v-else-if="activeTab === 'site' && draft" class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-2">
           <div class="sm:col-span-2 space-y-3"><h2 class="font-semibold text-slate-950 dark:text-white">Бренд сайта и рабочего пространства</h2><KitlanePartnerIdentity :name="draft.site.display_name" :logo-url="draft.site.logo_url" :compact-logo-url="draft.site.compact_logo_url" /><p class="text-xs text-slate-500">Название и логотипы доступны на сайте через настройки витрины. После загрузки нажмите «Сохранить».</p></div>
           <div class="space-y-2"><label class="field">Полный логотип<input type="file" accept="image/*,.svg" :disabled="uploadingLogo" @change="uploadLogo($event, false)" /></label><button v-if="draft.site.logo_asset_id" type="button" class="text-sm text-brand-700" @click="clearLogo(false)">Убрать полный логотип</button></div>

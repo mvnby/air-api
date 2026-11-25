@@ -44,6 +44,7 @@ from .bot_staff_selection import BotStaffSelection
 from .staff_invitation import StaffInvitation
 from .bot_voice import BotVoiceTranscriptionAudit
 from .storefront_settings import StorefrontSettings
+from .tender_module import TenantTenderModule
 from .yandex_business import YandexBusinessFeedSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection

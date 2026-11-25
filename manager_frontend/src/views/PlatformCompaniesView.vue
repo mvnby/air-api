@@ -4,6 +4,7 @@ import { registerUnsavedNavigationGuard } from '../services/unsaved-navigation-g
 import { confirmDialog } from '../services/ui-feedback';
 import { managerCompaniesApi, type PlatformCompany } from '../services/manager-companies';
 import CompanySitesList from '../components/manager/CompanySitesList.vue';
+import PlatformTenderModuleControl from '../features/tenders/PlatformTenderModuleControl.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 const items = ref<PlatformCompany[]>([]), total = ref(0), page = ref(1), search = ref(''), loading = ref(false), error = ref('');
 const names = ref<Record<number, string>>({}), saving = ref<Record<number, boolean>>({}), errors = ref<Record<number, string>>({});
@@ -33,6 +34,7 @@ onMounted(load);
       <form class="flex flex-wrap items-end gap-2" @submit.prevent="save(company, { display_name: names[company.id]?.trim() })"><label class="min-w-0 flex-1 text-sm">Название компании<input v-model="names[company.id]" required maxlength="200" class="mt-1 w-full rounded-lg border bg-transparent px-3 py-2" :disabled="saving[company.id]" /></label><button class="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" :disabled="saving[company.id] || !names[company.id]?.trim() || names[company.id]?.trim() === company.display_name">Сохранить название</button></form>
       <p v-if="company.is_system" class="text-xs text-gray-500">Системную компанию нельзя отключить.</p><p v-if="errors[company.id]" role="alert" class="text-sm text-red-600">{{ errors[company.id] }}</p>
       <CompanySitesList :sites="company.sites" />
+      <PlatformTenderModuleControl :tenant-id="company.id" :can-grant="company.status === 'active' && !company.demo_read_only" />
     </article>
     <p v-if="!loading && !items.length" class="text-gray-500">Компании не найдены.</p>
     <div v-if="total > 50" class="flex justify-end gap-4 text-sm"><button :disabled="page <= 1 || loading" @click="changePage(page - 1)">Назад</button><span>Страница {{ page }}</span><button :disabled="page * 50 >= total || loading" @click="changePage(page + 1)">Далее</button></div>

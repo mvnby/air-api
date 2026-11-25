@@ -33780,6 +33780,229 @@
         ]
       }
     },
+    "/api/manager/tender-module": {
+      "get": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Get Manager Tender Module",
+        "description": "Read module access, enablement, and the selected company's search profiles.",
+        "operationId": "get_manager_tender_module",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderModuleSettings"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Update Manager Tender Module",
+        "description": "Save versioned preferences for the selected company with active module access.",
+        "operationId": "update_manager_tender_module",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenderModuleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderModuleSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/manager/platform/companies/{tenant_id}/tender-module": {
+      "get": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Get Platform Company Tender Module",
+        "description": "Read the specified company's entitlement as the platform owner.",
+        "operationId": "get_platform_company_tender_module",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderModuleAccess"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Update Platform Company Tender Module",
+        "description": "Grant or revoke module access with a version check and an audit entry.",
+        "operationId": "update_platform_company_tender_module",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenderModuleEntitlementUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderModuleAccess"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/tender-module/profile-preview": {
+      "post": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Preview Manager Tender Profile",
+        "description": "Apply the draft filter to the most recent tenders in the selected storefront.",
+        "operationId": "preview_manager_tender_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenderSearchProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderProfilePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/service-catalog/template-preview": {
       "get": {
         "tags": [
@@ -109674,6 +109897,182 @@
         ],
         "title": "TenderLeadPushResult"
       },
+      "TenderLotMatch": {
+        "properties": {
+          "lot_key": {
+            "type": "string",
+            "title": "Lot Key"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "match",
+              "review",
+              "excluded"
+            ],
+            "title": "State"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "eligible",
+              "excluded_place",
+              "excluded_direction",
+              "excluded_activity",
+              "different_place",
+              "different_direction",
+              "different_activity",
+              "unconfirmed_place",
+              "unconfirmed_direction",
+              "unconfirmed_activity"
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lot_key",
+          "state",
+          "reason"
+        ],
+        "title": "TenderLotMatch"
+      },
+      "TenderModuleAccess": {
+        "properties": {
+          "entitled": {
+            "type": "boolean",
+            "title": "Entitled"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entitled",
+          "enabled",
+          "version"
+        ],
+        "title": "TenderModuleAccess"
+      },
+      "TenderModuleEntitlementUpdate": {
+        "properties": {
+          "entitled": {
+            "type": "boolean",
+            "title": "Entitled"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entitled",
+          "version"
+        ],
+        "title": "TenderModuleEntitlementUpdate"
+      },
+      "TenderModuleSettings": {
+        "properties": {
+          "entitled": {
+            "type": "boolean",
+            "title": "Entitled"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/TenderSearchProfile"
+            },
+            "type": "array",
+            "title": "Profiles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entitled",
+          "enabled",
+          "version"
+        ],
+        "title": "TenderModuleSettings"
+      },
+      "TenderModuleUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/TenderSearchProfile"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Profiles"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "version"
+        ],
+        "title": "TenderModuleUpdate"
+      },
+      "TenderPlace": {
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7"
+            ],
+            "title": "Region"
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locality"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "title": "TenderPlace"
+      },
       "TenderProfile": {
         "properties": {
           "id": {
@@ -109695,6 +110094,146 @@
           "name"
         ],
         "title": "TenderProfile"
+      },
+      "TenderProfilePreview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TenderProfilePreviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "TenderProfilePreview"
+      },
+      "TenderProfilePreviewItem": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "result": {
+            "$ref": "#/components/schemas/TenderLotMatch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "title",
+          "result"
+        ],
+        "title": "TenderProfilePreviewItem"
+      },
+      "TenderSearchProfile": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 96,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "broad",
+              "strict"
+            ],
+            "title": "Mode",
+            "default": "broad"
+          },
+          "included_places": {
+            "items": {
+              "$ref": "#/components/schemas/TenderPlace"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Included Places"
+          },
+          "excluded_places": {
+            "items": {
+              "$ref": "#/components/schemas/TenderPlace"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Excluded Places"
+          },
+          "included_directions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "air_conditioning",
+                "ventilation",
+                "refrigeration"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Included Directions"
+          },
+          "excluded_directions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "air_conditioning",
+                "ventilation",
+                "refrigeration"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Excluded Directions"
+          },
+          "activity_combinations": {
+            "items": {
+              "items": {
+                "type": "string",
+                "enum": [
+                  "maintenance",
+                  "diagnostics",
+                  "repair",
+                  "supply",
+                  "installation"
+                ]
+              },
+              "type": "array",
+              "maxItems": 5,
+              "minItems": 1
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Activity Combinations"
+          },
+          "excluded_activities": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "maintenance",
+                "diagnostics",
+                "repair",
+                "supply",
+                "installation"
+              ]
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Excluded Activities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "TenderSearchProfile"
       },
       "TenderWorkflowIdentity": {
         "properties": {
