@@ -218,9 +218,14 @@ onMounted(load);
       <template v-if="preview">
         <p v-if="!preview.items.length" class="text-sm text-slate-500">В этой витрине пока нет полученных закупок.</p>
         <ul v-else class="space-y-2 border-t border-slate-200 pt-3 text-sm dark:border-slate-800" aria-label="Предпросмотр профиля">
-          <li v-for="item in preview.items" :key="item.order_id" class="flex flex-wrap items-baseline justify-between gap-2">
-            <a :href="`/manager/orders/${item.order_id}`" class="break-words text-brand-700 underline">{{ item.title }}</a>
-            <span class="text-xs font-semibold" :class="item.result.state === 'review' ? 'text-amber-800 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300'">{{ resultLabels[item.result.reason] }}</span>
+          <li v-for="item in preview.items" :key="item.order_id">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <a :href="`/manager/orders/${item.order_id}`" class="break-words text-brand-700 underline">{{ item.title }}</a>
+              <span class="text-xs font-semibold" :class="item.result.state === 'review' ? 'text-amber-800 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300'">{{ resultLabels[item.result.reason] }}</span>
+            </div>
+            <ul v-if="(item.lots?.length || 0) > 1" class="mt-1 space-y-1 pl-2 text-xs text-slate-500">
+              <li v-for="lot in item.lots" :key="lot.lot_key">Лот {{ lot.lot_key }} · {{ resultLabels[lot.reason] }}</li>
+            </ul>
           </li>
         </ul>
       </template>

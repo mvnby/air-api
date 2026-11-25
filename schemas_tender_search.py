@@ -143,6 +143,7 @@ class TenderProfilePreviewItem(BaseModel):
     order_id: int
     title: str
     result: TenderLotMatch
+    lots: list[TenderLotMatch] = Field(default_factory=list)
 
 
 class TenderProfilePreview(BaseModel):

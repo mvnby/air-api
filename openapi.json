@@ -110123,6 +110123,13 @@
           },
           "result": {
             "$ref": "#/components/schemas/TenderLotMatch"
+          },
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/TenderLotMatch"
+            },
+            "type": "array",
+            "title": "Lots"
           }
         },
         "type": "object",

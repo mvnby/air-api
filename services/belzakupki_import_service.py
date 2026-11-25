@@ -23,6 +23,7 @@ from core.database import async_session_maker
 from models import BelzakupkiImportCheckpoint, LeadSource, Order, OrderStatus
 from models.tenancy import TenantScope
 from services.tenant_scope_service import SystemTenantScopeResolver
+from services.tender_lot_snapshot import native_lot_snapshot
 
 from services.belzakupki_canonical_identity import (
     canonical_procurement_url, canonical_tender_url, original_native_identities,
@@ -166,6 +167,7 @@ class BelzakupkiImportService:
                 "summary": cls._clean_text(tender.get("summary"), maximum=4000),
                 "contacts": tender.get("contacts"),
                 "ai_analysis": tender.get("ai_analysis"),
+                **native_lot_snapshot(tender),
             },
         }
 

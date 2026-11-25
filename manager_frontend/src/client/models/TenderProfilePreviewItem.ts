@@ -7,5 +7,6 @@ export type TenderProfilePreviewItem = {
     order_id: number;
     title: string;
     result: TenderLotMatch;
+    lots?: Array<TenderLotMatch>;
 };
 

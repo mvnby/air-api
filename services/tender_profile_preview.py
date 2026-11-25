@@ -5,6 +5,7 @@ import re
 from schemas_tender_search import (
     TenderLotSignals, TenderPlace, TenderProfilePreview, TenderProfilePreviewItem, TenderSearchProfile, normalized_place,
 )
+from services.tender_lot_snapshot import native_lot_snapshot
 from services.tender_qualification import _INSTALL_INCLUDED, _NO_WORKS, _NON_OBLIGATION, _SCOPE_NEGATION, _scope_patterns
 from services.tender_search_matcher import match_tender_lot
 
@@ -92,6 +93,26 @@ def preview_tender_profile(rows, profile: TenderSearchProfile) -> TenderProfileP
         if not isinstance(title, str) or not title.strip():
             continue
         enrichment = binding.get("enrichment")
-        result = match_tender_lot(profile, _classify(title, enrichment if isinstance(enrichment, dict) else {}))
-        items.append(TenderProfilePreviewItem(order_id=order_id, title=title, result=result))
+        reviewed = enrichment if isinstance(enrichment, dict) else {}
+        snapshot = native_lot_snapshot(tender)
+        lots = snapshot.get("lots", [])
+        if lots:
+            one_lot = snapshot["lot_inventory_complete"] and len(lots) == 1
+            matches = []
+            for lot in lots:
+                context = dict(reviewed) if one_lot else {}
+                if lot.get("delivery_place"):
+                    objects = context.get("objects")
+                    known = objects if isinstance(objects, list) else []
+                    context["objects"] = [*known, {"address": lot["delivery_place"]}]
+                subject = f"{title}\n{lot['name']}" if one_lot else lot["name"]
+                lot_signals = _classify(subject, context)
+                lot_signals.lot_key = lot["number"]
+                matches.append(match_tender_lot(profile, lot_signals))
+            priority = {"match": 0, "review": 1, "excluded": 2}
+            result = min(matches, key=lambda match: priority[match.state])
+        else:
+            matches = []
+            result = match_tender_lot(profile, _classify(title, reviewed))
+        items.append(TenderProfilePreviewItem(order_id=order_id, title=title, result=result, lots=matches))
     return TenderProfilePreview(items=items)
