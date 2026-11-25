@@ -1094,8 +1094,9 @@ export class ManagerOrdersService {
      * accessible order and return an editable preview. Requires system-tenant Manager access.
      * May fetch originals and extract missing text; does not apply the draft or overwrite
      * order/document values. Missing source/order returns 404, unknown/truncated document
-     * input 400 and source/provider failure 502. Repeating starts another analysis rather than
-     * replaying a receipt. See [source review and equipment
+     * input 400 and source/provider failure 502. With reuse_result, the active API process
+     * can reuse a recent draft for identical document text. Returns 429 when the automatic
+     * analysis workers are busy. See [source review and equipment
      * rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
      *
      * Access requires an authenticated Manager session/JWT and live membership; see [Manager

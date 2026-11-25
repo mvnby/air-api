@@ -33,7 +33,7 @@ from services.belzakupki_customer_evidence import extract_customer_evidence
 from services.belzakupki_customer_service import enrich_registry, apply_reviewed_customer
 from services.commercial_terms_extraction import extract_commercial_terms
 from services.order_commercial_terms_service import commercial_terms_response, store_source_terms
-from services.belzakupki_source_analysis import analyze_tender_text, extract_missing_document_text
+from services.belzakupki_source_analysis import analyze_tender_text, automatic_tender_analysis, extract_missing_document_text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
 from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
 from services.service_attachment_service import ServiceAttachmentService
@@ -248,8 +248,11 @@ class BelzakupkiEnrichmentService:
 
     @classmethod
     async def preview(cls, session: AsyncSession, *, order_id: int, scope: TenantScope) -> ManagerOrderSourcePreview:
+        from services.tender_source_reference import source_for_manager_review
+
         order = await cls._order(session, order_id, scope)
-        data = await cls._detail(order)
+        review = await source_for_manager_review(order)
+        data = review.detail
         source, external_id = _source_identity(order)
         raw = "\n".join(filter(None, [_text(data.get("description"), 30000)] + [
             _text(doc.get("extracted_text"), 100000) for doc in cls._documents(data)
@@ -282,6 +285,8 @@ class BelzakupkiEnrichmentService:
                             "Для дополнения выбран текущий клиент заказа; проверьте дубли отдельно."
                         )
         warnings: list[str] = list(evidence.warnings)
+        if review.warning:
+            warnings.append(review.warning)
         if not inn:
             warnings.append("УНП заказчика не найден; выберите клиента вручную или проверьте данные перед созданием.")
         elif len(matches) > 1 and existing_customer_id is None:
@@ -361,7 +366,8 @@ class BelzakupkiEnrichmentService:
             submission=evidence.submission,
             current_scenario=current_scenario, suggested_scenario=suggested_scenario,
             work_summary=summary, equipment_details=equipment_details, objects=objects,
-            documents=documents, field_sources=field_sources, warnings=warnings,
+            documents=documents, documents_source_url=review.documents_source_url,
+            field_sources=field_sources, warnings=warnings,
             analysis_source="reviewed" if reviewed else "source",
             analyzed_document_ids=[str(value) for value in previous.get("analyzed_document_ids") or []] if reviewed else [],
             equipment_prefill=previous.get("equipment_prefill") if reviewed else None,
@@ -373,7 +379,8 @@ class BelzakupkiEnrichmentService:
         payload: ManagerOrderSourceAnalyze,
     ) -> ManagerOrderSourcePreview:
         preview = await cls.preview(session, order_id=order_id, scope=scope)
-        selected = dict.fromkeys(payload.document_ids)
+        document_ids = sorted(payload.document_ids) if payload.reuse_result else payload.document_ids
+        selected = dict.fromkeys(document_ids)
         documents = {doc.id: doc for doc in preview.documents}
         if any(document_id not in documents for document_id in selected):
             raise ValueError("Unknown source document")
@@ -382,7 +389,7 @@ class BelzakupkiEnrichmentService:
             doc = documents[document_id]
             extracted = doc.extracted_text
             if not extracted or doc.extracted_text_truncated:
-                content, filename, mime_type = await cls.document(
+                content, filename, mime_type = await cls.review_document(
                     session, order_id=order_id, document_id=document_id, scope=scope,
                 )
                 extracted, diagnostic = await extract_missing_document_text(
@@ -439,7 +446,11 @@ class BelzakupkiEnrichmentService:
             preview.warnings = [warning for warning in preview.warnings if not warning.startswith("УНП заказчика не найден;")]
         if all(doc.extracted_text for doc in preview.documents):
             preview.warnings = [warning for warning in preview.warnings if not warning.startswith("Не все документы имеют извлечённый текст.")]
-        work_summary, equipment_details, objects = await analyze_tender_text("\n\n".join(texts))
+        text = "\n\n".join(texts)
+        if payload.reuse_result:
+            work_summary, equipment_details, objects = await automatic_tender_analysis.analyze(text, scope=scope, order_id=order_id)
+        else:
+            work_summary, equipment_details, objects = await analyze_tender_text(text)
         if work_summary:
             preview.work_summary = work_summary
             preview.field_sources["work_summary"] = "ИИ по выбранным документам"
@@ -477,6 +488,16 @@ class BelzakupkiEnrichmentService:
         return preview
 
     @classmethod
+    async def review_document(
+        cls, session: AsyncSession, *, order_id: int, document_id: str, scope: TenantScope,
+    ) -> tuple[bytes, str, str]:
+        from services.tender_source_reference import source_for_manager_review
+
+        order = await cls._order(session, order_id, scope)
+        review = await source_for_manager_review(order)
+        return await cls._download_document(review.detail, review.document_identity, document_id)
+
+    @classmethod
     async def document(
         cls, session: AsyncSession, *, order_id: int, document_id: str, scope: TenantScope,
         max_bytes: int | None = None, source_reference: str | None = None,
@@ -492,6 +513,12 @@ class BelzakupkiEnrichmentService:
             detail = await cls._detail(order) if source_reference is None else await detail_for_reference(order, source_reference)
         except ValueError as exc:
             raise SourceDocumentInventoryUnavailable("Belzakupki document inventory is unavailable") from exc
+        return await cls._download_document(detail, (source, external_id), document_id, max_bytes=max_bytes)
+
+    @classmethod
+    async def _download_document(
+        cls, detail: dict[str, Any], identity: tuple[str, str], document_id: str, *, max_bytes: int | None = None,
+    ) -> tuple[bytes, str, str]:
         candidates = [item for item in cls._documents(detail) if str(item["id"]) == document_id]
         if not candidates:
             raise SourceDocumentNotFound("Source document not found")
@@ -499,7 +526,7 @@ class BelzakupkiEnrichmentService:
             raise SourceDocumentInventoryUnavailable("Belzakupki source returned ambiguous document IDs")
         attachment_limit = int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES)
         limit = attachment_limit if max_bytes is None else min(max_bytes, attachment_limit)
-        response = await cls._fetch(source, external_id, document_id, max_bytes=limit)
+        response = await cls._fetch(*identity, document_id, max_bytes=limit)
         content_type = response.headers.get("content-type", "application/octet-stream").split(";", 1)[0]
         if len(response.content) > limit:
             raise SourceDocumentTooLarge("Source document exceeds the configured size limit")
@@ -513,13 +540,20 @@ class BelzakupkiEnrichmentService:
         cls, session: AsyncSession, *, order_id: int, scope: TenantScope,
         payload: ManagerOrderSourceApply, username: str,
     ) -> ManagerOrderSourceApplyResult:
+        from services.inbox_eligibility import require_unarchived_inbox
+        from services.tender_source_reference import source_for_manager_review
+
         if scope.demo_read_only:
             raise ValueError("Demo workspace is read-only")
         order = await cls._order(session, order_id, scope, lock=True)
-        from services.inbox_eligibility import require_unarchived_inbox
         await require_unarchived_inbox(session, "order", order_id)
-        detail = await cls._detail(order)
+        review = await source_for_manager_review(order)
+        detail = review.detail
+        document_source, document_external_id = review.document_identity
         source, external_id = _source_identity(order)
+        available = {str(doc["id"]): doc for doc in cls._documents(detail)}
+        if any(document_id not in available for document_id in payload.document_ids):
+            raise ValueError("Unknown source document")
         source_terms = extract_commercial_terms(str(detail.get("description") or ""), source="Описание закупки")
         for document in cls._documents(detail):
             if document.get("extracted_text"):
@@ -644,24 +678,21 @@ class BelzakupkiEnrichmentService:
             flag_modified(order, "technical_meta")
             if equipment_prefill.added:
                 applied.append("proposal_equipment")
-        available = {str(doc["id"]): doc for doc in cls._documents(detail)}
         attachment_ids: list[int] = []
-        if any(document_id not in available for document_id in payload.document_ids):
-            raise ValueError("Unknown source document")
         for document_id in dict.fromkeys(payload.document_ids):
-            doc = available.get(document_id)
-            assert doc is not None
+            doc = available[document_id]
             existing = (await session.execute(
                 select(ServiceAttachment)
                 .join(OrderAttachmentLink, OrderAttachmentLink.attachment_id == ServiceAttachment.id)
                 .where(OrderAttachmentLink.order_id == order_id, OrderAttachmentLink.archived_at.is_(None), ServiceAttachment.archived_at.is_(None))
             )).scalars().all()
             found = next((item for item in existing if (item.source_meta or {}).get("belzakupki_document_id") == document_id
-                          and (item.source_meta or {}).get("external_id") == external_id), None)
+                          and (item.source_meta or {}).get("external_id") == document_external_id
+                          and ((item.source_meta or {}).get("source") or source) == document_source), None)
             if found:
                 attachment_ids.append(int(found.id or 0))
                 continue
-            content, filename, mime_type = await cls.document(session, order_id=order_id, document_id=document_id, scope=scope)
+            content, filename, mime_type = await cls._download_document(detail, review.document_identity, document_id)
             if mime_type not in ServiceAttachmentService.SAFE_MIME_TYPES:
                 raise ValueError("Unsupported source document type for private attachment")
             if not doc.get("extracted_text"):
@@ -677,8 +708,8 @@ class BelzakupkiEnrichmentService:
                 mime_type=mime_type,
                 category="document", source="belzakupki",
                 created_by=username, tenant_scope=scope, commit=False,
-                source_meta={"purpose": "tender_original", "source": source,
-                             "external_id": external_id, "belzakupki_document_id": document_id,
+                source_meta={"purpose": "tender_original", "source": document_source,
+                             "external_id": document_external_id, "belzakupki_document_id": document_id,
                              "source_url": _text(doc.get("source_url"), 2048)},
             )
             attachment_ids.append(int(attachment["id"]))

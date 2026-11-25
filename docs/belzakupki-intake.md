@@ -189,10 +189,19 @@ The preview is read-only. It combines collector fields and bounded extracted
 document text, proposes customer type and contacts, and separates explicitly
 identified service sites. The original document opens through an authenticated
 Manager route; selected originals are copied to private order attachments only
-after manager confirmation. **Обработать ИИ** is a separate, on-demand draft
-step for selected documents. Its suggested work and equipment are reviewable
-and can be edited before applying. The order scenario is suggested from the
-procurement title or AI work summary; ambiguous text requires a manual choice.
+after manager confirmation. When the primary GIAS publication has no attachments,
+Manager checks the recorded native reference to the same procurement on Goszakupki.
+The preview links to that publication and uses its attachments. Downloads and
+confirmed original attachments retain the native Goszakupki document identity.
+
+When Manager loads these attachments, it automatically analyzes up to eight
+documents and shows an editable draft under **Что хочет заказчик**. Previously
+reviewed drafts open with their saved data. **Обработать ИИ** remains available
+to run a new analysis of a selected set of documents. Automatic analysis reuses
+the draft for the same order, tenant, storefront, model and input text for up to
+30 minutes in the active API process. Identical concurrent requests share a call,
+and at most two automatic calls can run in that process. The order scenario is suggested from the
+procurement title or AI work summary. Ambiguous text requires a manual choice.
 The manager can change the suggestion before saving. It does not set a proposal
 price from the procurement's estimated value.
 

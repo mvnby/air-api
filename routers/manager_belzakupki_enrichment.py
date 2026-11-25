@@ -24,6 +24,7 @@ from schemas_belzakupki_enrichment import (
     ManagerOrderSourcePreview,
 )
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
+from services.belzakupki_source_analysis import TenderAnalysisBusy
 from services.belzakupki_source_equipment_service import BelzakupkiSourceEquipmentService, SourceEquipmentPreviewChangedError
 
 
@@ -31,6 +32,8 @@ router = APIRouter(prefix="/api/manager/orders", tags=["manager-orders"])
 
 
 def _error(exc: Exception) -> HTTPException:
+    if isinstance(exc, TenderAnalysisBusy):
+        return HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "5"})
     if isinstance(exc, SourceEquipmentPreviewChangedError):
         return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, LookupError):
@@ -58,7 +61,9 @@ async def get_manager_order_source_card(
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        return await BelzakupkiSourceEquipmentService.card(session, order_id=order_id, scope=tenant_scope)
+        return await BelzakupkiSourceEquipmentService.card(
+            session, order_id=order_id, scope=tenant_scope, include_review_documents=True,
+        )
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
 
@@ -153,8 +158,9 @@ async def analyze_manager_order_source(
     accessible order and return an editable preview. Requires system-tenant Manager access.
     May fetch originals and extract missing text; does not apply the draft or overwrite
     order/document values. Missing source/order returns 404, unknown/truncated document
-    input 400 and source/provider failure 502. Repeating starts another analysis rather than
-    replaying a receipt. See [source review and equipment
+    input 400 and source/provider failure 502. With reuse_result, the active API process
+    can reuse a recent draft for identical document text. Returns 429 when the automatic
+    analysis workers are busy. See [source review and equipment
     rules](https://github.com/mvnby/air-api/blob/main/docs/belzakupki-intake.md#manager-review-and-source-documents).
 
     Access requires an authenticated Manager session/JWT and live membership; see [Manager
@@ -224,7 +230,7 @@ async def download_manager_order_source_document(
     access](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     try:
-        content, filename, mime_type = await BelzakupkiEnrichmentService.document(
+        content, filename, mime_type = await BelzakupkiEnrichmentService.review_document(
             session, order_id=order_id, document_id=document_id, scope=tenant_scope,
         )
     except (LookupError, ValueError, RuntimeError, httpx.HTTPError) as exc:

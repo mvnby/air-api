@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from zipfile import ZipFile
 
+import httpx
 import pytest
 
 from models import Customer, CustomerBranch, LeadSource, Order, OrderStatus
@@ -12,6 +13,7 @@ from models.tenancy import TenantScope
 from schemas_belzakupki_enrichment import ManagerOrderSourceAnalyze, ManagerOrderSourceApply, SourceCustomerDraft
 from services.belzakupki_enrichment_service import (
     BelzakupkiEnrichmentService,
+    SourceDocumentNotFound,
     _amount,
     _customer_unp_from_document,
     _objects_from_text,
@@ -19,6 +21,8 @@ from services.belzakupki_enrichment_service import (
     _source_identity,
 )
 from services.belzakupki_import_service import BelzakupkiImportService
+from services.belzakupki_source_equipment_service import BelzakupkiSourceEquipmentService
+from services.belzakupki_source_analysis import TenderAnalysisReuse
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +60,163 @@ def _detail(text: str | None = EXCERPT_455):
             "phone": "Юрова Екатерина Вячеславовна, +375212210029", "email": "mail@example.test"}},
         "documents": [{"id": 31, "name": "Техническое задание", "source_url": "https://example.test/doc", "extracted_text": text}],
     }
+
+
+def _gias_with_goszakupki_mirror():
+    order = _order()
+    order.id = 699
+    url = "https://goszakupki.by/single-source/view/3876716"
+    primary = {
+        "source": "gias_by", "external_id": "gias-699", "source_url": "https://gias.by/gias/#/purchase/current/gias-699",
+        "description": "Перенос кондиционера", "deadline_at": "2026-11-27T20:59:59Z", "documents": [],
+    }
+    original = {
+        "source": "goszakupki_by", "external_id": "3876716", "source_url": url,
+        "deadline_at": "2026-11-27T20:59:00Z",
+        "documents": [{"id": "smeta", "name": "smeta.pdf", "source_url": "https://goszakupki.by/docs/smeta.pdf"}],
+    }
+    reference = BelzakupkiImportService._order_fingerprint(source="goszakupki_by", external_id="3876716")
+    order.technical_meta = {"belzakupki": {
+        "tender": {"source": "gias_by", "external_id": "gias-699"},
+        "canonical_url": url, "source_references": {
+            reference: {"source": "goszakupki_by", "external_id": "3876716", "url": url},
+        },
+    }}
+    return order, primary, original, reference
+
+
+@pytest.mark.asyncio
+async def test_manager_review_downloads_analyzes_and_attaches_goszakupki_original(monkeypatch):
+    order, primary, original, reference = _gias_with_goszakupki_mirror()
+    order.status = OrderStatus.NEGOTIATION
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=primary))
+    downloads = []
+
+    async def fetch(source, external_id, document_id=None, *, max_bytes=None):
+        assert (source, external_id) == ("goszakupki_by", "3876716")
+        if document_id is None:
+            return httpx.Response(200, json=original)
+        assert document_id == "smeta"
+        downloads.append(document_id)
+        return httpx.Response(200, content=b"%PDF-1.7", headers={"content-type": "application/pdf"})
+
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_fetch", fetch)
+    work = "Демонтировать исправную сплит-систему и установить оба блока на новом месте."
+    monkeypatch.setattr("services.belzakupki_enrichment_service.extract_missing_document_text", AsyncMock(return_value=(work, None)))
+    ai = AsyncMock(return_value=(work, None, []))
+    monkeypatch.setattr("services.belzakupki_enrichment_service.analyze_tender_text", ai)
+    session = MagicMock()
+    session.get = AsyncMock(return_value=None)
+    session.execute = AsyncMock()
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.scalars.return_value.all.return_value = []
+    session.commit = AsyncMock()
+    scope = TenantScope(tenant_id=1, storefront_id=1)
+
+    preview = await BelzakupkiEnrichmentService.preview(session, order_id=699, scope=scope)
+    assert (preview.source_code, preview.deadline_at) == ("gias_by", primary["deadline_at"])
+    assert preview.documents_source_url == original["source_url"]
+    assert [doc.download_url for doc in preview.documents] == ["/api/manager/orders/699/source-documents/smeta"]
+    with pytest.raises(SourceDocumentNotFound):
+        await BelzakupkiEnrichmentService.document(session, order_id=699, scope=scope, document_id="smeta")
+    assert await BelzakupkiEnrichmentService.review_document(
+        session, order_id=699, scope=scope, document_id="smeta",
+    ) == (b"%PDF-1.7", "smeta.pdf", "application/pdf")
+    draft = await BelzakupkiEnrichmentService.analyze(
+        session, order_id=699, scope=scope, payload=ManagerOrderSourceAnalyze(document_ids=["smeta"]),
+    )
+    assert draft.analysis_source == "ai"
+    assert draft.work_summary == work
+    ai.assert_awaited_once_with(f"Документ smeta.pdf:\n{work}")
+    session.commit.assert_not_awaited()
+
+    save_original = AsyncMock(return_value={"id": 601})
+    monkeypatch.setattr(
+        "services.belzakupki_enrichment_service.ServiceAttachmentService.create_and_link_order_attachment", save_original,
+    )
+    result = await BelzakupkiEnrichmentService.apply(
+        session, order_id=699, scope=scope, username="manager",
+        payload=ManagerOrderSourceApply(customer_action="skip", document_ids=["smeta"], work_summary=work),
+    )
+    assert result.attachment_ids == [601]
+    assert order.technical_meta["belzakupki"]["enrichment"]["source"] == "gias_by"
+    source_meta = save_original.await_args.kwargs["source_meta"]
+    assert (source_meta["source"], source_meta["external_id"], source_meta["belzakupki_document_id"]) == (
+        "goszakupki_by", "3876716", "smeta",
+    )
+    assert downloads == ["smeta", "smeta", "smeta"]
+    session.execute.return_value.scalars.return_value.all.return_value = [
+        SimpleNamespace(id=601, original_filename="smeta.pdf", mime_type="application/pdf", source_meta=source_meta),
+    ]
+    manager_card = await BelzakupkiSourceEquipmentService.card(
+        session, order_id=699, scope=scope, include_review_documents=True,
+    )
+    primary_card = await BelzakupkiSourceEquipmentService.card(session, order_id=699, scope=scope)
+    original_card = await BelzakupkiSourceEquipmentService.card(session, order_id=699, scope=scope, source_reference=reference)
+    assert [doc.attachment_id for doc in manager_card.originals] == [601]
+    assert primary_card.originals == []
+    assert [doc.attachment_id for doc in original_card.originals] == [601]
+
+
+@pytest.mark.asyncio
+async def test_manager_reopening_the_same_documents_reuses_the_automatic_draft(monkeypatch):
+    detail = _detail()
+    detail["documents"].append({"id": "32", "name": "Приложение", "extracted_text": "Перечень работ"})
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=_order()))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=detail))
+    provider = AsyncMock(return_value=("Обслуживание", None, []))
+    monkeypatch.setattr("services.belzakupki_source_analysis.analyze_tender_text", provider)
+    monkeypatch.setattr("services.belzakupki_enrichment_service.analyze_tender_text", provider)
+    monkeypatch.setattr("services.belzakupki_enrichment_service.automatic_tender_analysis", TenderAnalysisReuse())
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock())
+    session.execute.return_value.scalars.return_value.all.return_value = []
+    scope = TenantScope(tenant_id=1, storefront_id=1)
+    for ids in (["32", "31"], ["31", "32"]):
+        preview = await BelzakupkiEnrichmentService.analyze(
+            session, order_id=455, scope=scope,
+            payload=ManagerOrderSourceAnalyze(document_ids=ids, reuse_result=True),
+        )
+        assert preview.work_summary == "Обслуживание"
+        assert preview.analyzed_document_ids == ["31", "32"]
+    assert provider.await_count == 1
+    await BelzakupkiEnrichmentService.analyze(
+        session, order_id=455, scope=scope, payload=ManagerOrderSourceAnalyze(document_ids=["31", "32"]),
+    )
+    assert provider.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["has_native", "link_only", "conflict", "unavailable", "wrong_procedure"])
+async def test_manager_review_keeps_native_docs_or_skips_unavailable_mirror(monkeypatch, case):
+    order, primary, original, reference = _gias_with_goszakupki_mirror()
+    native_docs = [{"id": "native", "name": "ТЗ.pdf"}] if case == "has_native" else []
+    primary["documents"] = native_docs
+    refs = order.technical_meta["belzakupki"]["source_references"]
+    if case == "link_only":
+        refs.clear()
+    elif case == "conflict":
+        refs[reference]["claimed_canonical_url"] = "https://goszakupki.by/request/view/123"
+    elif case == "wrong_procedure":
+        original["source_url"] = "https://goszakupki.by/request/view/3876716"
+    response = httpx.Response(200, json=original)
+    fetch = AsyncMock(return_value=response)
+    if case == "unavailable":
+        fetch.side_effect = httpx.ReadTimeout("source timed out")
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=primary))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_fetch", fetch)
+    preview = await BelzakupkiEnrichmentService.preview(
+        MagicMock(), order_id=699, scope=TenantScope(tenant_id=1, storefront_id=1),
+    )
+    assert preview.documents_source_url is None
+    assert [doc.id for doc in preview.documents] == [doc["id"] for doc in native_docs]
+    if case in {"unavailable", "wrong_procedure"}:
+        fetch.assert_awaited_once_with("goszakupki_by", "3876716")
+        assert any("Госзакупок" in warning for warning in preview.warnings)
+    else:
+        fetch.assert_not_awaited()
 
 
 def test_455_document_has_two_objects_and_eight_units():
@@ -189,7 +350,7 @@ async def test_analyze_reads_missing_doc_text_and_returns_ai_draft(monkeypatch):
     order = _order()
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_order", AsyncMock(return_value=order))
     monkeypatch.setattr(BelzakupkiEnrichmentService, "_detail", AsyncMock(return_value=_detail(None)))
-    monkeypatch.setattr(BelzakupkiEnrichmentService, "document", AsyncMock(return_value=(b"doc", "task.doc", "application/msword")))
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "review_document", AsyncMock(return_value=(b"doc", "task.doc", "application/msword")))
     monkeypatch.setattr(
         "services.belzakupki_enrichment_service.extract_missing_document_text",
         AsyncMock(return_value=(EXCERPT_455, None)),
@@ -303,7 +464,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
         AsyncMock(return_value=None),
     )
     document = AsyncMock(return_value=(b"original-word-bytes", "task.doc", "application/msword"))
-    monkeypatch.setattr(BelzakupkiEnrichmentService, "document", document)
+    monkeypatch.setattr(BelzakupkiEnrichmentService, "_download_document", document)
     storage = AsyncMock(return_value={"id": 601})
     monkeypatch.setattr(
         "services.belzakupki_enrichment_service.ServiceAttachmentService.create_and_link_order_attachment",
