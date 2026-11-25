@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "41": "Company tender module controls: separate audited platform entitlement, optimistic company profile updates, read-only scoped preview and bounded criteria. Reviewed 2026-11-26 for issue 1303",
     "38": "Personal equipment offers: scoped Manager drafts and replay, immutable published commercial snapshots, token expiry and revocation, exact signed storefront host and allow-listed public data. Reviewed 2026-11-22 for issue 1286",
     "35": "Scoped order sites and equipment: stable customer/branch ownership, bounded lists, durable command replay, exact order storefront and optimistic site versions. Reviewed 2026-11-20 for issue 1278",
     "36": "Diagnostic inspection revisions and native technical act drafts: verified order site/equipment scope, exact inspection versions, immutable document snapshots and explicit contract basis. Reviewed 2026-11-20 for issue 1278",
@@ -1040,6 +1041,13 @@
       ["POST /api/manager/tariffs/{tariff_id}/rules", "create_manager_tariff_rule", false, 3],
       ["PUT /api/manager/tariffs/{tariff_id}", "update_manager_tariff", false, 3],
       ["PUT /api/manager/tariffs/{tariff_id}/rules/{rule_id}", "update_manager_tariff_rule", false, 3]
+    ],
+    "routers/manager_tender_module.py": [
+      ["GET /api/manager/platform/companies/{tenant_id}/tender-module", "get_platform_company_tender_module", false, 41],
+      ["GET /api/manager/tender-module", "get_manager_tender_module", false, 41],
+      ["POST /api/manager/tender-module/profile-preview", "preview_manager_tender_profile", false, 41],
+      ["PUT /api/manager/platform/companies/{tenant_id}/tender-module", "update_platform_company_tender_module", false, 41],
+      ["PUT /api/manager/tender-module", "update_manager_tender_module", false, 41]
     ],
     "routers/manager_tenant_catalog.py": [
       ["GET /api/manager/tenant-catalog/products", "list_manager_tenant_catalog_products", false, 2],
