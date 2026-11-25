@@ -12,6 +12,7 @@ const modules = [
   'TenantCatalogView',
   'CatalogDecisionWorkspaceView',
   'ProductCollectionsView',
+  'PersonalOffersView',
   'ProductWorkspaceView',
   'MediaLibraryView',
   'CustomersView',

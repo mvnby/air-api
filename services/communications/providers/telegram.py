@@ -17,8 +17,10 @@ from aiogram.exceptions import (
     TelegramServerError,
     TelegramUnauthorizedError,
 )
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, ReplyParameters
 
-from services.communications.providers.base import ProviderDeliveryResult
+from core.config import settings
+from services.communications.providers.base import ProviderDeliveryResult, TelegramMessageOptions
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,7 @@ class TelegramDeliveryProvider:
         destination: str,
         text: str,
         delivery_id: str,
+        options: TelegramMessageOptions | None = None,
     ) -> ProviderDeliveryResult:
         normalized_delivery_id = str(delivery_id or "").strip()
         if not normalized_delivery_id:
@@ -77,11 +80,7 @@ class TelegramDeliveryProvider:
 
         try:
             async with asyncio.timeout(self._request_timeout_seconds):
-                message = await self._bot.send_message(
-                    chat_id=normalized_destination,
-                    text=normalized_text,
-                    parse_mode="HTML",
-                )
+                message = await self._deliver(normalized_destination, normalized_text, options)
             return ProviderDeliveryResult.sent(message.message_id)
         except TelegramRetryAfter as exc:
             return ProviderDeliveryResult.transient_failure(
@@ -148,3 +147,38 @@ class TelegramDeliveryProvider:
                 code="telegram_unexpected_error",
                 message="Telegram provider outcome requires manual reconciliation",
             )
+
+    async def _deliver(self, chat_id: int, text: str, options: TelegramMessageOptions | None):
+        params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        thread_id = None
+        if options is not None:
+            params["reply_markup"] = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text=label, url=url) for label, url in options.buttons
+            ]])
+            params["link_preview_options"] = LinkPreviewOptions(is_disabled=True)
+            if options.edit_message_id:
+                edited = True
+                try:
+                    await self._bot.edit_message_text(message_id=options.edit_message_id, **params)
+                except TelegramBadRequest as exc:
+                    reason = exc.message.casefold()
+                    edited = "message is not modified" in reason
+                    if not edited and all(error not in reason for error in ("message to edit not found", "message can't be edited")):
+                        raise
+                if edited and options.alert_text:
+                    params["text"] = options.alert_text
+                    params["reply_parameters"] = ReplyParameters(
+                        message_id=options.edit_message_id, allow_sending_without_reply=True,
+                    )
+            params["disable_notification"] = options.silent
+            if options.tender_topic:
+                thread_id = settings.TELEGRAM_TENDER_TOPIC_IDS.get(chat_id)
+        if thread_id:
+            try:
+                return await self._bot.send_message(message_thread_id=thread_id, **params)
+            except TelegramBadRequest as exc:
+                reason = exc.message.casefold()
+                if not any(error in reason for error in ("message thread not found", "topic_closed", "topic is closed", "chat is not a forum")):
+                    raise
+                params.pop("reply_parameters", None)
+        return await self._bot.send_message(**params)

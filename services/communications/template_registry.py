@@ -204,6 +204,10 @@ class WebsiteTemplateRegistry:
         # Preserve their fingerprint instead of materializing a new null key.
         if normalized_context.get("submission_context") is None:
             normalized_context.pop("submission_context", None)
+        if template_key == TENANT_INCOMING_TEMPLATE_KEY:
+            for key in ("subject", "tender"):
+                if normalized_context.get(key) is None:
+                    normalized_context.pop(key, None)
         return CommunicationTemplatePlanV1(
             channel="telegram",
             audience=audience,

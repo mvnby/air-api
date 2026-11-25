@@ -547,6 +547,7 @@ class EmailLeadIntakeService:
             tenant_scope=tenant_scope,
             order_technical_meta={"email_source_text": raw_body[:180_000], "email_subject": subject},
             commit=False,
+            notify_incoming=False,
         )
 
         from sqlalchemy.orm.attributes import flag_modified
@@ -616,6 +617,9 @@ class EmailLeadIntakeService:
         if skipped_attachments:
             order.technical_meta["email_attachments_skipped"] = skipped_attachments
             flag_modified(order, "technical_meta")
+        from services.communications.incoming_events import IncomingEventService
+
+        await IncomingEventService.enqueue_order(session, order, attachment_texts=attachment_texts)
         await session.commit()
         await session.refresh(order)
         return EmailLeadProcessResult(

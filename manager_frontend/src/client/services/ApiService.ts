@@ -33,6 +33,7 @@ import type { PublicBrandDetailResponse } from '../models/PublicBrandDetailRespo
 import type { PublicBrandResponse } from '../models/PublicBrandResponse';
 import type { PublicContactLeadPayload } from '../models/PublicContactLeadPayload';
 import type { PublicContactLeadResponse } from '../models/PublicContactLeadResponse';
+import type { PublicPersonalOfferResponse } from '../models/PublicPersonalOfferResponse';
 import type { PublicProductCollectionPlacementResponse } from '../models/PublicProductCollectionPlacementResponse';
 import type { PublicProductSearchResponse } from '../models/PublicProductSearchResponse';
 import type { PublicSeriesPageResponse } from '../models/PublicSeriesPageResponse';
@@ -986,6 +987,27 @@ export class ApiService {
             url: '/api/v1/address-suggest',
             query: {
                 'q': q,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Public Personal Offer
+     * Return a published offer only for its exact signed storefront host and active token.
+     * @param token
+     * @returns PublicPersonalOfferResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPublicPersonalOffer(
+        token: string,
+    ): CancelablePromise<PublicPersonalOfferResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/personal-offers/{token}',
+            path: {
+                'token': token,
             },
             errors: {
                 422: `Validation Error`,

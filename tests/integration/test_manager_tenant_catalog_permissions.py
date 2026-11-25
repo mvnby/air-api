@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -25,6 +25,7 @@ from models import (
     TenantOffer,
 )
 from models.supplier import ProductSupplierMapping, SupplierOffer
+from models.tenancy import StorefrontDomain
 
 
 @pytest.mark.asyncio
@@ -78,6 +79,7 @@ async def test_product_reader_has_complete_safe_content_and_current_demo_selecti
     assert payload["selection_item"]["id"] == product.id
     assert payload["selection_item"]["availability"] == "out_of_stock"
     assert payload["selection_item"]["purchase_cost_byn"] == 1800
+    assert payload["selection_item"]["public_site_url"] is None
     assert "PRIVATE" not in response.text
     assert "wholesale" not in response.text
     assert set(payload) == {
@@ -270,6 +272,12 @@ async def test_partner_catalog_decision_uses_only_granted_storefront_offers_and_
                          wholesale_currency="BYN", rrc_byn=2000, qty=4))
     db.add(ProductSupplierMapping(product_id=visible.id, supplier_id=supplier.id,
                                   external_id="DECISION-1"))
+    db.add_all([
+        StorefrontDomain(storefront_id=storefront.id, hostname="primary.partner.test", status="active",
+                         is_primary=True, verified_at=datetime.now(timezone.utc)),
+        StorefrontDomain(storefront_id=other_storefront.id, hostname="other.partner.test", status="active",
+                         is_primary=True, verified_at=datetime.now(timezone.utc)),
+    ])
     await db.commit()
     headers = _headers(user)
     response = await async_client.get("/api/manager/catalog-decision/products?include_orderable=true&search=Decision", headers=headers)
@@ -279,6 +287,10 @@ async def test_partner_catalog_decision_uses_only_granted_storefront_offers_and_
     assert item["id"] == visible.id
     assert item["retail_price_byn"] == 2200
     assert item["purchase_cost_byn"] == 700
+    assert item["public_site_url"] == "https://primary.partner.test/product/decision-visible/"
+    reader = await async_client.get(f"/api/manager/tenant-catalog/products/{visible.id}", headers=headers)
+    assert reader.status_code == 200, reader.text
+    assert reader.json()["selection_item"]["public_site_url"] == item["public_site_url"]
     options = await async_client.get("/api/manager/catalog-decision/filter-options", headers=headers)
     assert options.status_code == 200
     assert {value["id"] for value in options.json()["brands"]} == {brand.id}
@@ -640,6 +652,55 @@ async def test_system_tenant_catalog_keeps_canonical_master_behavior(
             "allowed": True,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_system_decision_product_link_uses_exact_public_storefront(async_client, db):
+    user = StaffUser(display_name="System Link Manager", status="active", roles=["manager"],
+                     primary_role="manager", username="system-link-manager-test")
+    secondary = Storefront(tenant_id=1, slug="copy-secondary", display_name="Secondary",
+                           status="active", is_default=False)
+    visible = Product(title="Copy primary", slug="copy-primary", price=1000,
+                      product_kind="complete_split_system", is_published=True)
+    hidden = Product(title="Copy draft", slug="copy-draft", price=1100,
+                     product_kind="complete_split_system", is_published=False)
+    db.add_all([user, secondary, visible, hidden])
+    await db.flush()
+    verified_at = datetime.now(timezone.utc)
+    db.add_all([
+        TenantMembership(tenant_id=1, staff_user_id=user.id, role="manager", status="active"),
+        StorefrontDomain(storefront_id=1, hostname="mvn.by", status="active", is_primary=True,
+                         verified_at=verified_at),
+        StorefrontDomain(storefront_id=secondary.id, hostname="secondary.mvn.test", status="active",
+                         is_primary=True, verified_at=verified_at),
+    ])
+    await db.commit()
+    url = "/api/manager/catalog-decision/products"
+    headers = _headers(user)
+    params = {"search": "Copy", "include_orderable": "true"}
+    primary = await async_client.get(url, params=params, headers=headers)
+    assert primary.status_code == 200, primary.text
+    assert {item["id"]: item["public_site_url"] for item in primary.json()["items"]} == {
+        visible.id: "https://mvn.by/product/copy-primary/", hidden.id: None,
+    }
+    scoped_headers = {**headers, "X-MVN-Manager-Storefront": secondary.slug}
+    before_offer = await async_client.get(url, params=params, headers=scoped_headers)
+    assert before_offer.status_code == 200, before_offer.text
+    assert {item["id"]: item["public_site_url"] for item in before_offer.json()["items"]} == {
+        visible.id: None, hidden.id: None,
+    }
+
+    db.add(TenantOffer(
+        tenant_id=1, storefront_id=secondary.id, product_id=visible.id, price=1200,
+        status="active", is_published=True, created_by_username="system:test",
+        updated_by_username="system:test",
+    ))
+    await db.commit()
+    after_offer = await async_client.get(url, params=params, headers=scoped_headers)
+    assert after_offer.status_code == 200, after_offer.text
+    assert {item["id"]: item["public_site_url"] for item in after_offer.json()["items"]} == {
+        visible.id: "https://secondary.mvn.test/product/copy-primary/", hidden.id: None,
+    }
 
 
 @pytest.mark.asyncio

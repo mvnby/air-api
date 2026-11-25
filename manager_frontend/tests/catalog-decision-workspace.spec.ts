@@ -24,7 +24,7 @@ describe('catalog decision workspace boundary', () => {
 });
 
 const identity = { username: 'manager-test', tenant_id: 1, staff_user_id: 7, capabilities: ['platform.manage'] } as any;
-const selectedModel = { id: 11, title: 'Console 12', heating_min_c: -30 } as any;
+const selectedModel = { id: 11, title: 'Console 12', heating_min_c: -30, is_published: true, public_site_url: 'https://mvn.by/product/console-12/' } as any;
 const targetOrder = { id: 42, title: 'Офис', status: 'negotiation', proposals: [
   { id: 50, name: 'Основное', status: 'draft', is_selected: true },
   { id: 51, name: 'Для кабинета', status: 'draft', is_selected: false },
@@ -53,6 +53,33 @@ afterEach(() => {
 });
 
 describe('order-bound equipment selection', () => {
+  it('copies the public model link in the desktop row and mobile menu without changing selection or order context', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      const wrapper = await startWorkspace('?orderId=42&proposalId=51', { renderTable: true });
+      const table = wrapper.findComponent(CatalogDecisionTable);
+      await table.get('tbody button[aria-pressed]').trigger('click');
+      await flushPromises();
+      const expectedLocation = location.pathname + location.search;
+      const desktopCopy = table.get('tbody button[aria-label="Копировать ссылку на сайте"]');
+      await desktopCopy.trigger('click');
+      await flushPromises();
+      expect(table.get('tbody [role="status"]').text()).toBe('Ссылка скопирована');
+
+      const mobileActions = table.get('article details');
+      expect(mobileActions.get('summary').text()).toBe('Действия');
+      await mobileActions.get('summary').trigger('click');
+      await mobileActions.get('button').trigger('click');
+      await flushPromises();
+      expect(writeText.mock.calls).toEqual([[selectedModel.public_site_url], [selectedModel.public_site_url]]);
+      expect(wrapper.findComponent(CatalogDecisionSelectionTray).props('items')).toHaveLength(1);
+      expect(location.pathname + location.search).toBe(expectedLocation);
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
   it('owns one compact shell title and returns to the exact order without clearing the basket', async () => {
     const key = `${catalogDecisionSelectionStorageKey(identity)}:order-42:proposal-51`;
     saveCatalogDecisionSelection([{ id: 11, title: 'Console 12' }], key);
@@ -184,7 +211,10 @@ describe('catalog workspace usability', () => {
     expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { ...technicalCriteria, search: undefined, wifi: undefined, includeOrderable: true }, 'recommended', 'asc');
     expect(new URLSearchParams(location.search).get('heating')).toBe('-25');
     expect(new URLSearchParams(location.search).get('form')).toBe('cassette');
-    await wrapper.findAll('button').find(button => button.text() === 'Сбросить фильтры')!.trigger('click');
+    const resultsControls = wrapper.get('[aria-label="Управление результатами подбора"]');
+    expect(resultsControls.find('[aria-label="Сортировка каталога"]').exists()).toBe(true);
+    expect(resultsControls.find('[aria-label="Выбранные фильтры"]').exists()).toBe(true);
+    await resultsControls.findAll('button').find(button => button.text() === 'Сбросить всё')!.trigger('click');
     await flushPromises();
     expect(catalogDecisionApi.list).toHaveBeenLastCalledWith(1, 40, { isPublished: true }, 'recommended', 'asc');
   });

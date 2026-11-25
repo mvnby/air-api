@@ -1,3 +1,4 @@
+import logging
 import re
 from urllib.parse import urlsplit, urlunsplit
 
@@ -8,7 +9,29 @@ from core.config import settings
 
 _TELEGRAM_TOKEN_IN_URL = re.compile(r"(?<=/bot)[0-9]+:[A-Za-z0-9_-]+")
 _URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+")
+_PERSONAL_OFFER_TOKEN_IN_PATH = re.compile(r"(/api/v1/personal-offers/|/predlozhenie/)[^/?#\s]+")
 _SECRET_FIELD_MARKERS = ("TOKEN", "PASSWORD", "SECRET", "CREDENTIAL")
+
+
+def redact_personal_offer_path(path: str) -> str:
+    return _PERSONAL_OFFER_TOKEN_IN_PATH.sub(r"\g<1>[redacted]", path)
+
+
+class _PersonalOfferAccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Uvicorn emits the request target as the third formatting argument.
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, target, protocol, status = record.args
+            if isinstance(target, str):
+                record.args = (client, method, redact_personal_offer_path(target), protocol, status)
+        return True
+
+
+_PERSONAL_OFFER_ACCESS_LOG_FILTER = _PersonalOfferAccessLogFilter()
+
+
+def mask_personal_offer_access_logs() -> None:
+    logging.getLogger("uvicorn.access").addFilter(_PERSONAL_OFFER_ACCESS_LOG_FILTER)
 
 
 def _configured_secret_values() -> tuple[str, ...]:
@@ -34,6 +57,7 @@ def _scrub_nested_value(value, secrets: tuple[str, ...]):
     if isinstance(value, str):
         scrubbed = _URL_IN_TEXT.sub(_strip_url_query, value)
         scrubbed = _TELEGRAM_TOKEN_IN_URL.sub("[redacted]", scrubbed)
+        scrubbed = redact_personal_offer_path(scrubbed)
         for secret in secrets:
             scrubbed = scrubbed.replace(secret, "[redacted]")
         return scrubbed
