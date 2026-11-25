@@ -27,8 +27,9 @@ class TenderDocumentFragment(BaseModel):
     fragment: int
     offset: int
     text: str
-    method: Literal["embedded", "ocr", "docx", "doc", "xlsx", "xls"]
+    method: Literal["embedded", "ocr", "docx", "doc", "xlsx", "xls", "rtf"]
     section: str | None = None
+    archive_member: str | None = None
     ocr_reliable: bool | None = None
 
 

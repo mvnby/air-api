@@ -56,6 +56,8 @@ DOCUMENT_MIME_TYPES = {
     "application/pdf": "pdf",
     WORD_MIME: "docx",
     "application/msword": "doc",
+    "application/rtf": "rtf",
+    "text/rtf": "rtf",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
     "application/vnd.ms-excel": "xls",
     "application/zip": "zip",
@@ -80,7 +82,7 @@ class _Extraction:
 
     def add(
         self, text: str, method: str, *, page: int | None = None, section: str | None = None,
-        ocr_reliable: bool | None = None,
+        ocr_reliable: bool | None = None, archive_member: str | None = None,
     ) -> bool:
         text = text.strip()
         if not text:
@@ -97,6 +99,7 @@ class _Extraction:
             self.fragments.append(TenderDocumentFragment(
                 page=page, section=section, fragment=len(self.fragments) + 1,
                 offset=self.total_chars, text=text[:remaining], method=method, ocr_reliable=ocr_reliable,
+                archive_member=archive_member,
             ))
             self.total_chars += len(self.fragments[-1].text)
         if len(text) > remaining:
@@ -300,6 +303,21 @@ def _add_sheet_row(extraction: _Extraction, values, sheet: str, row: int, kind: 
     return extraction.add(text, kind, section=f"Лист «{sheet}», строка {row}")
 
 
+def _extract_rtf(content: bytes, extraction: _Extraction) -> None:
+    from striprtf.striprtf import rtf_to_text
+
+    source = content.removeprefix(b"\xef\xbb\xbf").lstrip().decode("latin-1")
+    if not re.match(r"\{\\rtf\d", source):
+        raise ValueError("Invalid RTF header")
+    if re.search(r"\\(?:pict|object|objdata)\b|\\bin\d+", source):
+        extraction.diagnostics.append("В RTF есть графика или вложенные данные. Сверьте их по оригиналу.")
+    # Keep the RTF-declared code page for both hex escapes and legacy raw bytes.
+    encoded = re.sub("[\u0080-\u00ff]", lambda match: f"\\'{ord(match[0]):02x}", source)
+    for line in rtf_to_text(encoded, encoding="cp1251").splitlines():
+        if line.strip(" |\t") and not extraction.add(line, "rtf"):
+            break
+
+
 def _extract_xlsx(content: bytes, extraction: _Extraction) -> None:
     from openpyxl import load_workbook
     from openpyxl.utils.exceptions import InvalidFileException
@@ -417,7 +435,7 @@ def _extract_archive(content: bytes, extraction: _Extraction, directory: Path) -
             for fragment in member_result.fragments:
                 section = " · ".join(value for value in (name, fragment.section) if value)
                 if not extraction.add(fragment.text, fragment.method, page=fragment.page, section=section,
-                                      ocr_reliable=fragment.ocr_reliable):
+                                      ocr_reliable=fragment.ocr_reliable, archive_member=name):
                     return
 
 
@@ -433,6 +451,8 @@ def _extract_supported(content: bytes, document_format: str, extraction: _Extrac
             _extract_docx(content, extraction)
         elif document_format == "doc":
             _extract_doc(content, extraction, directory)
+        elif document_format == "rtf":
+            _extract_rtf(content, extraction)
         elif document_format == "xlsx":
             _extract_xlsx(content, extraction)
         elif document_format == "xls":
@@ -441,7 +461,7 @@ def _extract_supported(content: bytes, document_format: str, extraction: _Extrac
             _extract_archive(content, extraction, directory)
     except _DocumentLimit:
         raise
-    except (BadZipFile, DefusedXmlException, IndexError, KeyError, OSError, ParseError,
+    except (BadZipFile, DefusedXmlException, LookupError, OSError, ParseError,
             PyPdfError, RecursionError, RuntimeError, ValueError):
         extraction.diagnostics.append("Не удалось разобрать файл. Проверьте оригинал документа.")
 
@@ -634,7 +654,7 @@ async def load_tender_document(
         document_format = _format_for(filename, mime_type)
         if not document_format:
             return TenderDocumentReadResult(
-                **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC, DOCX, XLS, XLSX и ZIP."],
+                **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC, DOCX, RTF, XLS, XLSX и ZIP."],
             )
         try:
             extraction = await _cached_extraction(content, document_format, sha256, scope)

@@ -18,13 +18,14 @@ from sqlalchemy.dialects import postgresql
 
 from models import LeadSource, Order, ServiceAttachment
 from models.tenancy import TenantScope
-from schemas_tender_document_reader import TenderDocumentReadInput
+from schemas_tender_document_reader import TenderDocumentFragment, TenderDocumentReadInput, TenderDocumentReadResult
 from services import tender_document_reader as reader
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService, SourceDocumentNotFound, SourceDocumentTooLarge
 from services.belzakupki_import_service import BelzakupkiImportService
 from services.private_attachment_storage_service import (
     LocalPrivateAttachmentStorage, PrivateAttachmentTooLarge, S3PrivateAttachmentStorage,
 )
+from services import tender_original_evidence
 
 
 SCOPE = TenantScope(tenant_id=3, storefront_id=4)
@@ -118,6 +119,41 @@ def test_long_archive_member_leaves_budget_for_spreadsheet(monkeypatch, tmp_path
     assert result["status"] == "partial"
     assert result["total_chars"] <= reader.MAX_TEXT_CHARS
     assert result["fragments"][-1]["section"] == "Смета.xlsx · Лист «Смета», строка 3"
+
+
+def test_rtf_recognizes_cyrillic_rows_and_keeps_archive_attribution(tmp_path):
+    original = b"{\\rtf1\\ansi\\ansicpg1251 " + "Материалы".encode("cp1251") + b"\\cell 1 \\cell\\row}"
+    archive_bytes = BytesIO()
+    with ZipFile(archive_bytes, "w") as archive:
+        archive.writestr("Смета.rtf", original)
+    result = reader._extract_original(archive_bytes.getvalue(), "zip", tmp_path)
+    (part,) = result["fragments"]
+    assert result["status"] == "complete"
+    assert part["archive_member"] == "Смета.rtf" and part["method"] == "rtf"
+    assert "Материалы" in part["text"] and "1" in part["text"]
+
+
+def test_verification_budget_reserves_fragments_from_both_archive_members_and_other_originals(monkeypatch):
+    monkeypatch.setattr(tender_original_evidence, "MAX_FRAGMENTS", 6)
+    bundle = tender_original_evidence.TenderOriginalEvidence(selected_count=2)
+    parts = [
+        TenderDocumentFragment(fragment=index, offset=index, text="long design page", method="embedded",
+                               archive_member="Проект.pdf", section="Проект.pdf", page=index)
+        for index in range(1, 8)
+    ]
+    parts.append(TenderDocumentFragment(
+        fragment=8, offset=135, text="Монтаж решётки", method="rtf", archive_member="Смета.rtf", section="Смета.rtf",
+    ))
+    bundle.add(TenderDocumentReadResult(order_id=1, document_id="archive", origin="source",
+                                        status="complete", fragments=parts), "Архив.zip")
+    final_part = TenderDocumentFragment(fragment=1, offset=0, text="Условия подачи", method="docx")
+    bundle.add(TenderDocumentReadResult(order_id=1, document_id="instructions", origin="source",
+                                        status="complete", fragments=[final_part]), "Подача.docx")
+    assert bundle.documents[0].status == "over_analysis_limit"
+    assert any(part.location.startswith("Проект.pdf") for part in bundle.fragments)
+    assert any(part.text == "Монтаж решётки" for part in bundle.fragments)
+    assert any(part.filename == "Подача.docx" for part in bundle.fragments)
+    assert len(bundle.fragments) <= 6
 
 
 @pytest.mark.asyncio

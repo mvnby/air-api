@@ -132,7 +132,7 @@ class ManagerTenderEvidenceService:
         inventory = {str(row["id"]): str(row.get("name") or "Оригинал")[:500] for row in rows}
         if any(document_id not in inventory for document_id in job.document_ids):
             raise _InventoryChanged
-        evidence = TenderOriginalEvidence()
+        evidence = TenderOriginalEvidence(len(job.document_ids))
         for document_id in job.document_ids:
             try:
                 async with asyncio.timeout_at(deadline), async_session_maker() as session:

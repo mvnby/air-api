@@ -118,6 +118,8 @@ def _original_file_type(content: bytes, filename: str, supplied_type: str) -> tu
         return filename if filename.lower().endswith(".doc") else filename + ".doc", "application/msword"
     if content.startswith(b"%PDF-"):
         return filename if filename.lower().endswith(".pdf") else filename + ".pdf", "application/pdf"
+    if content.removeprefix(b"\xef\xbb\xbf").lstrip().startswith(b"{\\rtf"):
+        return filename if filename.lower().endswith(".rtf") else filename + ".rtf", "application/rtf"
     if content.startswith(b"PK\x03\x04"):
         try:
             with ZipFile(BytesIO(content)) as archive:

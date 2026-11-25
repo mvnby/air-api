@@ -71,7 +71,7 @@ async def analyze_tender_documents(session, actor, inputs):
     profile = inputs.profile
     if inputs.profile_name == "mvn_vitebsk":
         profile = await asyncio.to_thread(load_mvn_tender_profile)
-    evidence = TenderOriginalEvidence()
+    evidence = TenderOriginalEvidence(len(inputs.document_ids))
     unselected = len(inventory) - len(inputs.document_ids)
     # The synchronous MCP response must arrive before the 60-second ingress timeout.
     extraction_deadline = started + 30

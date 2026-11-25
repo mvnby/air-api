@@ -209,6 +209,8 @@ price from the procurement's estimated value.
 publication. Manager shows per-file completeness and document quotes with page,
 Word fragment, spreadsheet row or ZIP member. Missing PDFs, pages with low OCR
 confidence, skipped archive members and analysis limits keep coverage partial.
+RTF rows and paragraphs are read as text fragments. The combined analysis limit
+reserves capacity for selected originals and members of their archives.
 Provider failures can still return literal evidence extracted locally. The
 verification runs in the background and uses system-company owner access.
 Unchanged hashes reuse recent extraction and completed analysis in the active
