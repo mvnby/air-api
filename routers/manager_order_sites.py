@@ -11,6 +11,7 @@ from routers.manager_operation_ids import (
     MANAGER_LINK_ORDER_SITE_EQUIPMENT,
     MANAGER_LIST_ORDER_SITE_EQUIPMENT,
     MANAGER_LIST_ORDER_SITES,
+    MANAGER_UPDATE_ORDER_SITE,
 )
 from routers.manager_permission_policy import ManagerPermissionRoute
 from schemas_connector_mcp import ConnectorWriteResult
@@ -21,6 +22,7 @@ from schemas_order_sites import (
     OrderSiteEquipmentList,
     OrderSiteItem,
     OrderSiteList,
+    OrderSiteUpdateRequest,
 )
 from services.order_site_service import OrderSiteService
 from services.public_write_idempotency_service import (
@@ -76,6 +78,22 @@ async def manager_add_order_site(
     """Add a site from the order customer's branch or from an order-specific address."""
     outcome = await _call(OrderSiteService.add_site(
         session, CommandActor.from_auth(auth), order_id, request.payload,
+        idempotency_key=request.idempotency_key,
+    ))
+    return {"result": outcome.value, "replayed": outcome.replayed}
+
+
+@router.patch("/{site_id}", response_model=ConnectorWriteResult[OrderSiteItem], operation_id=MANAGER_UPDATE_ORDER_SITE)
+async def manager_update_order_site(
+    request: OrderSiteUpdateRequest,
+    order_id: int = Path(gt=0),
+    site_id: int = Path(gt=0),
+    session: AsyncSession = Depends(get_session),
+    auth: AuthenticatedUser = Depends(require_manager_access),
+):
+    """Correct the saved site title or address using its current version."""
+    outcome = await _call(OrderSiteService.update_site(
+        session, CommandActor.from_auth(auth), order_id, site_id, request.payload,
         idempotency_key=request.idempotency_key,
     ))
     return {"result": outcome.value, "replayed": outcome.replayed}

@@ -9,7 +9,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import OrderDocument, OrderProductLink, OrderProposal, OrderServiceLink
+from models import Order, OrderDocument, OrderProductLink, OrderProposal, OrderServiceLink
 from modules.documents.domain.lifecycle import DocumentStatus
 from services.order_proposal_version import proposal_version
 
@@ -129,6 +129,8 @@ async def _effective_acts(session: AsyncSession, order_id: int) -> list[OrderDoc
     statement = select(OrderDocument).where(
         OrderDocument.order_id == order_id,
         OrderDocument.doc_type == "act",
+        # A received file can support a native act without closing any volume.
+        or_(OrderDocument.origin.is_(None), OrderDocument.external_status == "signed"),
         or_(
             OrderDocument.status.in_((DocumentStatus.ISSUED.value, DocumentStatus.SENT.value, DocumentStatus.SIGNED.value)),
             OrderDocument.status.is_(None),
@@ -139,11 +141,27 @@ async def _effective_acts(session: AsyncSession, order_id: int) -> list[OrderDoc
 
 
 async def ensure_legacy_act_write_allowed(session: AsyncSession, order_id: int) -> None:
-    """The caller holds the order lock before adding any unscoped closing act."""
-    if any(_entry(row) for row in await _effective_acts(session, order_id)):
+    """Serialize unscoped act generation with other closing writes."""
+    await session.scalar(select(Order.id).where(Order.id == order_id).with_for_update())
+    effective = await _effective_acts(session, order_id)
+    if any(row.external_status == "signed" for row in effective):
+        raise ManagedDocumentConflictError(
+            "В заказе уже есть подписанный внешний акт без проверяемой разбивки по строкам. "
+            "Сначала сверьте ранее закрытые объёмы."
+        )
+    if any(_entry(row) for row in effective):
         raise ManagedDocumentConflictError(
             "По заказу уже оформлен акт по выбранным объектам. "
             "Подготовьте очередной акт из того же предложения с проверкой закрытых объёмов."
+        )
+
+
+async def ensure_signed_external_act_write_allowed(session: AsyncSession, order_id: int) -> None:
+    """A signed import has no verifiable breakdown and cannot close alongside another act."""
+    if await _effective_acts(session, order_id):
+        raise ManagedDocumentConflictError(
+            "По заказу уже оформлен акт. Приложите подписанную копию к существующему акту "
+            "или импортируйте файл со статусом «Получен»."
         )
 
 

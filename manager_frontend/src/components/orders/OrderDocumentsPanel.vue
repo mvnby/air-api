@@ -14,6 +14,7 @@ import { getOrderDocumentAccess } from './order-document-access';
 import LegacyDocumentsShell from '../../features/documents/components/LegacyDocumentsShell.vue';
 import { DocumentGenerationContextKey } from '../../features/documents/model/document-generation-context';
 import { useDocumentFileActions } from '../../features/documents/composables/use-document-file-actions';
+import { hasExternalOrigin } from '../../features/documents/integrations/external-order-documents-api';
 import { useExternalContractRegistration } from '../../features/documents/composables/use-external-contract-registration';
 import { useActDocumentScope } from '../../features/documents/composables/use-act-document-scope';
 import { useWaybillDocumentScope } from '../../features/documents/composables/use-waybill-document-scope';
@@ -324,7 +325,7 @@ const loadDocuments = async () => {
   try {
     const res = await ManagerDocsService.getManagerOrderDocuments(orderId);
     if (requestId !== documentsRequestId || props.order.id !== orderId) return;
-    documents.value = res.items;
+    documents.value = res.items.filter(item => !hasExternalOrigin(item));
     if (!isCreatePanelOpen.value) selectedDocumentType.value = suggestedDocumentType.value;
     syncBaseDocumentSelection();
   } catch (error) {

@@ -54,16 +54,17 @@ class OrderSiteDAO:
         )
 
     @staticmethod
-    async def find_order_only_site(session, order, *, title, address):
-        return await session.scalar(
-            select(OrderSite).where(
-                OrderSite.order_id == order.id,
-                OrderSite.customer_id == order.customer_id,
-                OrderSite.customer_branch_id.is_(None),
-                func.lower(OrderSite.title) == title.lower(),
-                func.lower(OrderSite.address) == address.lower(),
-            )
+    async def find_order_only_site(session, order, *, title, address, exclude_site_id=None):
+        query = select(OrderSite).where(
+            OrderSite.order_id == order.id,
+            OrderSite.customer_id == order.customer_id,
+            OrderSite.customer_branch_id.is_(None),
+            func.lower(OrderSite.title) == func.lower(title),
+            func.lower(OrderSite.address) == func.lower(address),
         )
+        if exclude_site_id is not None:
+            query = query.where(OrderSite.id != exclude_site_id)
+        return await session.scalar(query)
 
     @staticmethod
     async def for_order_equipment(session, order_id, equipment_id):

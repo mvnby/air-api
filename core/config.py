@@ -372,6 +372,9 @@ class Settings(BaseSettings):
     DOCUMENT_PDF_CONVERTER_URL: str = ""
     DOCUMENT_PDF_CONVERTER_TIMEOUT_SECONDS: float = 30.0
 
+    # External order uploads require a local ClamAV daemon in production.
+    EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET: str = ""
+
     @model_validator(mode="after")
     def _validate_private_attachment_storage(self):
         if not self.is_production:

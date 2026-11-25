@@ -1,31 +1,40 @@
 """Shared Manager and MCP contracts for order sites and physical units."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from schemas import ManagerEquipmentDetailResponse
 from schemas_connector_mcp import ConnectorInput, WriteInput
 
 
 EquipmentRole = Literal["sale", "installation", "maintenance", "repair", "diagnostic", "warranty_case", "other"]
+SiteTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+SiteAddress = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
 
 class OrderSiteAddPayload(ConnectorInput):
     customer_branch_id: int | None = Field(default=None, gt=0)
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    address: str | None = Field(default=None, min_length=1, max_length=1000)
-
-    @field_validator("title", "address", mode="before")
-    @classmethod
-    def trim_text(cls, value):
-        return value.strip() if isinstance(value, str) else value
+    title: SiteTitle | None = None
+    address: SiteAddress | None = None
 
     @model_validator(mode="after")
     def require_order_only_address(self):
         if self.customer_branch_id is None and not (self.title and self.address):
             raise ValueError("Укажите филиал или название и адрес объекта")
+        return self
+
+
+class OrderSiteUpdatePayload(ConnectorInput):
+    expected_version: int = Field(ge=1)
+    title: SiteTitle | None = None
+    address: SiteAddress | None = None
+
+    @model_validator(mode="after")
+    def require_correction(self):
+        if self.title is None and self.address is None:
+            raise ValueError("Укажите исправленное название или адрес объекта")
         return self
 
 
@@ -75,6 +84,10 @@ class OrderSiteEquipmentLinkPayload(ConnectorInput):
 
 class OrderSiteAddRequest(WriteInput):
     payload: OrderSiteAddPayload
+
+
+class OrderSiteUpdateRequest(WriteInput):
+    payload: OrderSiteUpdatePayload
 
 
 class OrderSiteEquipmentLinkRequest(WriteInput):

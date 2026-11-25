@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManagerOrderDocumentExternalFile } from './ManagerOrderDocumentExternalFile';
 export type ManagerOrderDocumentItem = {
     id: number;
     proposal_id?: (number | null);
@@ -20,5 +21,10 @@ export type ManagerOrderDocumentItem = {
     date: string;
     edit_url?: (string | null);
     is_downloadable?: boolean;
+    origin?: 'legacy' | 'native_generated' | 'external_upload';
+    external_status?: ('received' | 'signed' | null);
+    status?: (string | null);
+    file_version?: number;
+    external_files?: Array<ManagerOrderDocumentExternalFile>;
 };
 

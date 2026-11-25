@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, computed_field, field_validator
 
 from api_contracts.order_responsibility import ManagerOrderResponsiblePerson
 from models import PaymentCurrency
@@ -276,6 +276,19 @@ class ManagerOrderListItemResponse(BaseModel):
         return self.status == "execution" or self.proposal_status == "approved"
 
 
+class ManagerOrderDocumentExternalFile(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    role: Literal["original", "signed_copy"]
+    filename: str
+    mime_type: str
+    size_bytes: int
+    checksum_sha256: str
+    uploaded_at: datetime
+    uploaded_by: str
+
+
 class ManagerOrderDocumentItem(BaseModel):
     id: int
     proposal_id: Optional[int] = None
@@ -294,6 +307,11 @@ class ManagerOrderDocumentItem(BaseModel):
     date: datetime
     edit_url: Optional[str] = None
     is_downloadable: bool = True
+    origin: Literal["legacy", "native_generated", "external_upload"] = "legacy"
+    external_status: Optional[Literal["received", "signed"]] = None
+    status: Optional[str] = None
+    file_version: int = 0
+    external_files: List[ManagerOrderDocumentExternalFile] = Field(default_factory=list)
 
 
 class ManagerOrderDocumentListResponse(BaseModel):

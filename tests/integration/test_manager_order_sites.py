@@ -1,6 +1,7 @@
 """The same service order keeps three locations and all four physical systems."""
 
 import asyncio
+from datetime import datetime
 
 import pytest
 from sqlalchemy import func
@@ -9,7 +10,8 @@ from sqlmodel import select
 
 from core.command_actor import CommandActor
 from models import (
-    Customer, CustomerBranch, CustomerEquipment, CustomerType, EquipmentOrderLink, Order, OrderStatus, StaffUser,
+    Customer, CustomerBranch, CustomerEquipment, CustomerType, DocumentLegalEntity, EquipmentOrderLink,
+    Order, OrderDocument, OrderStatus, StaffUser,
 )
 from models.order_site import OrderSite, OrderSiteEquipment
 from models.tenancy import Storefront, Tenant, TenantMembership, TenantScope
@@ -330,3 +332,75 @@ async def test_legacy_unlink_only_protects_the_role_required_by_an_explicit_site
     current_site = await async_client.get(equipment_path, headers=headers)
     assert current_site.status_code == 200, current_site.text
     assert [item["equipment_id"] for item in current_site.json()["items"]] == [equipment_id]
+
+
+@pytest.mark.asyncio
+async def test_manager_corrects_a_site_without_changing_its_branch_or_issued_snapshot(async_client, db):
+    user, _, _, branches, _, order = await make_workspace(db)
+    headers = _headers(user)
+    sites = f"/api/manager/orders/{order.id}/sites"
+    original = await add_site(
+        async_client, headers, sites, "site-correction-branch-01", {"customer_branch_id": branches[0].id},
+    )
+    issuer = DocumentLegalEntity(tenant_id=1, slug="site-correction-test", display_name="Site test issuer")
+    db.add(issuer)
+    await db.flush()
+    snapshot = {"values": {"order.object_title": original["title"], "order.object_address": original["address"]}}
+    document = OrderDocument(
+        order_id=order.id, tenant_id=1, legal_entity_id=issuer.id, doc_type="technical_inspection_act",
+        number="TEST-ACT-1", date=datetime(2026, 11, 20), internal_reference="test-site-correction-doc",
+        status="issued", scope_customer_branch_id=branches[0].id, scope_title=original["title"],
+        scope_address=original["address"], scope_meta={"site_id": original["id"]}, render_snapshot=snapshot,
+    )
+    db.add(document)
+    await db.commit()
+
+    async def patch(site, key, **changes):
+        return await async_client.patch(
+            f"{sites}/{site['id']}", headers=headers,
+            json={"idempotency_key": key, "payload": {"expected_version": site["version"], **changes}},
+        )
+
+    changed_title = "Уточнённая площадка"
+    changed_address = "Уточнённый тестовый адрес"
+    changed = await patch(
+        original, "site-correction-write-01", title=f" {changed_title} ", address=changed_address,
+    )
+    assert changed.status_code == 200, changed.text
+    saved = changed.json()["result"]
+    assert saved == {**original, "version": original["version"] + 1, "title": changed_title, "address": changed_address}
+    replay = await patch(original, "site-correction-write-01", title=changed_title, address=changed_address)
+    assert replay.json() == {"result": saved, "replayed": True}
+
+    stale = await patch(original, "site-correction-stale-01", address="Устаревшее исправление")
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "version_conflict"
+    no_op = await patch(saved, "site-correction-noop-01", address=changed_address)
+    assert no_op.json()["result"]["version"] == saved["version"]
+    assert (
+        await patch(saved, "site-correction-branch-02", title="Попытка подменить филиал", customer_branch_id=branches[1].id)
+    ).status_code == 422
+
+    first = await add_site(
+        async_client, headers, sites, "site-correction-adhoc-01", {"title": "Площадка первая", "address": "Адрес 1"},
+    )
+    second = await add_site(
+        async_client, headers, sites, "site-correction-adhoc-02", {"title": "Площадка вторая", "address": "Адрес 2"},
+    )
+    duplicate = await patch(first, "site-correction-duplicate", title=second["title"], address=second["address"])
+    assert duplicate.status_code == 409, duplicate.text
+    listed = await async_client.get(sites, headers=headers)
+    assert listed.json()["items"] == [saved, first, second]
+
+    await db.refresh(document)
+    await db.refresh(order)
+    await db.refresh(branches[0])
+    assert document.scope_title == original["title"] and document.scope_address == original["address"]
+    assert document.render_snapshot == snapshot and document.scope_meta == {"site_id": original["id"]}
+    assert order.customer_branch_id == saved["customer_branch_id"] == branches[0].id
+    assert order.delivery_address == "Основная площадка по заказу"
+    assert branches[0].delivery_address == "Тестовый адрес А"
+
+    order.status = OrderStatus.CLOSED
+    await db.commit()
+    closed = await patch(saved, "site-correction-closed-01", address="После закрытия")
+    assert closed.status_code == 409, closed.text

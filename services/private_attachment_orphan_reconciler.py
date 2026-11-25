@@ -12,7 +12,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import ServiceAttachment, StorageReconciliationCursor
+from models import OrderDocumentExternalFile, ServiceAttachment, StorageReconciliationCursor
 from services.private_attachment_storage_service import (
     PrivateAttachmentStorage,
     PrivateStoragePage,
@@ -29,7 +29,7 @@ class _ReconciliationClaim:
 
 
 class PrivateAttachmentOrphanReconciler:
-    VARIANT_PREFIXES = ("public-installation-", "public-repair-")
+    VARIANT_PREFIXES = ("public-installation-", "public-repair-", "order-document-external-")
     GRACE_HOURS = 24
     LEASE_SECONDS = 5 * 60
 
@@ -172,12 +172,17 @@ class PrivateAttachmentOrphanReconciler:
                     ),
                 )
             )
-            return {
+            referenced = {
                 key
                 for row in rows
                 for key in row
                 if key is not None
             }
+            external_keys = await session.scalars(select(OrderDocumentExternalFile.storage_key).where(
+                OrderDocumentExternalFile.provider == storage.provider_name,
+                OrderDocumentExternalFile.storage_key.in_(keys),
+            ))
+            return referenced.union(external_keys)
 
     @classmethod
     async def _advance(

@@ -21,6 +21,7 @@ import { equipmentTitle } from '../equipment/registry';
 const props = defineProps<{
   order: ManagerOrderDetailResponse;
   site: OrderSiteItem;
+  replacementId?: number | null;
   equipment: OrderSiteEquipmentItem[];
   inspections: Record<number, OrderInspectionState>;
   loadInspection: (id: number, force?: boolean) => Promise<OrderInspectionState | undefined>;
@@ -42,6 +43,7 @@ const busy = ref(false);
 const loadError = ref('');
 const commandError = ref('');
 const selectedIds = ref<number[]>([]);
+const replacement = ref<ManagedDocumentItem | null>(null);
 const checking = ref(new Set<number>());
 const inspectionErrors = ref<Record<number, string>>({});
 const result = ref<OrderTechnicalActPrepared | null>(null);
@@ -62,6 +64,9 @@ const scopes = computed(() => selected.value.flatMap(item => {
 }));
 const hasDefect = computed(() => selected.value.some(item => props.inspections[item.equipment_id]?.inspection?.status === 'defect_found'));
 const formError = computed(() => {
+  if (replacement.value && selected.value.length !== selectedIds.value.length) {
+    return 'Часть оборудования исходного акта недоступна на объекте.';
+  }
   if (!selected.value.length || checking.value.size) return '';
   if (selected.value.some(item => inspectionErrors.value[item.equipment_id])) return 'Проверьте, что загружены актуальные версии осмотров.';
   if (scopes.value.length !== selected.value.length) return 'Для каждой выбранной единицы нужно сохранить осмотр.';
@@ -69,6 +74,7 @@ const formError = computed(() => {
   return '';
 });
 const canSubmit = computed(() => !props.disabled && !busy.value && !loading.value && !checking.value.size
+  && (!props.replacementId || Boolean(replacement.value && !result.value))
   && !formError.value && selected.value.length > 0 && selected.value.length <= 100
   && Boolean(legalEntityId.value && issueDate.value && basis.selected.value));
 
@@ -85,6 +91,9 @@ const loadBasis = async () => {
     legalEntities.value = issuers.items.filter(item => item.status === 'active');
     documents.value = native.items;
     orderDocuments.value = legacy.items;
+    if (props.replacementId) {
+      await loadReplacement(native.items);
+    }
   } catch (error) {
     if (active) loadError.value = getApiErrorMessage(error);
   } finally {
@@ -101,6 +110,29 @@ const checkInspection = async (id: number, force = false) => {
     }
   } finally {
     if (active) checking.value.delete(id);
+  }
+};
+const loadReplacement = async (items: ManagedDocumentItem[]) => {
+  replacement.value = null;
+  const source = items.find(item => item.id === props.replacementId && item.order_id === props.order.id);
+  if (!source || !(source.doc_type === 'technical_inspection_act' || source.doc_type === 'defect_act')
+    || !['issued', 'sent', 'signed'].includes(source.status)
+    || source.scope_site_ids?.length !== 1 || source.scope_site_ids[0] !== props.site.id
+    || !source.scope_equipment_ids?.length || !source.legal_entity_id
+    || Boolean(source.base_document_id) === Boolean(source.base_customer_contract_id)) {
+    loadError.value = 'Исходный технический акт недоступен на этом объекте.';
+    return;
+  }
+  replacement.value = source;
+  documentType.value = source.doc_type;
+  legalEntityId.value = source.legal_entity_id;
+  issueDate.value = (source.official_date || source.date).slice(0, 10);
+  basis.value.value = source.base_document_id ? `document:${source.base_document_id}` : `customer-contract:${source.base_customer_contract_id}`;
+  selectedIds.value = [...source.scope_equipment_ids];
+  // Re-read each saved inspection rather than using a version from the old act.
+  for (const id of selectedIds.value) {
+    if (!active) break;
+    if (props.equipment.some(item => item.equipment_id === id)) await checkInspection(id, true);
   }
 };
 const selectEquipment = (id: number, event: Event) => {
@@ -122,6 +154,7 @@ const prepare = async () => {
     issue_date: issueDate.value,
     base_document_id: baseDocumentId.value,
     base_customer_contract_id: baseCustomerContractId.value,
+    ...(replacement.value ? { replaces_document_id: replacement.value.id } : {}),
   };
   const fingerprint = JSON.stringify(payload);
   if (intent?.fingerprint !== fingerprint) {
@@ -163,11 +196,12 @@ onMounted(loadBasis);
 <template>
   <form class="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" data-testid="prepare-site-technical-act" @submit.prevent="prepare">
     <fieldset class="space-y-3" :disabled="disabled || busy">
-      <legend class="text-sm font-semibold">Подготовка технического акта</legend>
+      <legend class="text-sm font-semibold">{{ replacementId ? 'Исправленная редакция технического акта' : 'Подготовка технического акта' }}</legend>
+      <p v-if="replacement" class="text-sm text-slate-500">Исходный акт № {{ replacement.display_number }}</p>
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="field-label">
           Вид документа
-          <select v-model="documentType" class="field-input">
+          <select v-model="documentType" class="field-input" :disabled="Boolean(replacementId)">
             <option value="technical_inspection_act">Акт технического обследования</option>
             <option value="defect_act">Дефектный акт</option>
           </select>
@@ -184,7 +218,7 @@ onMounted(loadBasis);
               :value="item.equipment_id"
               type="checkbox"
               :checked="selectedIds.includes(item.equipment_id)"
-              :disabled="selectedIds.length >= 100 && !selectedIds.includes(item.equipment_id)"
+              :disabled="Boolean(replacementId) || (selectedIds.length >= 100 && !selectedIds.includes(item.equipment_id))"
               @change="selectEquipment(item.equipment_id, $event)"
             />
             {{ equipmentTitle(item.equipment) }}
@@ -207,14 +241,14 @@ onMounted(loadBasis);
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="field-label">
           Наше юридическое лицо
-          <select v-model="legalEntityId" class="field-input" :disabled="loading" required>
+          <select v-model="legalEntityId" class="field-input" :disabled="loading || Boolean(replacementId)" required>
             <option :value="null">Выберите юридическое лицо</option>
             <option v-for="issuer in legalEntities" :key="issuer.id" :value="issuer.id">{{ issuer.display_name }}</option>
           </select>
         </label>
         <label class="field-label">
           Документ-основание
-          <select v-model="basis.value.value" class="field-input" :disabled="!legalEntityId || loading" required>
+          <select v-model="basis.value.value" class="field-input" :disabled="!legalEntityId || loading || Boolean(replacementId)" required>
             <option value="">Выберите договор или оферту</option>
             <option v-for="item in basis.options.value" :key="item.value" :value="item.value">{{ item.label }}</option>
           </select>
@@ -222,6 +256,9 @@ onMounted(loadBasis);
       </div>
       <p v-if="legalEntityId && !loading && !basis.loading.value && !basis.options.value.length" class="text-xs text-slate-500">
         Нет доступного основания. Проверьте договор в разделе «Документы» и юридическое лицо.
+      </p>
+      <p v-else-if="replacement && !loading && !basis.loading.value && !basis.selected.value" class="text-xs text-slate-500">
+        Основание исходного акта недоступно на выбранную дату. Проверьте реквизиты договора.
       </p>
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" class="btn-mini-outline" @click="emit('close')">Свернуть</button>

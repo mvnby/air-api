@@ -64,6 +64,27 @@ ensure_document_pdf_runtime() {
   log document-pdf "private ${DOCUMENT_PDF_SERVICE} runtime is healthy"
 }
 
+verify_candidate_document_scanner() {
+  # Nodes without external uploads have no scanner requirement.
+  if ! grep -Eq '^[[:space:]]*EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET[[:space:]]*=' "${ENV_FILE}"; then
+    return 0
+  fi
+  local app_service="$1"
+  "${COMPOSE[@]}" run --rm --no-deps --pull missing -T --entrypoint python \
+    "${app_service}" - <<'PY'
+import asyncio
+
+from core.config import settings
+from services.external_document_scan import scan_external_document
+
+if settings.EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET.strip():
+    if not settings.is_production:
+        raise SystemExit("expected production scanner configuration")
+    asyncio.run(scan_external_document(b"Kitlane scanner readiness probe\n"))
+    print("external_document_scanner=clean")
+PY
+}
+
 [[ -f "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" \
   && ! -L "${COMMUNICATIONS_WORKER_RELEASE_HELPER}" ]] || {
   log error "communications worker release helper is missing or unsafe"
@@ -336,6 +357,9 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "${TMP_DIR}"' EXIT
   prepare_registry_auth
+  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
+  export BACKEND_IMAGE
+  verify_candidate_document_scanner app
   log primary "deploying through the inactive API slot"
   API_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
     API_DEPLOY_LOCK_HELPER="${DEPLOY_LOCK_HELPER}" \
@@ -347,7 +371,6 @@ if [[ "${EXPECTED_ROLE}" == "primary" ]]; then
   # The API generation is now active; retain the guard only for owned recovery.
   export API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=false
   require_expected_role
-  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --profile bluegreen)
   worker_supported=true
   deploy_communications_worker
   require_expected_role
@@ -378,6 +401,7 @@ ensure_document_pdf_runtime
 "${COMPOSE[@]}" pull "${active_service}"
 "${COMPOSE[@]}" pull "${COMMUNICATIONS_WORKER_SERVICE}"
 require_deploy_capacity
+verify_candidate_document_scanner "${active_service}"
 fence_communications_worker
 export API_IDLE_WORKER_CAPACITY_RELIEF_ALLOWED=false
 write_backend_image "${BACKEND_IMAGE}"

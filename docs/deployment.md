@@ -107,6 +107,79 @@ API_LOCAL_HEALTH_URL=http://127.0.0.1:18000/api/health
 This keeps the emergency Caddy/network compose on `zakup` intact while still
 allowing backend image deploys from `main`.
 
+### External order document scanner
+
+In production, typed DOC, DOCX and PDF uploads need a clean verdict from a
+local ClamAV daemon before the API stores the file. The API returns 503 if
+scanning is unavailable. The scanner setting is unset by default. Every API
+slot receives a read-only mount of the project-local `document-scanner/`
+directory at `/run/mvn-document-scanner`. A directory mount follows socket
+recreation when the daemon restarts.
+
+Prepare both API hosts before enabling uploads:
+
+1. Check memory headroom including fresh signature reloads and a blue-green
+   rollout. Provision a supported local `clamd` and automatic signature
+   updates on each host. Start with the fenced replica in Patroni mode. Use a
+   Unix socket without a TCP listener. Check the actual host-to-container UID
+   or GID mapping before assigning permissions.
+2. Configure `LocalSocket` at `/opt/air-api/document-scanner/clamd.sock` on
+   `mvn-api-nl` and `/opt/mvn-reserve/document-scanner/clamd.sock` on
+   `mvn-api-by`. Give the daemon ownership of the directory, restrict directory
+   traversal to the daemon and authorized clients, and set `LocalSocketMode`
+   to `0660` with the approved `LocalSocketGroup`. Verify service confinement allows the
+   socket path. Set `StreamMaxLength` to at least `10M` and
+   `AlertExceedsMax yes` so engine scan limits are reported. Keep application
+   file size and daemon processing limits bounded.
+   [ClamAV configuration](https://docs.clamav.net/manual/Usage/Configuration.html)
+3. Confirm the socket and current loaded signatures on each host. In
+   Patroni mode, review a separate change containing the Compose mounts and
+   their matching verifier digests. Keep the communications profiles intact.
+   Run the [atomic PITR transaction](api-ha-runbook.md#postgresql-pitr) from the
+   exact CI-green configuration revision under its existing deployment
+   freeze. After both nodes attest those bytes, merge and deploy the reviewed
+   configuration, then continue with the application release. For a host-local
+   physical-mode reserve Compose, verify the same read-only directory mount
+   in its reviewed deployment configuration.
+4. Set `EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET=/run/mvn-document-scanner/clamd.sock`
+   in each node's API env file. The Patroni release probes the configured socket
+   from the exact candidate image using the prepared Compose before switching
+   traffic. On a physical-mode reserve, run the proposed-slot probe below. After
+   rollout, run the same probe on the active slot on each node, then run the
+   normal [post-deploy smoke checks](#backend-release-safety).
+
+From the API project directory, set `reviewed_image` to the staged immutable
+API image digest, `compose_file` to the prepared Compose file and `app_service`
+to the proposed slot. The probe submits in-memory test bytes and is read-only
+with respect to orders and attachment storage.
+
+```bash
+BACKEND_IMAGE="$reviewed_image" docker compose -f "$compose_file" --profile bluegreen \
+  run --rm --no-deps --pull never -T --entrypoint python "$app_service" - <<'PY'
+import asyncio
+from core.config import settings
+from services.external_document_scan import scan_external_document
+
+if not settings.is_production:
+    raise SystemExit("expected production scanner configuration")
+asyncio.run(scan_external_document(b"Kitlane scanner readiness probe\n"))
+print("external_document_scanner=clean")
+PY
+```
+
+After deployment, use `docker compose -f "$compose_file" --profile bluegreen
+exec -T "$app_service" python -` with the same Python input. The success marker
+proves that the running image obtained a clean `INSTREAM` verdict through its
+mounted socket. Record that marker and the daemon signature version for both
+nodes before verifying the Manager and ChatGPT upload paths.
+
+If the scan fails before cutover, leave traffic on the previous release.
+To disable uploads after rollout, clear the scanner setting and reconcile the
+API slots through the documented rolling release process. Confirm the
+containers actually reloaded their environment, since a same-image fast path
+can skip recreation. Keep the attested Compose document-scanner mount during
+the rollback. A production upload without a scanner returns 503.
+
 ### Shared Belarus host: Kitlane worker suspension
 
 The Belarus Patroni node may also host Kitlane at `/opt/belzakupki`. Its RQ

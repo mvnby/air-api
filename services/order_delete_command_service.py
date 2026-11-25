@@ -20,6 +20,7 @@ from models.maintenance_observation import MaintenanceObservation
 from models.order_inspection import OrderInspectionRevision
 from models.incoming_mail import IncomingMail
 from models.service_asset import EquipmentOrderLink
+from models.order_document_external_file import OrderDocumentExternalFile
 from services.command_transaction import command_transaction
 from services.document_service import DocumentService
 from services.order_document_cleanup_service import OrderDocumentCleanupService
@@ -33,6 +34,10 @@ class OrderHasMaintenanceObservations(Exception):
 
 class OrderHasDiagnosticInspections(Exception):
     """Saved diagnostic provenance must remain attached to its source order."""
+
+
+class OrderHasExternalEvidence(Exception):
+    """The order is needed to retain its private evidence history."""
 
 
 class OrderDeleteCommandService:
@@ -72,6 +77,12 @@ class OrderDeleteCommandService:
                 OrderInspectionRevision.order_id == order_id
             ).limit(1)) is not None:
                 raise OrderHasDiagnosticInspections("Нельзя удалить заказ с сохранёнными осмотрами оборудования.")
+            external_files = sa.exists().where(OrderDocumentExternalFile.document_id == OrderDocument.id)
+            if await session.scalar(sa.select(OrderDocument.id).where(
+                OrderDocument.order_id == order_id,
+                sa.or_(OrderDocument.origin == "external_upload", external_files),
+            ).limit(1)) is not None:
+                raise OrderHasExternalEvidence("Нельзя удалить заказ с сохранёнными внешними документами.")
 
             documents = await DocumentService.list_order_documents(
                 session,
