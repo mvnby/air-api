@@ -142,8 +142,9 @@ Prepare both API hosts before enabling uploads:
    physical-mode reserve Compose, verify the same read-only directory mount
    in its reviewed deployment configuration.
 4. Set `EXTERNAL_DOCUMENT_CLAMD_UNIX_SOCKET=/run/mvn-document-scanner/clamd.sock`
-   in each node's API env file. Probe the proposed slot before switching
-   traffic using the exact release image and prepared Compose. After
+   in each node's API env file. The Patroni release probes the configured socket
+   from the exact candidate image using the prepared Compose before switching
+   traffic. On a physical-mode reserve, run the proposed-slot probe below. After
    rollout, run the same probe on the active slot on each node, then run the
    normal [post-deploy smoke checks](#backend-release-safety).
 

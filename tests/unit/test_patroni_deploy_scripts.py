@@ -313,6 +313,16 @@ def test_node_deploy_keeps_migrations_separate_and_has_role_and_maintenance_fenc
     assert rollback_runtime < rollback_recreate < rollback_proxy_refresh
 
 
+def test_configured_scanner_is_probed_before_each_api_cutover():
+    text = DEPLOY.read_text(encoding="utf-8")
+    probe = text.index("verify_candidate_document_scanner()")
+    assert 'run --rm --no-deps --pull missing -T --entrypoint python' in text[probe:]
+    primary_probe = text.index("verify_candidate_document_scanner app", probe)
+    assert primary_probe < text.index('bash "${BLUE_GREEN_SCRIPT}"', primary_probe)
+    standby_probe = text.index('verify_candidate_document_scanner "${active_service}"')
+    assert standby_probe < text.index('write_backend_image "${BACKEND_IMAGE}"', standby_probe)
+
+
 def test_patroni_compose_keeps_document_pdf_converter_private_and_gated():
     for path in (
         REPO_ROOT / "deploy/ha/mvn-api/docker-compose.patroni.yml",
