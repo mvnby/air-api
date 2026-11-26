@@ -34490,6 +34490,229 @@
         }
       }
     },
+    "/api/manager/installation-materials": {
+      "get": {
+        "tags": [
+          "manager-installation-materials"
+        ],
+        "summary": "List Manager Installation Material Prices",
+        "description": "Read the authenticated company's private purchase prices for installation materials.",
+        "operationId": "list_manager_installation_material_prices",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 180,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationMaterialPriceList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-installation-materials"
+        ],
+        "summary": "Create Manager Installation Material Price",
+        "description": "Record the listed purchase price and quantity of a supplier pack.",
+        "operationId": "create_manager_installation_material_price",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationMaterialPriceInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationMaterialPriceItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-materials/{price_id}": {
+      "put": {
+        "tags": [
+          "manager-installation-materials"
+        ],
+        "summary": "Update Manager Installation Material Price",
+        "description": "Replace a price using its current version in the authenticated company.",
+        "operationId": "update_manager_installation_material_price",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "price_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Price Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationMaterialPriceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationMaterialPriceItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/installation-materials/calculate": {
+      "post": {
+        "tags": [
+          "manager-installation-materials"
+        ],
+        "summary": "Calculate Manager Installation Material Cost",
+        "description": "Calculate consumption costs in BYN from current prices. This read saves no order or estimate.",
+        "operationId": "calculate_manager_installation_material_cost",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationMaterialCostInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationMaterialCostResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/manager/installation-discounts": {
       "get": {
         "tags": [
@@ -61262,6 +61485,400 @@
         },
         "type": "object",
         "title": "InstallationMatcher"
+      },
+      "InstallationMaterialCostInput": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMaterialQuantity"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "InstallationMaterialCostInput"
+      },
+      "InstallationMaterialCostLine": {
+        "properties": {
+          "price_id": {
+            "type": "integer",
+            "title": "Price Id"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity"
+          },
+          "price": {
+            "$ref": "#/components/schemas/InstallationMaterialPriceItem"
+          },
+          "total_byn": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Byn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "quantity",
+          "price",
+          "total_byn"
+        ],
+        "title": "InstallationMaterialCostLine"
+      },
+      "InstallationMaterialCostResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMaterialCostLine"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_byn": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Byn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_byn"
+        ],
+        "title": "InstallationMaterialCostResult"
+      },
+      "InstallationMaterialPriceInput": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "supplier": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Supplier"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "m",
+              "m2",
+              "piece",
+              "set",
+              "kg",
+              "l",
+              "roll"
+            ],
+            "title": "Unit"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,13}0*$)\\d{0,8}\\.\\d{0,4}0*$)"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_price_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Pack Price Byn"
+          },
+          "checked_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Checked On"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "supplier",
+          "unit",
+          "pack_quantity",
+          "pack_price_byn",
+          "checked_on"
+        ],
+        "title": "InstallationMaterialPriceInput"
+      },
+      "InstallationMaterialPriceItem": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "supplier": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Supplier"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "m",
+              "m2",
+              "piece",
+              "set",
+              "kg",
+              "l",
+              "roll"
+            ],
+            "title": "Unit"
+          },
+          "pack_quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,13}0*$)\\d{0,8}\\.\\d{0,4}0*$)",
+            "title": "Pack Quantity"
+          },
+          "pack_price_byn": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)",
+            "title": "Pack Price Byn"
+          },
+          "checked_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Checked On"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Note",
+            "default": ""
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "supplier",
+          "unit",
+          "pack_quantity",
+          "pack_price_byn",
+          "checked_on",
+          "id",
+          "version"
+        ],
+        "title": "InstallationMaterialPriceItem"
+      },
+      "InstallationMaterialPriceList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationMaterialPriceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "InstallationMaterialPriceList"
+      },
+      "InstallationMaterialPriceUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "supplier": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Supplier"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "m",
+              "m2",
+              "piece",
+              "set",
+              "kg",
+              "l",
+              "roll"
+            ],
+            "title": "Unit"
+          },
+          "pack_quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,13}0*$)\\d{0,8}\\.\\d{0,4}0*$)"
+              }
+            ],
+            "title": "Pack Quantity"
+          },
+          "pack_price_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Pack Price Byn"
+          },
+          "checked_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Checked On"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Note",
+            "default": ""
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "supplier",
+          "unit",
+          "pack_quantity",
+          "pack_price_byn",
+          "checked_on",
+          "expected_version"
+        ],
+        "title": "InstallationMaterialPriceUpdate"
+      },
+      "InstallationMaterialQuantity": {
+        "properties": {
+          "price_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Price Id"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,13}0*$)\\d{0,8}\\.\\d{0,4}0*$)"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "quantity",
+          "expected_version"
+        ],
+        "title": "InstallationMaterialQuantity"
       },
       "InstallationMeasuredWork": {
         "properties": {

@@ -92,6 +92,7 @@ from .communication_runtime import (
     CommunicationWebsiteCanaryRun,
 )
 from .integration_event import ConsumerInbox, IntegrationOutboxEvent
+from .installation_material import InstallationMaterialPrice
 from .installation_discount import (
     InstallationDiscountPolicy,
     InstallationDiscountProductRule,
@@ -201,6 +202,7 @@ __all__ = [
     "AuthLoginThrottle",
     "BankReceipt",
     "BelzakupkiImportCheckpoint",
+    "InstallationMaterialPrice",
     "Cart",
     "CartItem",
     "Brand",

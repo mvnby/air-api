@@ -309,6 +309,7 @@ onMounted(() => { void loadTariffs(); void loadComparison(); });
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
+        <a href="/manager/tariffs/materials" class="btn-mini-outline">Себестоимость материалов</a>
         <label class="text-sm text-gray-600 dark:text-slate-300">Направление</label>
         <select
           v-model="kindFilter"
