@@ -4,7 +4,11 @@ import type { ManagerOrderDetailResponse } from '../src/client';
 import OrderCustomerContext from '../src/components/orders/OrderCustomerContext.vue';
 const suggestAddress = vi.hoisted(() => vi.fn());
 const confirmClose = vi.hoisted(() => vi.fn());
+const systemTenant = vi.hoisted(() => ({ value: false }));
 vi.mock('../src/services/ui-feedback', () => ({ confirmDialog: confirmClose }));
+vi.mock('../src/services/manager-session', () => ({
+  managerSession: { auth: { value: { get is_system_tenant() { return systemTenant.value; } } } },
+}));
 const api = vi.hoisted(() => ({ createManagerCustomerBranch: vi.fn(), getManagerCustomerBranches: vi.fn(), getManagerCustomers: vi.fn(), patchManagerCustomer: vi.fn(), patchManagerOrder: vi.fn() }));
 vi.mock('../src/api', () => ({ api }));
 vi.mock('../src/client', async original => ({ ...(await original<typeof import('../src/client')>()), ManagerSettingsService: { suggestAddress } }));
@@ -22,6 +26,7 @@ const open = async (w: VueWrapper, target: string) => { await w.get('[data-order
 const address = (w: VueWrapper) => w.get('[data-testid="object-address"]');
 const deferred = <T,>() => { let resolve!: (v: T) => void; const promise = new Promise<T>(r => resolve = r); return { promise, resolve }; };
 beforeEach(() => {
+  systemTenant.value = false;
   api.getManagerCustomerBranches.mockResolvedValue({ items: branches });
   api.getManagerCustomers.mockResolvedValue({ items: [{ id: 22, name: 'Новый клиент', phone: '+375291234567', inn: '123456789' }] });
   api.patchManagerCustomer.mockResolvedValue({}); api.patchManagerOrder.mockResolvedValue({ ...order, customer: { id: 22, name: 'Новый клиент' } });
@@ -29,6 +34,24 @@ beforeEach(() => {
 });
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers(); vi.clearAllMocks(); });
 describe('inline customer and object context', () => {
+  it('routes to the work site named in the tender title before the object is saved', async () => {
+    systemTenant.value = true;
+    const tenderAddress = 'г. Лепель, пл. Свободы, 1';
+    const w = make({
+      order: {
+        ...order,
+        title: 'Текущий ремонт по адресу: г.Лепель, пл.Свободы, 1 (перенос кондиционера)',
+        source_enrichment: { objects: [{ address: 'г. Лепель, пл. Свободы, 11-2' }, { address: tenderAddress }] },
+      },
+    });
+    expect(w.get('[data-testid="calculate-order-travel-route"]').isVisible()).toBe(true);
+    const link = () => new URL(w.get('a[href^="https://www.google.com/maps/dir/"]').attributes('href'));
+    expect(link().searchParams.get('waypoints')).toBe('Беларусь, ' + tenderAddress);
+    await open(w, 'object');
+    await address(w).setValue('Ушачи');
+    expect(link().searchParams.get('waypoints')).toBe('Беларусь, Ушачи');
+    expect(api.patchManagerOrder).not.toHaveBeenCalled();
+  });
   it('expands inside the selected summary and directly toggles closed', async () => {
     const w = make(); await open(w, 'customer');
     expect(w.get('#order-context-customer-editor').isVisible()).toBe(true);

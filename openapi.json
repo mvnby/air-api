@@ -20633,7 +20633,7 @@
           "manager-orders"
         ],
         "summary": "Calculate Manager Order Travel Route",
-        "description": "Estimate the driving distance and time from Vitebsk to an order's draft\nobject address and back. A Manager in the system company with access to the\norder can preview a typed or selected address. The estimate does not persist\nchanges or create worker payments. The provider receives the address and route points.",
+        "description": "Estimate the round trip from central Vitebsk to the settlement of the order's\nobject. A Manager in the system company with access to the order can preview a\ndraft address. The provider receives the locality and route points. The\nestimate does not persist changes or create worker payments.",
         "operationId": "calculate_manager_order_travel_route",
         "security": [
           {
@@ -85219,10 +85219,7 @@
         "properties": {
           "provider": {
             "type": "string",
-            "enum": [
-              "openrouteservice",
-              "yandex"
-            ],
+            "const": "openrouteservice",
             "title": "Provider"
           },
           "origin": {

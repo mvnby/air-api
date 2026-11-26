@@ -379,10 +379,10 @@ export class ManagerOrdersService {
     }
     /**
      * Calculate Manager Order Travel Route
-     * Estimate the driving distance and time from Vitebsk to an order's draft
-     * object address and back. A Manager in the system company with access to the
-     * order can preview a typed or selected address. The estimate does not persist
-     * changes or create worker payments. The provider receives the address and route points.
+     * Estimate the round trip from central Vitebsk to the settlement of the order's
+     * object. A Manager in the system company with access to the order can preview a
+     * draft address. The provider receives the locality and route points. The
+     * estimate does not persist changes or create worker payments.
      * @param orderId
      * @param requestBody
      * @returns ManagerOrderTravelRouteResponse Successful Response

@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { OrderTravelLeg } from './OrderTravelLeg';
 export type ManagerOrderTravelRouteResponse = {
-    provider: 'openrouteservice' | 'yandex';
+    provider: string;
     origin: string;
     destination: string;
     approximate_destination: boolean;

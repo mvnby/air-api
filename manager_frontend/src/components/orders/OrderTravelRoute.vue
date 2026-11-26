@@ -15,7 +15,8 @@ let pending: CancelablePromise<ManagerOrderTravelRouteResponse> | null = null;
 
 const messages: Record<string, string> = {
   order_route_not_configured: 'Расчёт маршрута в Manager пока не подключён.',
-  order_route_address_not_found: 'Уточните населённый пункт, улицу или номер дома.',
+  order_route_settlement_required: 'Укажите населённый пункт в адресе объекта. Например, «Ушачи, ул. Советская, 1».',
+  order_route_address_not_found: 'Не удалось найти населённый пункт. Проверьте адрес или откройте маршрут в Google Maps.',
   order_route_not_found: 'Провайдер не нашёл автомобильный маршрут.',
   order_route_rate_limit: 'Подождите немного и повторите расчёт.',
   order_route_provider_limit: 'Сервис маршрутов достиг лимита запросов.',
@@ -69,7 +70,7 @@ const legs = computed(() => result.value ? [
 </script>
 
 <template>
-  <section v-if="mapUrl" aria-label="Маршрут из Витебска" class="space-y-2 border-y border-slate-200 py-2 dark:border-slate-700">
+  <section v-if="mapUrl" aria-label="Маршрут из Витебска" class="mt-1.5 space-y-2 px-1">
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" class="btn-mini-outline gap-1 text-xs" :disabled="loading"
         data-testid="calculate-order-travel-route" @click="calculate">
@@ -91,15 +92,14 @@ const legs = computed(() => result.value ? [
             </dd>
           </div>
         </dl>
-        <p v-if="result.approximate_destination" class="text-amber-800 dark:text-amber-300">
-          Точка определена приблизительно. Сверьте её на карте.
+        <p v-if="result.approximate_destination" class="text-slate-600 dark:text-slate-300">
+          До центра населённого пункта. Точный адрес можно открыть в Google Maps.
         </p>
-        <p v-if="result.provider === 'openrouteservice'" class="text-slate-500 dark:text-slate-400">
+        <p class="text-slate-500 dark:text-slate-400">
           Время в дороге без учёта пробок и работ на объекте.
           <a href="https://openrouteservice.org/" target="_blank" rel="noopener noreferrer" class="underline">© openrouteservice.org by HeiGIT</a>
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" class="underline">© OpenStreetMap contributors</a>
         </p>
-        <p v-else class="text-slate-500 dark:text-slate-400">Оценка Яндекс Карт без времени работ на объекте.</p>
       </div>
     </div>
   </section>

@@ -36,7 +36,7 @@ describe('OrderTravelRoute', () => {
       expect(calculate).toHaveBeenCalledWith(699, { address: 'Ушачи' });
       expect(wrapper.text()).toContain('3 ч 10 мин');
       expect(wrapper.text()).toContain('235,3 км');
-      expect(wrapper.text()).toContain('Точка определена приблизительно');
+      expect(wrapper.text()).toContain('До центра населённого пункта');
       expect(wrapper.text()).toContain('© openrouteservice.org by HeiGIT');
     } finally { wrapper.unmount(); }
   });

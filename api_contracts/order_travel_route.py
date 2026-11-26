@@ -21,7 +21,7 @@ class OrderTravelLeg(BaseModel):
 
 
 class ManagerOrderTravelRouteResponse(BaseModel):
-    provider: Literal["openrouteservice", "yandex"]
+    provider: Literal["openrouteservice"]
     origin: str
     destination: str
     approximate_destination: bool
