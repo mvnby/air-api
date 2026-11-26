@@ -42,6 +42,7 @@ const emit = defineEmits<{
       <ChevronDown :size="14" class="ml-auto mt-1 shrink-0 text-slate-400 transition-transform" :class="expanded === 'object' ? 'rotate-180' : ''" aria-hidden="true" />
     </button>
     <div v-show="expanded === 'object'" id="order-context-object-editor" class="mt-2 border-t border-slate-200 pt-3 dark:border-slate-700"><slot name="object" /></div>
+    <slot name="objectActions" />
     </section>
     <button type="button" class="mt-3 hidden w-full items-start gap-2 rounded-lg border-t border-slate-200 pt-3 text-left hover:text-brand-700 dark:border-slate-700 dark:hover:text-brand-200 lg:flex" data-order-usage="context-payments" @click="emit('payments')">
       <WalletCards :size="17" class="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />

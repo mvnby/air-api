@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { openManagerChild } from '../../services/manager-navigation-history';
+import { managerSession } from '../../services/manager-session';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowLeftRight, Copy, ExternalLink, MapPin, Pencil } from 'lucide-vue-next';
 import { api } from '../../api';
@@ -7,10 +8,11 @@ import { useCompanyAddressSuggestion } from '../../composables/useCompanyAddress
 import type { ManagerCatalogCustomerItemResponse, ManagerCustomerBranchItemResponse, ManagerOrderDetailResponse } from '../../client';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import { confirmDialog } from '../../services/ui-feedback';
-import { buildYandexMapUrl } from '../../utils/address';
+import { buildYandexMapUrl, normalizeAddressQuery } from '../../utils/address';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import OrderWorkspaceContext from './OrderWorkspaceContext.vue';
+import OrderTravelRoute from './OrderTravelRoute.vue';
 
 type ObjectDraft = { address: string; branchId: number | null; comment: string };
 const props = withDefaults(defineProps<{
@@ -49,6 +51,28 @@ const busy = computed(() => props.disabled || savingCustomer.value || assigningC
 const selectedBranch = computed(() => branches.value.find(item => item.id === draftBranchId.value)
   || (props.order.customer_branch?.id === draftBranchId.value ? props.order.customer_branch : null));
 const objectAddress = computed(() => deliveryAddress.value.trim() || props.order.customer_branch?.delivery_address || '');
+const tenderAddress = computed(() => {
+  const addresses = [...new Set((props.order.source_enrichment?.objects ?? [])
+    .map(object => object.address?.trim() ?? '').filter(Boolean))];
+  if (addresses.length <= 1) return addresses[0] ?? '';
+
+  // The estimate can list the customer's registered address alongside the work site.
+  const explicitAddress = props.order.title?.match(/(?:^|\s)по адресу\s*:?\s*(.+)$/iu)?.[1];
+  if (!explicitAddress) return '';
+  const canonical = (value: string) => normalizeAddressQuery(value).toLowerCase().replace(/\s*([,.])\s*/g, '$1');
+  const titleAddress = canonical(explicitAddress);
+  const matches = addresses.filter(candidate => {
+    const prefix = canonical(candidate);
+    return titleAddress.startsWith(prefix) && !/^[\p{L}\p{N}/-]/u.test(titleAddress.slice(prefix.length));
+  });
+  return matches.length === 1 ? matches[0] ?? '' : '';
+});
+const routeAddress = computed(() => {
+  const address = editTarget.value === 'object'
+    ? draftAddress.value.trim() || selectedBranch.value?.delivery_address
+    : objectAddress.value;
+  return address || tenderAddress.value;
+});
 const { candidates: addressCandidates, loading: addressLoading, error: addressLookupError,
   searched: addressSearched, suggest: suggestAddress, reset: resetAddressSuggestions } = useCompanyAddressSuggestion();
 const canSuggestAddress = computed(() => customer.value?.type === 'company' && !draftAddress.value.trim() && Boolean(displayName.value.trim()));
@@ -265,6 +289,9 @@ defineExpose({ beforeClose });
         <p v-if="objectError" class="text-xs text-red-700 dark:text-red-300" role="alert">{{ objectError }}</p>
         <div class="flex flex-wrap justify-end gap-2"><button type="button" class="btn-mini-outline text-xs" @click="resetObjectDraft(); editTarget = null">Отмена</button><button type="button" class="btn-mini text-xs" data-testid="save-object" @click="saveObject">{{ savingObject ? 'Сохраняем…' : 'Сохранить' }}</button></div>
       </fieldset>
+    </template>
+    <template #objectActions>
+      <OrderTravelRoute v-if="managerSession.auth.value?.is_system_tenant" :order-id="order.id" :address="routeAddress" />
     </template>
   </OrderWorkspaceContext>
 </template>
