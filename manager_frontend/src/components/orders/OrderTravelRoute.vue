@@ -94,7 +94,12 @@ const legs = computed(() => result.value ? [
         <p v-if="result.approximate_destination" class="text-amber-800 dark:text-amber-300">
           Точка определена приблизительно. Сверьте её на карте.
         </p>
-        <p class="text-slate-500 dark:text-slate-400">Оценка Яндекс Карт без времени работ на объекте.</p>
+        <p v-if="result.provider === 'openrouteservice'" class="text-slate-500 dark:text-slate-400">
+          Время в дороге без учёта пробок и работ на объекте.
+          <a href="https://openrouteservice.org/" target="_blank" rel="noopener noreferrer" class="underline">© openrouteservice.org by HeiGIT</a>
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" class="underline">© OpenStreetMap contributors</a>
+        </p>
+        <p v-else class="text-slate-500 dark:text-slate-400">Оценка Яндекс Карт без времени работ на объекте.</p>
       </div>
     </div>
   </section>

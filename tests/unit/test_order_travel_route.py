@@ -1,9 +1,11 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi import HTTPException, Response
+from pydantic import ValidationError
 
 from api_contracts.order_travel_route import ManagerOrderTravelRouteRequest
 from models.tenancy import TenantScope
@@ -35,6 +37,7 @@ def geocoder_response(*, country="BY", kind="house", precision="exact"):
 
 def install_transport(monkeypatch, handler):
     create_client = httpx.AsyncClient
+    monkeypatch.delenv("ORDER_ROUTE_ORS_API_KEY", raising=False)
     monkeypatch.setenv("ORDER_ROUTE_YANDEX_GEOCODER_KEY", "test-geocoder")
     monkeypatch.setenv("ORDER_ROUTE_YANDEX_ROUTER_KEY", "test-router")
     monkeypatch.setattr(
@@ -75,8 +78,67 @@ async def test_calculates_both_directions_using_documented_yandex_units(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_ors_prioritizes_heigit_and_requests_two_driving_legs_without_geometry(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.url.host == "api.heigit.org"
+        assert request.headers["authorization"] == "test-heigit"
+        assert "api_key" not in request.url.params
+        if request.method == "GET":
+            assert request.url.path == "/pelias/v1/search"
+            assert request.url.params["text"] == "Ушачи, Советская улица, 1"
+            assert request.url.params["boundary.country"] == "BLR"
+            return httpx.Response(200, json={"features": [{
+                "geometry": {"coordinates": [28.6128, 55.1813]},
+                "properties": {
+                    "country_a": "BLR", "layer": "address", "match_type": "exact",
+                    "label": "Ушачи, Советская улица, 1",
+                },
+            }]})
+        assert request.url.path == "/openrouteservice/v2/matrix/driving-car"
+        assert json.loads(request.content) == {
+            "locations": [[30.2049, 55.1904], [28.6128, 55.1813]],
+            "metrics": ["distance", "duration"],
+            "units": "m",
+        }
+        return httpx.Response(200, json={
+            "distances": [[0, 114900.1], [116100.0, 0]],
+            "durations": [[0, 6000.0], [6100.0, 0]],
+        })
+
+    install_transport(monkeypatch, handler)
+    monkeypatch.setenv("ORDER_ROUTE_ORS_API_KEY", "test-heigit")
+    result = await OrderTravelRouteService.calculate("Ушачи, Советская улица, 1")
+    assert len(requests) == 2
+    assert result.provider == "openrouteservice"
+    assert result.destination == "Ушачи, Советская улица, 1"
+    assert result.total.model_dump() == {"distance_m": 231000, "duration_s": 12100}
+    assert result.approximate_destination is False
+
+
+@pytest.mark.asyncio
+async def test_ors_address_missing_does_not_use_yandex_or_call_matrix(monkeypatch):
+    def handler(request):
+        assert request.url.path == "/pelias/v1/search"
+        return httpx.Response(200, json={"features": []})
+
+    install_transport(monkeypatch, handler)
+    monkeypatch.setenv("ORDER_ROUTE_ORS_API_KEY", "test-heigit")
+    with pytest.raises(OrderTravelRouteError, match="order_route_address_not_found"):
+        await OrderTravelRouteService.calculate("Ушачи")
+
+
+def test_missing_matrix_leg_is_not_reported_as_zero_distance():
+    with pytest.raises(OrderTravelRouteError, match="order_route_not_found"):
+        OrderTravelRouteService._leg(None, None)
+
+
+@pytest.mark.asyncio
 async def test_suggest_key_does_not_enable_paid_routing(monkeypatch):
     monkeypatch.setenv("YANDEX_API_KEY", "suggest-only")
+    monkeypatch.delenv("ORDER_ROUTE_ORS_API_KEY", raising=False)
     monkeypatch.delenv("ORDER_ROUTE_YANDEX_GEOCODER_KEY", raising=False)
     monkeypatch.delenv("ORDER_ROUTE_YANDEX_ROUTER_KEY", raising=False)
     with pytest.raises(OrderTravelRouteError) as error:
@@ -85,9 +147,15 @@ async def test_suggest_key_does_not_enable_paid_routing(monkeypatch):
 
 
 def test_city_result_is_approximate_and_foreign_candidate_is_rejected():
-    assert OrderTravelRouteService._destination(geocoder_response(kind="locality"))[2]
+    assert OrderTravelRouteService._yandex_destination(geocoder_response(kind="locality"))[2]
     with pytest.raises(OrderTravelRouteError, match="order_route_address_not_found"):
-        OrderTravelRouteService._destination(geocoder_response(country="RU"))
+        OrderTravelRouteService._yandex_destination(geocoder_response(country="RU"))
+
+
+@pytest.mark.parametrize("non_address", ["+375 29 121-21-21", "contact@example.test"])
+def test_legacy_contact_info_is_not_a_geocoding_address(non_address):
+    with pytest.raises(ValidationError, match="an address is required"):
+        ManagerOrderTravelRouteRequest(address=non_address)
 
 
 @pytest.mark.parametrize(

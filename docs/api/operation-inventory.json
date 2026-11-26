@@ -9,7 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
-    "44": "MVN order travel preview: live Manager and storefront scope, external geocoding by explicit request, two road legs, bounded provider usage and read-only results. Reviewed 2026-11-26",
+    "44": "MVN order travel preview: live Manager and storefront scope, external geocoding by explicit request, two road legs from HeiGIT or Yandex, bounded provider usage and read-only results. Reviewed 2026-11-26",
     "43": "Installation material purchase prices: private company scope, exact pack and fractional consumption values, optimistic versions and bounded lists and calculations. Reviewed 2026-11-26",
     "42": "Public tender evidence: active company profile and entitlement checks, durable public-only receipt, verified scope for original downloads, bounded worker leases and exact-content reuse. Reviewed 2026-11-26",
     "41": "Company tender module controls: separate audited platform entitlement, optimistic company profile updates, scoped preview and bounded public market discovery. Reviewed 2026-11-26 for issue 1303",

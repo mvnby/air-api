@@ -31,7 +31,8 @@ export const buildYandexMapUrl = (
 
 export const buildVitebskRoundTripUrl = (address: string) => {
   const objectAddress = normalizeAddressQuery(address);
-  if (objectAddress.length < 3 || objectAddress.length > 240) return '';
+  if (objectAddress.length < 3 || objectAddress.length > 240
+    || !/[a-zа-яёіў]/i.test(objectAddress) || objectAddress.includes('@')) return '';
 
   const url = new URL('https://www.google.com/maps/dir/');
   url.search = new URLSearchParams({

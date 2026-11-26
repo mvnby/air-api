@@ -11,7 +11,7 @@ vi.mock('../src/client', async original => ({
 }));
 
 const route: ManagerOrderTravelRouteResponse = {
-  provider: 'yandex',
+  provider: 'openrouteservice',
   origin: 'Витебск, центр города',
   destination: 'Беларусь, Ушачи',
   approximate_destination: true,
@@ -37,6 +37,7 @@ describe('OrderTravelRoute', () => {
       expect(wrapper.text()).toContain('3 ч 10 мин');
       expect(wrapper.text()).toContain('235,3 км');
       expect(wrapper.text()).toContain('Точка определена приблизительно');
+      expect(wrapper.text()).toContain('© openrouteservice.org by HeiGIT');
     } finally { wrapper.unmount(); }
   });
 
