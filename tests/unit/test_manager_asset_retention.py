@@ -216,7 +216,10 @@ def test_both_image_build_paths_retain_assets_before_docker_build():
 
 
 def test_release_uses_exact_ci_bytes_and_excludes_private_files(tmp_path):
-    payload = bundle({"index.html": "tested HTML", "assets/index-bbbbbbbb.js": "tested module", "assets/kitlane-mark.svg": "<svg/>", ".env": "secret"})
+    payload = bundle({
+        "index.html": "tested HTML", "assets/index-bbbbbbbb.js": "tested module", "assets/kitlane-mark.svg": "<svg/>",
+        "assets/manager-practice.html": "tested practice", "assets/unlisted.html": "other page", ".env": "secret",
+    })
     base_api = artifact_api(payload)
     artifact = {"id": 17, "name": "manager-dist-23", "digest": "sha256:" + hashlib.sha256(payload).hexdigest()}
 
@@ -230,6 +233,8 @@ def test_release_uses_exact_ci_bytes_and_excludes_private_files(tmp_path):
     assert (dist / "index.html").read_text() == "tested HTML"
     assert (dist / "assets/index-bbbbbbbb.js").read_text() == "tested module"
     assert (dist / "assets/kitlane-mark.svg").read_text() == "<svg/>"
+    assert (dist / "assets/manager-practice.html").read_text() == "tested practice"
+    assert not (dist / "assets/unlisted.html").exists()
     assert not (dist / ".env").exists()
     with pytest.raises(ValueError, match="exact SHA"):
         history.restore_current_build(tmp_path / "wrong", REPOSITORY, CURRENT, 23, api=api)

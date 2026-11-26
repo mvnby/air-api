@@ -1,4 +1,4 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PersonalTask } from '../src/services/personal-tasks-api';
@@ -23,6 +23,7 @@ vi.mock('../src/services/personal-tasks-api', async (original) => ({
 }));
 
 import PersonalTasksView from '../src/views/PersonalTasksView.vue';
+import ManagerQuickCreate from '../src/components/manager/ManagerQuickCreate.vue';
 import PersonalTaskCard from '../src/components/tasks/PersonalTaskCard.vue';
 import { OpenAPI } from '../src/client/core/OpenAPI';
 
@@ -80,6 +81,59 @@ beforeEach(() => {
 afterEach(() => {
   for (const wrapper of wrappers.splice(0)) wrapper.unmount();
   vi.unstubAllGlobals();
+});
+
+describe('contextual task capture', () => {
+  it('keeps the open order and draft after a failed save and retries its command once', async () => {
+    const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0 });
+    vi.stubGlobal('visualViewport', viewport);
+    const path = '/manager/orders/84?section=documents';
+    window.history.replaceState({}, '', path);
+    const view = mount(ManagerQuickCreate, { props: { location: path, canCreateTask: true, compact: true },
+      attachTo: document.body });
+    wrappers.push(view);
+    const body = new DOMWrapper(document.body);
+    const trigger = view.get('[aria-label="Записать поручение"]');
+    await trigger.trigger('click');
+    const text = body.get('textarea');
+    expect(document.activeElement).toBe(text.element);
+    Object.assign(viewport, { height: 458, offsetTop: 24 });
+    viewport.dispatchEvent(new Event('resize'));
+    await flushPromises();
+    const backdrop = body.get<HTMLElement>('.quick-backdrop').element;
+    expect(backdrop.style.getPropertyValue('--kitlane-dialog-height')).toBe('458px');
+    expect(backdrop.style.getPropertyValue('--kitlane-dialog-top')).toBe('24px');
+    await text.setValue('  Выслать письмо после звонка  ');
+    mocks.create.mockRejectedValueOnce(new Error('Соединение прервалось'));
+    await body.get('form').trigger('submit');
+    await flushPromises();
+    expect(body.get('[role="alert"]').exists()).toBe(true);
+    await body.get('[aria-label="Закрыть"]').trigger('click');
+    await trigger.trigger('click');
+    expect(body.get('textarea').element.value.trim()).toBe('Выслать письмо после звонка');
+    await body.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.create.mock.calls[0]?.[0]).toEqual({ text: 'Выслать письмо после звонка', order_id: 84 });
+    expect(mocks.create.mock.calls[1]).toEqual(mocks.create.mock.calls[0]);
+    expect(body.find('[role="dialog"]').exists()).toBe(false);
+    expect(view.emitted('notice')).toEqual([['Поручение сохранено']]);
+    expect(window.location.pathname + window.location.search).toBe(path);
+  });
+
+  it('links the displayed raw incoming even when a previously opened editor has closed', async () => {
+    const path = '/manager/leads?kind=lead&itemId=15';
+    window.history.replaceState({}, '', path);
+    const view = mount(ManagerQuickCreate, { props: { location: path + '&incomingId=10', canCreateTask: true, compact: false },
+      attachTo: document.body });
+    wrappers.push(view);
+    const body = new DOMWrapper(document.body);
+    await view.get('[aria-label="Создать"]').trigger('click');
+    await body.findAll('button').find(button => button.text() === 'Поручение')!.trigger('click');
+    await body.get('textarea').setValue('Позвонить по заявке');
+    await body.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.create.mock.calls[0]?.[0]).toEqual({ text: 'Позвонить по заявке', lead_id: 15 });
+  });
 });
 
 describe('PersonalTasksView', () => {

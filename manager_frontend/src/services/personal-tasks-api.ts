@@ -64,6 +64,9 @@ export const newPersonalTaskCommandKey = (): string => {
   return `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+export const personalTasksChangedEvent = 'manager:personal-tasks-changed';
+export const notifyPersonalTasksChanged = () => window.dispatchEvent(new Event(personalTasksChangedEvent));
+
 const base = '/api/manager/personal-tasks';
 
 export const getPersonalTask = (taskId: number): Promise<PersonalTask> => request(OpenAPI, {

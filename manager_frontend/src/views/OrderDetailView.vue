@@ -23,7 +23,11 @@ const workspace = ref<InstanceType<typeof OrderEditDrawer> | null>(null);
 const loading = ref(false);
 const error = ref('');
 const proposalError = computed(() => order.value ? orderProposalLinkError(order.value, window.location.href) : '');
-const backLabel = computed(() => props.returnTo.startsWith('/manager/calendar') ? 'К календарю' : 'К заказам');
+const backLabel = computed(() => {
+  if (props.returnTo.startsWith('/manager/leads')) return 'Ко входящим';
+  if (props.returnTo.startsWith('/manager/tenders')) return 'К мониторингу';
+  return props.returnTo.startsWith('/manager/calendar') ? 'К календарю' : 'К заказам';
+});
 let requestId = 0;
 let deleted = false;
 const scope = computed(() => `${managerSession.auth.value?.tenant_id}:${managerSession.auth.value?.staff_user_id || managerSession.auth.value?.username}:${managerStorefrontSelection.selectedSlug.value}`);

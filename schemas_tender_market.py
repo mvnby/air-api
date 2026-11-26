@@ -40,12 +40,18 @@ class TenderMarketProfileMatch(BaseModel):
     lots: list[TenderLotMatch]
 
 
+class TenderMarketCrmLink(BaseModel):
+    kind: Literal["incoming", "order"]
+    id: int = Field(gt=0)
+
+
 class TenderMarketItem(BaseModel):
     id: int
     title: str
     source: str
     source_url: str
     deadline_at: AwareDatetime | None = None
+    crm_link: TenderMarketCrmLink | None = None
     profiles: list[TenderMarketProfileMatch]
 
 

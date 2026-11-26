@@ -4,7 +4,10 @@ from sqlalchemy import and_, case, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from models import TenderMarketCheckpoint, TenderMarketPublication
+from models import Customer, LeadSource, Order, TenderMarketCheckpoint, TenderMarketPublication
+from models.leads_inbox import InboxTriageState
+from models.tenancy import TenantScope
+from services.tenant_entity_access_service import TenantEntityAccessService
 
 
 def _source_priority(publication):
@@ -75,6 +78,27 @@ class TenderMarketDAO:
         await session.execute(update(TenderMarketPublication).where(
             TenderMarketPublication.active.is_(True), TenderMarketPublication.seen_generation < generation,
         ).values(active=False))
+
+    @staticmethod
+    async def crm_references(session: AsyncSession, scope: TenantScope, fingerprints: set[str], inbox_clause):
+        provider = Order.technical_meta["belzakupki"]
+        tender = provider["tender"]
+        query = (select(
+            Order.id, Order.source_fingerprint, inbox_clause.label("in_inbox"),
+            provider["canonical_url"].as_string().label("canonical_url"),
+            provider["canonical_conflicts"].label("canonical_conflicts"),
+            provider["identity_conflicts"].label("identity_conflicts"),
+            tender["source"].as_string().label("native_source"),
+            tender["url"].as_string().label("native_url"),
+            tender["canonical_url"].as_string().label("native_canonical_url"),
+        ).select_from(Order).outerjoin(Customer, Customer.id == Order.customer_id)
+            .outerjoin(InboxTriageState, and_(InboxTriageState.entity_kind == "order",
+                InboxTriageState.entity_id == Order.id, InboxTriageState.tenant_id == scope.tenant_id,
+                InboxTriageState.storefront_id == scope.storefront_id))
+            .where(TenantEntityAccessService.order_clause(scope),
+                   TenantEntityAccessService.order_customer_clause(scope),
+                   Order.lead_source == LeadSource.BELZAKUPKI, Order.source_fingerprint.in_(fingerprints)))
+        return (await session.execute(query)).all()
 
     @staticmethod
     async def candidates(

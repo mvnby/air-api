@@ -169,3 +169,11 @@ body {
 .dark input::placeholder {
   color: var(--kitlane-muted) !important;
 }
+
+@media (max-width: 767px) {
+  body:has(.kitlane-mobile-dock) { --kitlane-mobile-nav-space: calc(52px + env(safe-area-inset-bottom)); }
+  body:has(.kitlane-mobile-dock) .kitlane-main { padding-bottom: var(--kitlane-mobile-nav-space); }
+  body:has(.kitlane-mobile-dock) .catalog-selection-tray { bottom: calc(.75rem + var(--kitlane-mobile-nav-space)); }
+  body:has(input:focus, textarea:focus, [contenteditable=true]:focus, [aria-modal=true]) .kitlane-mobile-dock { display: none; }
+  body:has(input:focus, textarea:focus, [contenteditable=true]:focus, [aria-modal=true]) { --kitlane-mobile-nav-space: 0px; }
+}

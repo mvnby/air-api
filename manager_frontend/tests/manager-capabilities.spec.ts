@@ -18,7 +18,7 @@ import {
   MANAGER_CAPABILITY,
   isManagerPathAllowed,
 } from '../src/manager-capabilities';
-import { coreNavItems, navSections } from '../src/manager-navigation';
+import { coreNavItems, navSections, workspaceNavigation, searchNavSections } from '../src/manager-navigation';
 import TenantCatalogView from '../src/views/TenantCatalogView.vue';
 import { sanitizeEquipmentComponentPayload } from '../src/components/equipment/equipment-component-permissions';
 import { api } from '../src/api';
@@ -118,24 +118,17 @@ describe('tenant manager capabilities', () => {
       expect(isManagerPathAllowed(tenantManagerAuth, path), path).toBe(false);
     }
 
-    const visibleLabels = [...coreNavItems, ...navSections.flatMap(section => section.items)]
-      .filter(item => !item.requiredCapability || tenantManagerAuth.capabilities.includes(item.requiredCapability))
-      .map(item => item.label);
-    expect(visibleLabels).toEqual([
-      'Главная',
-      'Поручения',
-      'Входящие',
-      'Заказы',
-      'Подбор оборудования',
-      'Календарь',
-      'Клиенты',
-      'Кондиционеры',
-      'Персональные предложения',
-      'Подборки',
-      'Оборудование',
-      'Деньги у сотрудников',
-      'Почта',
-    ]);
+    const nav = workspaceNavigation(tenantManagerAuth);
+    expect(nav.primary.map(item => item.label)).toEqual(['Входящие', 'Заказы', 'Подбор оборудования', 'Клиенты']);
+    expect(nav.personal.map(item => item.label)).toEqual(['Поручения', 'Календарь']);
+    const search = (term: string) => searchNavSections(nav.groups, term).flatMap(group => group.items.map(item => item.path));
+    expect(search('контрагент')).toEqual(['/manager/customers']);
+    expect(search('КП')).toEqual(['/manager/personal-offers']);
+    expect(search('тендер')).toEqual([]);
+    expect(search('резервные')).toEqual([]);
+    const installer = workspaceNavigation({ capabilities: [MANAGER_CAPABILITY.installerWorksRead] });
+    expect(installer.primary.map(item => item.path)).toEqual(['/manager/my-work', '/manager/my-money', '/manager/my-pay']);
+    expect(installer.groups.map(group => group.id)).toEqual(['daily']);
   });
 
   it('lets a partner owner configure only their document contour', () => {
@@ -173,7 +166,7 @@ describe('tenant manager capabilities', () => {
       navSections.flatMap(section => section.items)
         .filter(item => !item.requiredCapability || partnerOwnerAuth.capabilities.includes(item.requiredCapability))
         .map(item => item.label),
-    ).toEqual(expect.arrayContaining(['Тарифы смет', 'Публичный монтаж', 'Сметы услуг']));
+    ).toEqual(expect.arrayContaining(['Тарифы смет', 'Расценки на монтаж', 'Сметы услуг']));
   });
 
   it('opens private calls only with the server pilot capability, outside the global menu', () => {

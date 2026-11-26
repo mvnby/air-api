@@ -9,7 +9,7 @@ export const orderReturnUrl = (value?: string | null): string => {
   const fallback = '/manager/orders/kanban';
   let url: URL;
   try { url = new URL(value || fallback, window.location.origin); } catch { return fallback; }
-  if (url.origin !== window.location.origin || ![...BOARD_PATHS, '/manager/calendar'].includes(url.pathname)) return fallback;
+  if (url.origin !== window.location.origin || ![...BOARD_PATHS, '/manager/calendar', '/manager/leads', '/manager/tenders'].includes(url.pathname)) return fallback;
   url.searchParams.delete('orderId');
   url.searchParams.delete('proposalId');
   url.searchParams.delete('section');
@@ -111,7 +111,7 @@ export const openOrderPage = (orderId: number, board?: OrderBoardState) => {
 
 export const returnFromOrder = (returnTo: string) => {
   const target = orderReturnUrl(returnTo);
-  const origin = window.history.state?.orderOrigin;
+  const origin = window.history.state?.orderOrigin || window.history.state?.managerReturn;
   if (origin?.href === target && goToManagerHistoryTarget(origin, target)) return;
   return navigateManager(target, {}, true);
 };

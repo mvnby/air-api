@@ -111250,6 +111250,29 @@
         ],
         "title": "TenderLotMatch"
       },
+      "TenderMarketCrmLink": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "incoming",
+              "order"
+            ],
+            "title": "Kind"
+          },
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "TenderMarketCrmLink"
+      },
       "TenderMarketEvidenceResult": {
         "properties": {
           "status": {
@@ -111343,6 +111366,16 @@
               }
             ],
             "title": "Deadline At"
+          },
+          "crm_link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenderMarketCrmLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "profiles": {
             "items": {

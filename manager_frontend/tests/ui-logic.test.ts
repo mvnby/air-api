@@ -39,7 +39,7 @@ import {
   serializeCatalogQualityState,
 } from '../src/components/catalog-quality/catalog-quality-state';
 import { countLabel } from '../src/components/catalog-quality/catalog-quality-copy';
-import { navSections } from '../src/manager-navigation';
+import { coreNavItems, navSections, selectionItems } from '../src/manager-navigation';
 import {
   MANAGER_CAPABILITY,
   isManagerPathAllowed,
@@ -254,14 +254,13 @@ assert(
 );
 
 assert(
-  navSections.find((section) => section.id === 'catalog')?.items.map((item) => item.label).join('|')
-    === 'Кондиционеры|Бренды|Фичи|Поставщики|Прайсы поставщиков|Маппинг прайсов|Качество каталога|Медиатека|Теги',
-  'catalog navigation must follow the product data workflow',
+  coreNavItems.map(item => item.path).join('|') === '/manager/leads|/manager/orders|/manager/catalog-decision|/manager/customers',
+  'daily destinations must follow the sales workflow',
 );
 assert(
-  navSections.find((section) => section.id === 'sales')?.items.map((item) => item.label).join('|')
-    === 'Скидки на монтаж|Персональные предложения|Подборки|Поставки',
-  'sales navigation must group equipment selection and storefront workflows',
+  navSections.find(group => group.id === 'sales')?.items.some(item => item.path === '/manager/tenders')
+    && selectionItems.some(item => item.path === '/manager/product-collections'),
+  'market monitoring belongs with sales, and storefront collections with selection',
 );
 
 assert(ADDRESS_SUGGEST_DEBOUNCE_MS === 800, 'address debounce must remain 800 ms');
