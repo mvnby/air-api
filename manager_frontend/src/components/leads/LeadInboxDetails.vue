@@ -10,7 +10,7 @@ import WebsiteInterests from '../WebsiteInterests.vue';
 import CommercialTermsPanel from '../orders/CommercialTermsPanel.vue';
 import TenderWorkflowPanel from '../orders/TenderWorkflowPanel.vue';
 const props = defineProps<{ item: InboxItem; history: InboxHistory[]; contactSaving?: boolean }>();
-const emit = defineEmits<{ (e: 'review-source', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void; (e: 'link-changed'): void; (e: 'mark-unread', item: InboxItem): void; (e: 'not-request'): void; (e: 'updated', item: InboxItem, history: InboxHistory[]): void }>();
+const emit = defineEmits<{ (e: 'no-answer', request: InboxContactRequest): void; (e: 'link-changed'): void; (e: 'mark-unread', item: InboxItem): void; (e: 'not-request'): void; (e: 'updated', item: InboxItem, history: InboxHistory[]): void }>();
 const date = (value: string) => new Date(value).toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const tenderUrl = computed(() => { try { const url = new URL(props.item.tender?.url || ''); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; } catch { return null; } });
 const followup = ref('');
@@ -39,7 +39,6 @@ const historyLabels: Record<string, string> = { no_answer: 'Нет ответа'
     <EmailLeadOrderLink v-if="item.entity_kind !== 'lead' && item.source === 'email' && (item.status === 'new_lead' || item.linked_order_id)" :source-order-id="item.id" :linked-order-id="item.linked_order_id" @changed="emit('link-changed')" />
     <p v-if="item.source === 'email' && !item.linked_order_id" class="context-note">Если это продолжение переписки по существующему заказу, привяжите письмо к нему.</p>
     <div class="detail-actions">
-      <button v-if="item.entity_kind !== 'lead' && item.source === 'belzakupki' && !item.archive" type="button" title="Проверить данные из закупки перед созданием сделки" @click="emit('review-source', item)">Проработать источник</button>
       <button v-if="!item.archive && !item.linked_order_id" type="button" @click="emit('not-request')">Это не новая заявка</button>
       <button type="button" @click="emit('mark-unread', item)">Пометить непросмотренным</button>
     </div>

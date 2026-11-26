@@ -25,12 +25,15 @@ vi.mock('../src/composables/useB2BLookup', () => ({
   useB2BLookup: () => ({ lookupCompany: vi.fn(), isEgrLoading: { value: false } }),
 }));
 vi.mock('../src/components/leads/LeadInboxCard.vue', () => ({
-  default: { name: 'LeadInboxCard', props: ['item', 'quickIncoming'], emits: ['edit-incoming', 'updated'], template: '<article data-testid="inbox-item">{{ item.customer_name }}<button v-if="quickIncoming" data-testid="edit-incoming" @click="$emit(\'edit-incoming\')">Исправить</button></article>' },
+  default: { name: 'LeadInboxCard', props: ['item', 'quickIncoming'], emits: ['edit-incoming', 'updated', 'qualify'], template: '<article data-testid="inbox-item">{{ item.customer_name }}<button v-if="quickIncoming" data-testid="edit-incoming" @click="$emit(\'edit-incoming\')">Исправить</button></article>' },
 }));
 vi.mock('../src/components/leads/QuickIncomingCapture.vue', () => ({
   default: { name: 'QuickIncomingCapture', props: ['leadId'], emits: ['close', 'saved'], template: '<section data-testid="quick-incoming">{{ leadId || \'new\' }}</section>' },
 }));
-vi.mock('../src/components/leads/LeadQualifyModal.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('../src/components/leads/LeadQualifyModal.vue', () => ({ default: { template: '<div data-testid="regular-qualification" />' } }));
+vi.mock('../src/components/leads/LeadSourceReviewModal.vue', () => ({
+  default: { props: ['orderId'], template: '<div data-testid="tender-qualification">{{ orderId }}</div>' },
+}));
 vi.mock('../src/components/leads/EmailLeadImportPanel.vue', () => ({ default: { template: '<div data-testid="email-import">Импорт почты</div>' } }));
 vi.mock('../src/components/ui/AddressSuggestInput.vue', () => ({ default: { template: '<div />' } }));
 
@@ -99,6 +102,27 @@ describe('LeadInbox usability', () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="inbox-item"]').text()).toBe('Борис');
     wrapper.unmount();
+  });
+
+  it('opens the source review when qualifying a tender and the generic form for other requests', async () => {
+    const tender = { ...activeItem, id: 699, entity_kind: 'order', source: 'belzakupki' };
+    mocks.getLeadsInbox.mockResolvedValue(response([tender, activeItem]));
+    const wrapper = mount(LeadInbox);
+    await flushPromises();
+    const cards = wrapper.findAllComponents({ name: 'LeadInboxCard' });
+    cards[0]!.vm.$emit('qualify', tender);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="tender-qualification"]').text()).toBe('699');
+    expect(wrapper.find('[data-testid="regular-qualification"]').exists()).toBe(false);
+    wrapper.unmount();
+
+    const other = mount(LeadInbox);
+    await flushPromises();
+    other.findAllComponents({ name: 'LeadInboxCard' })[1]!.vm.$emit('qualify', activeItem);
+    await flushPromises();
+    expect(other.find('[data-testid="tender-qualification"]').exists()).toBe(false);
+    expect(other.find('[data-testid="regular-qualification"]').exists()).toBe(true);
+    other.unmount();
   });
 
   it('requests only one page and restores source, scope and page for the same account and storefront', async () => {

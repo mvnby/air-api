@@ -103,6 +103,14 @@ def test_deadlines_and_clarification_answers_are_not_submission_channel():
         assert extract_customer_evidence(_detail({}, text, number=1)).submission.method == "unknown"
 
 
+def test_lepel_imperative_to_submit_offer_on_platform():
+    data = _detail({}, "Предоставить коммерческое предложение на ЭТП в срок по 27 ноября.", number=699)
+    submission = extract_customer_evidence(data).submission
+    assert submission.method == "platform"
+    assert submission.url == data["source_url"]
+    assert submission.evidence == "Предоставить коммерческое предложение на ЭТП"
+
+
 def test_live_464_bilingual_word_table_keeps_bank_before_unp_and_submission_email():
     data = json.loads((Path(__file__).parents[1] / "fixtures/tender_customer/464.json").read_text())
     evidence = extract_customer_evidence(data)

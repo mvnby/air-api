@@ -182,6 +182,14 @@ const incomingSaved = async (incoming: { lead_id: number }) => {
 };
 
 // ── Qualify ───────────────────────────────────────────────────────────────────
+const openQualification = (item: InboxItem) => {
+  if (item.entity_kind !== 'lead' && item.source === 'belzakupki' && !item.linked_order_id) {
+    sourceReviewTarget.value = item;
+  } else {
+    qualifyTarget.value = item;
+  }
+};
+
 const handleQualifySuccess = async (orderId: number) => {
   qualifyTarget.value = null;
   notifyInboxChanged();
@@ -298,8 +306,7 @@ const onEmailImported = async () => {
         :is-archive="scope === 'archive'"
         :contact-saving="contactSaving"
         :quick-incoming="scope !== 'archive' && !item.linked_order_id && isQuickIncoming(item)"
-        @qualify="qualifyTarget = $event"
-        @review-source="sourceReviewTarget = $event"
+        @qualify="openQualification"
         @link-changed="notifyInboxChanged(); load()"
         @updated="updateItem"
         @details-closed="unreadOnly && load()"

@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from core.command_actor import CommandActor
 from core.config import settings
-from models import Customer, Order, OrderProposal
+from models import Customer, LeadSource, Order, OrderProposal
 from schemas_connector_mcp import (
     ConnectorContext,
     CustomerSearchResult,
@@ -21,6 +21,7 @@ from schemas_connector_mcp import (
     OrderProposalSummary,
     OrderSearchResult,
     OrderSummary,
+    ReviewedTenderContext,
 )
 from services.leads_inbox_service import InboxError, LeadsInboxService
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -34,6 +35,27 @@ def _enum_text(value: Any) -> str:
 def _search_pattern(value: str) -> str:
     # Search text is literal: percent/underscore are not user-supplied wildcards.
     return "%" + value.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def _reviewed_tender(order: Order) -> ReviewedTenderContext | None:
+    if order.lead_source != LeadSource.BELZAKUPKI:
+        return None
+    source = (order.technical_meta or {}).get("belzakupki")
+    review = source.get("enrichment") if isinstance(source, dict) else None
+    if not isinstance(review, dict):
+        return None
+    objects = review.get("objects")
+    addresses = list(dict.fromkeys(
+        item["address"].strip()[:500]
+        for item in (objects[:30] if isinstance(objects, list) else [])
+        if isinstance(item, dict) and isinstance(item.get("address"), str) and item["address"].strip()
+    ))
+    summary, equipment = review.get("work_summary"), review.get("equipment_details")
+    return ReviewedTenderContext(
+        work_summary=summary[:10000] if isinstance(summary, str) else None,
+        equipment_details=equipment[:10000] if isinstance(equipment, str) else None,
+        execution_addresses=addresses,
+    )
 
 
 class ConnectorQueryService:
@@ -162,8 +184,11 @@ class ConnectorQueryService:
             .where(OrderProposal.order_id == order_id)
             .order_by(OrderProposal.sort_order, OrderProposal.id)
         )).mappings().all()
-        return OrderDetail(**cls._order(row[0], row[1]).model_dump(),
-                           proposals=[OrderProposalSummary(**item) for item in proposals])
+        return OrderDetail(
+            **cls._order(row[0], row[1]).model_dump(),
+            proposals=[OrderProposalSummary(**item) for item in proposals],
+            tender_review=_reviewed_tender(row[0]),
+        )
 
     @staticmethod
     async def service_order_intake(session, actor, order_id: int) -> IncomingOrderContext:

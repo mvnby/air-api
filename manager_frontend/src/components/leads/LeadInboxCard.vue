@@ -9,7 +9,7 @@ import { tenderStageLabels } from '../../services/tender-workflow';
 const props = defineProps<{ item: InboxItem; isArchive?: boolean; contactSaving?: boolean; quickIncoming?: boolean }>();
 const emit = defineEmits<{
   (e: 'qualify', item: InboxItem): void; (e: 'no-answer', request: InboxContactRequest): void;
-  (e: 'review-source', item: InboxItem): void; (e: 'link-changed'): void;
+  (e: 'link-changed'): void;
   (e: 'updated', item: InboxItem): void; (e: 'archived', item: InboxItem): void;
   (e: 'restore', item: InboxItem): void; (e: 'details-closed'): void;
   (e: 'edit-incoming'): void;
@@ -123,7 +123,7 @@ const markUnread = async () => { await setRead(false); if (!error.value) expande
     <p v-if="error" class="card-error" role="alert">{{ error }}<button v-if="expanded" type="button" @click="loadDetails">Повторить</button></p>
     <LeadRefusalPanel v-if="refusing" :order-id="item.id" :entity-kind="item.entity_kind" :mode="refusalMode" @cancel="refusing = false" @archived="emit('archived', item)" />
     <div v-if="expanded && detailLoading" class="detail-loading" role="status">Загружаем подробности…</div>
-    <LeadInboxDetails v-else-if="expanded && detail" :item="current" :history="history" :contact-saving="contactSaving" @updated="sourceUpdated" @not-request="refusalMode = 'not_request'; refusing = true; expanded = false" @review-source="emit('review-source', $event)" @no-answer="emit('no-answer', $event)" @mark-unread="markUnread" @link-changed="emit('link-changed')" />
+    <LeadInboxDetails v-else-if="expanded && detail" :item="current" :history="history" :contact-saving="contactSaving" @updated="sourceUpdated" @not-request="refusalMode = 'not_request'; refusing = true; expanded = false" @no-answer="emit('no-answer', $event)" @mark-unread="markUnread" @link-changed="emit('link-changed')" />
   </article>
 </template>
 <style scoped>

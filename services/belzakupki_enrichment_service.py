@@ -35,7 +35,9 @@ from services.commercial_terms_extraction import extract_commercial_terms
 from services.order_commercial_terms_service import commercial_terms_response, store_source_terms
 from services.belzakupki_source_analysis import analyze_tender_text, automatic_tender_analysis, extract_missing_document_text
 from services.belzakupki_equipment_prefill import BelzakupkiEquipmentPrefillService
-from services.order_scenarios import SCENARIOS, infer_scenario_from_task, resolve_scenario
+from services.order_scenarios import SCENARIOS, WORK_SCENARIO, infer_scenario_from_task, resolve_scenario
+from services.order_service import OrderService
+from services.order_workflow_revision import bump_order_workflow_revision
 from services.service_attachment_service import ServiceAttachmentService
 from services.tenant_entity_access_service import TenantEntityAccessService
 
@@ -265,7 +267,7 @@ class BelzakupkiEnrichmentService:
         raw = "\n".join(filter(None, [_text(data.get("description"), 30000)] + [
             _text(doc.get("extracted_text"), 100000) for doc in cls._documents(data)
         ]))
-        evidence = extract_customer_evidence(data)
+        evidence = extract_customer_evidence({**data, "source_url": review.documents_source_url or data.get("source_url")})
         await enrich_registry(evidence)
         customer = evidence.customer
         inn = customer.inn
@@ -421,7 +423,7 @@ class BelzakupkiEnrichmentService:
                 "legal_address": preview.customer.legal_address,
                 "contacts": {"phone": preview.customer.phone, "email": preview.customer.email},
             },
-            "source_url": preview.source_url,
+            "source_url": preview.documents_source_url or preview.source_url,
             "documents": [doc.model_dump() for doc in preview.documents],
         })
         if refreshed.customer.inn != preview.customer.inn or any(
@@ -462,7 +464,8 @@ class BelzakupkiEnrichmentService:
         if work_summary:
             preview.work_summary = work_summary
             preview.field_sources["work_summary"] = "ИИ по выбранным документам"
-            suggested = infer_scenario_from_task(work_summary)
+            title_scenario = infer_scenario_from_task(preview.title)
+            suggested = title_scenario if title_scenario == WORK_SCENARIO else infer_scenario_from_task(work_summary)
             preview.suggested_scenario = (
                 _scenario_draft(suggested.workflow_type, suggested.service_type) if suggested else None
             )
@@ -586,17 +589,18 @@ class BelzakupkiEnrichmentService:
             )
             selected_scenario = (workflow_type, service_type)
         applied: list[str] = []
-        evidence = extract_customer_evidence(detail)
+        evidence = extract_customer_evidence({**detail, "source_url": review.documents_source_url or detail.get("source_url")})
         customer = await apply_reviewed_customer(
             session, order=order, scope=scope, payload=payload,
             evidence=evidence, applied=applied,
         )
+        promoted = customer is not None and order.status == OrderStatus.NEW_LEAD
         if customer is not None:
             if order.customer_id and order.customer_id != customer.id:
                 raise ValueError("Order already has another customer")
             order.customer_id = int(customer.id or 0)
             applied.append("customer_id")
-            if order.status == OrderStatus.NEW_LEAD:
+            if promoted:
                 order.status = OrderStatus.NEGOTIATION
                 applied.append("status")
         source_meta = dict(order.technical_meta or {})
@@ -726,6 +730,10 @@ class BelzakupkiEnrichmentService:
             applied.append("attachment")
         if source_terms:
             store_source_terms(order, source_terms)
+        if promoted:
+            await session.refresh(order, attribute_names=["proposals"])
+            await OrderService.ensure_default_proposal(session, order)
+            await bump_order_workflow_revision(session, order)
         await session.commit()
         return ManagerOrderSourceApplyResult(
             order_id=order_id, customer_id=order.customer_id,

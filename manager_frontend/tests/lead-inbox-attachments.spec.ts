@@ -212,14 +212,15 @@ describe('LeadInboxCard read-only attachments', () => {
     expectNoWrites();
   });
 
-  it('offers source review only for Belzakupki leads', async () => {
+  it('offers one negotiation action on a tender card even when its details are open', async () => {
     const regular = mount(LeadInboxCard, { props: { item: lead } });
     expect(regular.text()).not.toContain('Проработать');
     const tender = mount(LeadInboxCard, { props: { item: { ...lead, source: 'belzakupki' } } });
     await tender.get('button.title').trigger('click');
     await flushPromises();
-    await tender.get('button[title="Проверить данные из закупки перед созданием сделки"]').trigger('click');
-    expect(tender.emitted('review-source')?.[0]?.[0]).toEqual(expect.objectContaining({ id: lead.id }));
+    expect(tender.text()).not.toContain('Проработать источник');
+    await tender.get('button[title="Перевести в переговоры"]').trigger('click');
+    expect(tender.emitted('qualify')?.[0]?.[0]).toEqual(expect.objectContaining({ id: lead.id, source: 'belzakupki' }));
     regular.unmount();
     tender.unmount();
   });

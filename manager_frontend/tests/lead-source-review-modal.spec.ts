@@ -20,6 +20,7 @@ const preview = {
   objects: [{ address: 'Минск, Ленина, 1', equipment: [{ brand: 'Daikin', model: 'A1', quantity: 2 }] }],
   field_sources: { 'customer.name': 'Карточка закупки', 'customer.inn': 'Текст документа', 'objects.0.address': 'Текст документа', 'objects.0.equipment.0': 'Текст документа' },
   documents: [{ id: 'doc-1', name: 'ТЗ.pdf', download_url: '/api/manager/orders/41/source-documents/doc-1', extracted_text: 'Техническое задание' }],
+  analysis_source: 'reviewed' as const,
   warnings: [],
 };
 
@@ -39,7 +40,7 @@ describe('LeadSourceReviewModal', () => {
 
   it('automatically shows the work from the linked Goszakupki documents', async () => {
     const sourceUrl = 'https://goszakupki.by/single-source/view/3876716';
-    const mirror = { ...preview, source_code: 'gias_by', documents_source_url: sourceUrl };
+    const mirror = { ...preview, source_code: 'gias_by', documents_source_url: sourceUrl, analysis_source: 'source' };
     const work = 'Демонтировать исправную сплит-систему и установить оба блока на новом месте.';
     sourceApi.preview.mockResolvedValue(mirror);
     let finishAnalysis!: (result: unknown) => void;
@@ -53,6 +54,7 @@ describe('LeadSourceReviewModal', () => {
     await flushPromises();
     expect(wrapper.get('#source-work-heading').text()).toBe('Что хочет заказчик');
     expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe(work);
+    expect(wrapper.get('[data-testid="reread-tender-documents"]').element.closest('details')?.open).toBe(false);
     expect(sourceApi.apply).not.toHaveBeenCalled();
   });
 
@@ -67,7 +69,7 @@ describe('LeadSourceReviewModal', () => {
     expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe('Состав подтверждён менеджером');
   });
 
-  it('requires explicit confirmation and sends reviewed data without a price', async () => {
+  it('moves a reviewed tender with one explicit action and without a price', async () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     expect(wrapper.text()).toContain('ТЗ.pdf');
@@ -75,9 +77,10 @@ describe('LeadSourceReviewModal', () => {
     expect(wrapper.text()).toContain('Направить предложения на tender@example.test');
     expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value).toBe('maintenance:maintenance');
     expect(wrapper.find('input[placeholder*="Цен"]').exists()).toBe(false);
-    expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
-
-    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
+    expect(wrapper.get('button.btn-mini').text()).toBe('В переговоры');
+    expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeUndefined();
+    expect(wrapper.text()).not.toContain('Подтверждаю применение проверенных данных');
+    expect(sourceApi.apply).not.toHaveBeenCalled();
     await wrapper.get('button.btn-mini').trigger('click');
 
     expect(sourceApi.apply).toHaveBeenCalledWith(41, expect.objectContaining({
@@ -130,7 +133,7 @@ describe('LeadSourceReviewModal', () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text().includes('Филиал'))!.trigger('click');
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await flushPromises();
     expect((wrapper.get('input[placeholder="Телефон"]').element as HTMLInputElement).value).toBe('');
     expect((wrapper.get('input[placeholder="УНП"]').element as HTMLInputElement).value).toBe('987654321');
@@ -182,7 +185,7 @@ describe('LeadSourceReviewModal', () => {
     await flushPromises();
     await wrapper.get('input[placeholder="Название или имя"]').setValue('Вручную исправлено');
     await wrapper.get('input[placeholder="Название банка"]').setValue('Банк менеджера');
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await flushPromises();
     expect((wrapper.get('input[placeholder="Название или имя"]').element as HTMLInputElement).value).toBe('Вручную исправлено');
     expect((wrapper.get('input[placeholder="Название банка"]').element as HTMLInputElement).value).toBe('Банк менеджера');
@@ -210,7 +213,7 @@ describe('LeadSourceReviewModal', () => {
     await flushPromises();
     const select = wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]');
     expect(select.element.value).toBe('sales_installation:turnkey');
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await flushPromises();
     expect(select.element.value).toBe('maintenance:maintenance');
     await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
@@ -220,7 +223,7 @@ describe('LeadSourceReviewModal', () => {
     }));
 
     await select.setValue('service_work:');
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await flushPromises();
     expect(select.element.value).toBe('service_work:');
   });
@@ -238,8 +241,8 @@ describe('LeadSourceReviewModal', () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
     expect(wrapper.get<HTMLSelectElement>('select[aria-label="Сценарий заказа"]').element.value).toBe('');
-    await wrapper.findAll('input[type="checkbox"]').at(-1)!.setValue(true);
     expect(wrapper.get('button.btn-mini').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('#tender-apply-blocker').text()).toBe('Выберите сценарий заказа.');
   });
 
   it('keeps the source document visible if scenario options cannot load', async () => {
@@ -275,9 +278,9 @@ describe('LeadSourceReviewModal', () => {
   it('keeps the review visible when document analysis fails', async () => {
     const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
     await flushPromises();
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await flushPromises();
-    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1'], false);
+    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1'], true);
     expect(wrapper.text()).toContain('AI unavailable');
     expect(wrapper.text()).toContain('ТЗ.pdf');
     expect(wrapper.find('input[placeholder="Название или имя"]').exists()).toBe(true);
@@ -352,7 +355,7 @@ describe('LeadSourceReviewModal', () => {
     expect(wrapper.text()).not.toContain('Старая заявка');
     let oldAnalysis!: (value: typeof preview) => void;
     sourceApi.analyze.mockReturnValueOnce(new Promise((resolve) => { oldAnalysis = resolve; }));
-    await wrapper.findAll('button').find((button) => button.text() === 'Обработать ИИ')!.trigger('click');
+    await wrapper.get('[data-testid="reread-tender-documents"]').trigger('click');
     await wrapper.setProps({ orderId: 43 }); await flushPromises();
     oldAnalysis({ ...preview, work_summary: 'Старый результат ИИ' }); await flushPromises();
     expect(wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]').element.value).toBe(preview.work_summary);

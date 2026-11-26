@@ -91,8 +91,15 @@ class OrderProposalSummary(BaseModel):
     is_archived: bool
 
 
+class ReviewedTenderContext(BaseModel):
+    work_summary: str | None = None
+    equipment_details: str | None = None
+    execution_addresses: list[str] = Field(default_factory=list)
+
+
 class OrderDetail(OrderSummary):
     proposals: list[OrderProposalSummary]
+    tender_review: ReviewedTenderContext | None = None
 
 
 class IncomingOrderContext(BaseModel):
