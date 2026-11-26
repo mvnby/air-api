@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Bell, Pin, Search, X } from 'lucide-vue-next';
 import { useDialogA11y } from '../../composables/useDialogA11y';
+import { useDialogViewport } from '../../composables/useDialogViewport';
 import { searchNavSections, type NavSection } from '../../manager-navigation';
 
 const props = defineProps<{
@@ -20,12 +21,15 @@ const visible = computed(() => {
     ...props.groups.filter(group => group.id !== 'daily'),
   ];
 });
-useDialogA11y({ open: computed(() => true), dialogRef: dialog, initialFocusRef: search, close: () => emit('close') });
+const open = computed(() => true);
+const initialFocus = computed(() => window.matchMedia?.('(max-width: 767px)')?.matches ? dialog.value : search.value);
+const viewportStyle = useDialogViewport(open);
+useDialogA11y({ open, dialogRef: dialog, initialFocusRef: initialFocus, close: () => emit('close') });
 </script>
 
 <template>
   <Teleport to="body">
-    <div class="directory-backdrop" @click.self="emit('close')">
+    <div class="directory-backdrop" :style="viewportStyle" @click.self="emit('close')">
       <section ref="dialog" class="section-directory" role="dialog" aria-modal="true" aria-labelledby="section-directory-title" tabindex="-1">
         <header><h2 id="section-directory-title">{{ personal ? 'Моя работа' : 'Все разделы' }}</h2>
           <button class="icon-control" type="button" aria-label="Закрыть список разделов" @click="emit('close')"><X :size="20" /></button>
@@ -71,4 +75,8 @@ useDialogA11y({ open: computed(() => true), dialogRef: dialog, initialFocusRef: 
 .pin { color:var(--kitlane-muted); } .pin[aria-pressed=true],.due-reminders { color:var(--kitlane-accent-text); }
 @media (max-width:600px){ .directory-backdrop {padding:0;align-items:end;} .section-directory,.section-directory:has(.single){width:100%;max-width:none;max-height:88dvh;border-radius:1rem 1rem 0 0;padding-bottom:env(safe-area-inset-bottom);} .directory-groups{grid-template-columns:1fr;} .directory-row a,.icon-control{min-height:44px;} .icon-control{width:44px;} }
 @media (prefers-reduced-motion:no-preference){.section-directory{animation:directory-in 140ms ease-out;} @keyframes directory-in{from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)}}}
+@media(max-width:767px){
+  .directory-backdrop { top:var(--kitlane-dialog-top,0); bottom:auto; height:var(--kitlane-dialog-height,100dvh); grid-template-rows:minmax(0,1fr); }
+  .section-directory { max-height:min(88dvh,100%); }
+}
 </style>

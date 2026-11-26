@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { Inbox, ListTodo, Plus, X } from 'lucide-vue-next';
 import { useDialogA11y } from '../../composables/useDialogA11y';
+import { useDialogViewport } from '../../composables/useDialogViewport';
 import { createPersonalTask, newPersonalTaskCommandKey, notifyPersonalTasksChanged } from '../../services/personal-tasks-api';
 import { notifyInboxChanged, globalIncomingCapturedEvent } from '../../services/lead-inbox';
 import { readOrderPage } from '../../services/order-navigation';
@@ -38,7 +39,9 @@ const binding = computed(() => {
 });
 const clear = () => { text.value = ''; due.value = ''; reminder.value = ''; details.value = false; error.value = ''; signature.value = ''; };
 const close = () => { if (!saving.value) step.value = null; };
-useDialogA11y({ open: computed(() => step.value !== null), dialogRef: dialog, initialFocusRef: input, close });
+const isOpen = computed(() => step.value !== null);
+const viewportStyle = useDialogViewport(isOpen);
+useDialogA11y({ open: isOpen, dialogRef: dialog, initialFocusRef: input, close });
 watch(() => props.location, () => { step.value = null; clear(); });
 const chooseTask = async () => { step.value = 'task'; await nextTick(); input.value?.focus(); };
 const chooseIncoming = async () => {
@@ -79,11 +82,11 @@ const captured = (record: { lead_id: number }) => {
 </script>
 
 <template>
-  <button type="button" class="quick-trigger" :aria-label="taskShortcut ? 'Записать поручение' : 'Создать'" :title="taskShortcut ? 'Записать поручение' : 'Создать'" aria-haspopup="dialog" :aria-expanded="Boolean(step)" @click="open">
-    <component :is="taskShortcut ? ListTodo : Plus" :size="18" aria-hidden="true" /><span :class="{ 'sr-only': compact }">{{ taskShortcut ? 'Поручение' : 'Создать' }}</span>
+  <button type="button" class="quick-trigger" :class="{ 'task-shortcut': taskShortcut, compact }" :aria-label="taskShortcut ? 'Записать поручение' : 'Создать'" :title="taskShortcut ? 'Записать поручение' : 'Создать'" aria-haspopup="dialog" :aria-expanded="Boolean(step)" @click="open">
+    <component :is="taskShortcut ? ListTodo : Plus" :size="18" aria-hidden="true" /><span>{{ taskShortcut ? 'Поручение' : 'Создать' }}</span>
   </button>
   <Teleport to="body">
-    <div v-if="step" class="quick-backdrop" @click.self="close">
+    <div v-if="step" class="quick-backdrop" :style="viewportStyle" @click.self="close">
       <section ref="dialog" class="quick-dialog" role="dialog" aria-modal="true" :aria-label="step === 'task' ? 'Новое поручение' : step === 'incoming' ? 'Новое обращение' : 'Создать'" tabindex="-1">
         <QuickIncomingCapture v-if="step === 'incoming'" @close="close" @captured="captured" @saved="captured" />
         <template v-else>
@@ -129,5 +132,14 @@ const captured = (record: { lead_id: number }) => {
 .quick-actions .optional-fields { margin-right:auto; }
 .quick-save { padding:.65rem 1rem; background:var(--kitlane-accent); color:white; border-radius:.55rem; justify-self:end; font-weight:650; }
 .quick-save:disabled { opacity:.55; }
-@media(max-width:767px){.quick-trigger{min-height:44px;min-width:44px;padding:0 .5rem;} .quick-trigger span{display:none;} .quick-backdrop{align-items:end;padding:0;} .quick-dialog{width:100%;max-height:90dvh;border-radius:1rem 1rem 0 0;padding-bottom:env(safe-area-inset-bottom);}.quick-form input,.quick-form textarea{font-size:16px;} }
+@media(min-width:768px){ .quick-trigger.compact span { display:none; } }
+@media(max-width:767px){
+  .quick-trigger { min-height:44px; min-width:44px; padding:0 .5rem; }
+  .quick-trigger span { display:none; }
+  .quick-trigger.task-shortcut { flex-direction:column; gap:1px; }
+  .quick-trigger.task-shortcut span { display:block; font-size:.68rem; line-height:1.1; }
+  .quick-backdrop { top:var(--kitlane-dialog-top,0); bottom:auto; height:var(--kitlane-dialog-height,100dvh); grid-template-rows:minmax(0,1fr); align-items:end; padding:0; }
+  .quick-dialog { width:100%; max-height:min(90dvh,100%); border-radius:1rem 1rem 0 0; padding-bottom:env(safe-area-inset-bottom); }
+  .quick-form input,.quick-form textarea { font-size:16px; }
+}
 </style>

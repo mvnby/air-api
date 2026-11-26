@@ -85,6 +85,8 @@ afterEach(() => {
 
 describe('contextual task capture', () => {
   it('keeps the open order and draft after a failed save and retries its command once', async () => {
+    const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0 });
+    vi.stubGlobal('visualViewport', viewport);
     const path = '/manager/orders/84?section=documents';
     window.history.replaceState({}, '', path);
     const view = mount(ManagerQuickCreate, { props: { location: path, canCreateTask: true, compact: true },
@@ -95,6 +97,12 @@ describe('contextual task capture', () => {
     await trigger.trigger('click');
     const text = body.get('textarea');
     expect(document.activeElement).toBe(text.element);
+    Object.assign(viewport, { height: 458, offsetTop: 24 });
+    viewport.dispatchEvent(new Event('resize'));
+    await flushPromises();
+    const backdrop = body.get<HTMLElement>('.quick-backdrop').element;
+    expect(backdrop.style.getPropertyValue('--kitlane-dialog-height')).toBe('458px');
+    expect(backdrop.style.getPropertyValue('--kitlane-dialog-top')).toBe('24px');
     await text.setValue('  Выслать письмо после звонка  ');
     mocks.create.mockRejectedValueOnce(new Error('Соединение прервалось'));
     await body.get('form').trigger('submit');
