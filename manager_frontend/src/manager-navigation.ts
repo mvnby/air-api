@@ -54,6 +54,7 @@ export const coreNavItems: NavItem[] = [
   { path: '/manager', label: 'Главная', icon: Home, match: 'exact' },
   { path: '/manager/tasks', label: 'Поручения', icon: ListTodo, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/leads', label: 'Входящие', icon: UserPlus, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
+  { path: '/manager/tenders', label: 'Тендеры', icon: FileSpreadsheet, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.tenderMarket },
   { path: '/manager/orders', label: 'Заказы', icon: ShoppingCart, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/catalog-decision', label: 'Подбор оборудования', icon: Calculator, match: 'exact', requiredCapability: MANAGER_CAPABILITY.crmManage },
   { path: '/manager/calendar', label: 'Календарь', icon: Calendar, match: 'prefix', requiredCapability: MANAGER_CAPABILITY.crmManage },

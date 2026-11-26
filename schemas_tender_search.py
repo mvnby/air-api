@@ -98,6 +98,7 @@ class TenderLotSignals(BaseModel):
     places_complete: bool = False
     directions_complete: bool = False
     activities_complete: bool = False
+    verified_native_lot: bool = False
 
 
 class TenderLotMatch(BaseModel):

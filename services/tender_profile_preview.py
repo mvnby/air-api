@@ -82,6 +82,47 @@ def _classify(title: str, enrichment: dict) -> TenderLotSignals:
     )
 
 
+def publication_signals(
+    title: str, tender: dict, *, reviewed: dict | None = None, active_lots_only: bool = False,
+) -> tuple[list[TenderLotSignals], bool]:
+    context = reviewed or {}
+    snapshot = native_lot_snapshot(tender)
+    lots = snapshot.get("lots", [])
+    if not lots:
+        return [_classify(title, context)], False
+    one_lot = snapshot["lot_inventory_complete"] and len(lots) == 1
+    signals = []
+    for lot in lots:
+        if active_lots_only and lot.get("status", "").casefold() in {"отменен", "отменён", "отменена", "завершен", "завершён", "завершена"}:
+            continue
+        lot_context = dict(context) if one_lot else {}
+        if lot.get("delivery_place"):
+            objects = lot_context.get("objects")
+            known = objects if isinstance(objects, list) else []
+            lot_context["objects"] = [*known, {"address": lot["delivery_place"]}]
+        subject = f"{title}\n{lot['name']}" if one_lot else lot["name"]
+        lot_signals = _classify(subject, lot_context)
+        lot_signals.lot_key = lot["number"]
+        lot_signals.verified_native_lot = snapshot["lot_inventory_complete"]
+        signals.append(lot_signals)
+    if not signals:
+        return [TenderLotSignals(
+            lot_key="procedure", directions_complete=snapshot["lot_inventory_complete"],
+        )], False
+    return signals, True
+
+
+def match_publication_signals(classified: tuple[list[TenderLotSignals], bool], profile: TenderSearchProfile):
+    signals, per_lot = classified
+    matches = [match_tender_lot(profile, lot) for lot in signals]
+    priority = {"match": 0, "review": 1, "excluded": 2}
+    return min(matches, key=lambda match: priority[match.state]), matches if per_lot else []
+
+
+def match_publication(title: str, tender: dict, profile: TenderSearchProfile, *, reviewed: dict | None = None):
+    return match_publication_signals(publication_signals(title, tender, reviewed=reviewed), profile)
+
+
 def preview_tender_profile(rows, profile: TenderSearchProfile) -> TenderProfilePreview:
     items = []
     for order_id, meta in rows:
@@ -93,26 +134,7 @@ def preview_tender_profile(rows, profile: TenderSearchProfile) -> TenderProfileP
         if not isinstance(title, str) or not title.strip():
             continue
         enrichment = binding.get("enrichment")
-        reviewed = enrichment if isinstance(enrichment, dict) else {}
-        snapshot = native_lot_snapshot(tender)
-        lots = snapshot.get("lots", [])
-        if lots:
-            one_lot = snapshot["lot_inventory_complete"] and len(lots) == 1
-            matches = []
-            for lot in lots:
-                context = dict(reviewed) if one_lot else {}
-                if lot.get("delivery_place"):
-                    objects = context.get("objects")
-                    known = objects if isinstance(objects, list) else []
-                    context["objects"] = [*known, {"address": lot["delivery_place"]}]
-                subject = f"{title}\n{lot['name']}" if one_lot else lot["name"]
-                lot_signals = _classify(subject, context)
-                lot_signals.lot_key = lot["number"]
-                matches.append(match_tender_lot(profile, lot_signals))
-            priority = {"match": 0, "review": 1, "excluded": 2}
-            result = min(matches, key=lambda match: priority[match.state])
-        else:
-            matches = []
-            result = match_tender_lot(profile, _classify(title, reviewed))
+        result, matches = match_publication(title, tender, profile,
+                                            reviewed=enrichment if isinstance(enrichment, dict) else None)
         items.append(TenderProfilePreviewItem(order_id=order_id, title=title, result=result, lots=matches))
     return TenderProfilePreview(items=items)

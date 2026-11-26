@@ -8,6 +8,7 @@ class ManagerCapabilityService:
     """Derive the manager UI contract from server-verified authorization state."""
 
     CRM_MANAGE = "crm.manage"
+    TENDER_MARKET = "tender.market"
     CATALOG_MASTER_READ = "catalog.master.read"
     CATALOG_MASTER_EDIT = "catalog.master.edit"
     CATALOG_MASTER_DELETE = "catalog.master.delete"

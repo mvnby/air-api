@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { TenderMarketResults } from '../models/TenderMarketResults';
 import type { TenderModuleAccess } from '../models/TenderModuleAccess';
 import type { TenderModuleEntitlementUpdate } from '../models/TenderModuleEntitlementUpdate';
 import type { TenderModuleSettings } from '../models/TenderModuleSettings';
@@ -12,6 +13,43 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ManagerTenderModuleService {
+    /**
+     * List Manager Tender Market
+     * Read public results selected by the active company's saved profiles.
+     *
+     * Company entitlement and enablement are required. The response carries the
+     * rules version and a cursor for the next bounded candidate scan. A profile
+     * change returns 409 for a stale cursor. Reading does not create CRM records.
+     * @param desired
+     * @param profile
+     * @param beforeId
+     * @param settingsVersion
+     * @param limit
+     * @returns TenderMarketResults Successful Response
+     * @throws ApiError
+     */
+    public static listManagerTenderMarket(
+        desired: 'match' | 'review' = 'match',
+        profile?: (string | null),
+        beforeId?: (number | null),
+        settingsVersion?: (number | null),
+        limit: number = 30,
+    ): CancelablePromise<TenderMarketResults> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tender-market',
+            query: {
+                'desired': desired,
+                'profile': profile,
+                'before_id': beforeId,
+                'settings_version': settingsVersion,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Get Manager Tender Module
      * Read module access, enablement, and the selected company's search profiles.

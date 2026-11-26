@@ -33780,6 +33780,123 @@
         ]
       }
     },
+    "/api/manager/tender-market": {
+      "get": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "List Manager Tender Market",
+        "description": "Read public results selected by the active company's saved profiles.\n\nCompany entitlement and enablement are required. The response carries the\nrules version and a cursor for the next bounded candidate scan. A profile\nchange returns 409 for a stale cursor. Reading does not create CRM records.",
+        "operationId": "list_manager_tender_market",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "desired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "match",
+                "review"
+              ],
+              "type": "string",
+              "default": "match",
+              "title": "Desired"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "name": "settings_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Settings Version"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderMarketResults"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tender-module": {
       "get": {
         "tags": [
@@ -109936,6 +110053,136 @@
           "reason"
         ],
         "title": "TenderLotMatch"
+      },
+      "TenderMarketItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/TenderMarketProfileMatch"
+            },
+            "type": "array",
+            "title": "Profiles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source",
+          "source_url",
+          "profiles"
+        ],
+        "title": "TenderMarketItem"
+      },
+      "TenderMarketProfileMatch": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "result": {
+            "$ref": "#/components/schemas/TenderLotMatch"
+          },
+          "lots": {
+            "items": {
+              "$ref": "#/components/schemas/TenderLotMatch"
+            },
+            "type": "array",
+            "title": "Lots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "result",
+          "lots"
+        ],
+        "title": "TenderMarketProfileMatch"
+      },
+      "TenderMarketResults": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TenderMarketItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          },
+          "settings_version": {
+            "type": "integer",
+            "title": "Settings Version"
+          },
+          "profile_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profile Names"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "syncing": {
+            "type": "boolean",
+            "title": "Syncing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "settings_version",
+          "profile_names"
+        ],
+        "title": "TenderMarketResults"
       },
       "TenderModuleAccess": {
         "properties": {

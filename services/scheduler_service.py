@@ -200,6 +200,8 @@ class SchedulerService:
 
         # Pull one bounded Belzakupki opportunity page for the explicitly scoped inbox.
         tasks.append(asyncio.create_task(self._belzakupki_import_loop()))
+        if settings.BELZAKUPKI_TENDER_MARKET_ENABLED:
+            tasks.append(asyncio.create_task(self._tender_market_sync_loop()))
         tasks.append(asyncio.create_task(self._jev_shadow_loop()))
 
         try:
@@ -710,5 +712,17 @@ class SchedulerService:
             except Exception:
                 logger.exception("BELZAKUPKI_IMPORT_FAILED")
             await asyncio.sleep(interval_minutes * 60)
+
+    async def _tender_market_sync_loop(self):
+        from services.tender_market_sync_service import TenderMarketSyncService
+
+        interval = settings.BELZAKUPKI_IMPORT_INTERVAL_MINUTES * 60
+        while True:
+            try:
+                if TenderMarketSyncService.enabled():
+                    await TenderMarketSyncService.run_scheduled_sync()
+            except Exception as error:
+                logger.warning("Tender market synchronization failed: %s", type(error).__name__)
+            await asyncio.sleep(interval)
 
 scheduler_service = SchedulerService()

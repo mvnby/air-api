@@ -64,6 +64,7 @@ const CustomerProfileView = defineManagerAsyncComponent('CustomerProfileView', (
 const OrdersKanbanView = defineManagerAsyncComponent('OrdersKanbanView', () => import('./views/OrdersKanbanView.vue'));
 const OrderDetailView = defineManagerAsyncComponent('OrderDetailView', () => import('./views/OrderDetailView.vue'));
 const LeadsView = defineManagerAsyncComponent('LeadsView', () => import('./views/LeadsView.vue'));
+const TenderMarketView = defineManagerAsyncComponent('TenderMarketView', () => import('./views/TenderMarketView.vue'));
 const PersonalTasksView = defineManagerAsyncComponent('PersonalTasksView', () => import('./views/PersonalTasksView.vue'));
 const CallRecordingsView = defineManagerAsyncComponent('CallRecordingsView', () => import('./views/CallRecordingsView.vue'));
 const CalendarDashboard = defineManagerAsyncComponent('CalendarDashboard', () => import('./views/CalendarDashboard.vue'));
@@ -230,6 +231,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/tasks')) return 'personal-tasks';
   if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) return 'call-recordings';
   if (path.startsWith('/manager/leads')) return 'leads';
+  if (path === '/manager/tenders' || path === '/manager/tenders/') return 'tender-market';
   if (path.startsWith('/manager/orders')) return 'orders';
   if (path.startsWith('/manager/calendar')) return 'calendar';
   if (path.startsWith('/manager/equipment')) return 'equipment';
@@ -577,6 +579,7 @@ watch(currentPath, () => {
       <PersonalTasksView v-else-if="authorizedView === 'personal-tasks'" :key="currentLocation" />
       <CallRecordingsView v-else-if="authorizedView === 'call-recordings'" :key="currentLocation" />
       <LeadsView v-else-if="authorizedView === 'leads'" :key="currentLocation" />
+      <TenderMarketView v-else-if="authorizedView === 'tender-market'" :key="currentLocation" :can-manage-settings="canManageSettings" />
       <OrderDetailView v-else-if="authorizedView === 'orders' && orderPage" :key="currentLocation" :order-id="orderPage.orderId" :return-to="orderPage.returnTo" />
       <OrdersKanbanView v-else-if="authorizedView === 'orders'" :key="currentLocation" />
       <CalendarDashboard v-else-if="authorizedView === 'calendar'" :key="currentLocation" />

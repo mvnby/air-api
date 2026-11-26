@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import type { TenderModuleSettings, TenderLotMatch, TenderProfilePreview, TenderSearchProfile } from '../../client';
 import { tenderModuleApi } from '../../services/tender-module';
+import { managerSession } from '../../services/manager-session';
+import { MANAGER_CAPABILITY } from '../../manager-capabilities';
 import { getApiErrorMessage } from '../../utils/api-errors';
 import TenderPlacesEditor from './TenderPlacesEditor.vue';
 
@@ -61,16 +63,23 @@ function normalizeProfile(input: TenderSearchProfile): Profile {
   };
 }
 
-function applyResult(settings: TenderModuleSettings) {
+function applyResult(settings: TenderModuleSettings, tenantId: number | undefined) {
   current.value = settings;
   profiles.value = (settings.profiles ?? []).map(normalizeProfile);
   selected.value = Math.min(selected.value, Math.max(0, profiles.value.length - 1));
+  const auth = managerSession.auth.value;
+  if (auth && auth.tenant_id === tenantId) {
+    const capabilities = (auth.capabilities ?? []).filter((value) => value !== MANAGER_CAPABILITY.tenderMarket);
+    if (settings.enabled && settings.entitled && !auth.demo_read_only) capabilities.push(MANAGER_CAPABILITY.tenderMarket);
+    managerSession.auth.value = { ...auth, capabilities };
+  }
 }
 
 async function load() {
   loading.value = true;
   error.value = '';
-  try { applyResult(await tenderModuleApi.get()); }
+  const tenantId = managerSession.auth.value?.tenant_id;
+  try { applyResult(await tenderModuleApi.get(), tenantId); }
   catch (reason) { error.value = getApiErrorMessage(reason); }
   finally { loading.value = false; }
 }
@@ -81,8 +90,9 @@ async function save(enabled: boolean, edits: Profile[]) {
   saving.value = true;
   error.value = '';
   success.value = '';
+  const tenantId = managerSession.auth.value?.tenant_id;
   try {
-    applyResult(await tenderModuleApi.update({ enabled, version: current.value.version, profiles: payload }));
+    applyResult(await tenderModuleApi.update({ enabled, version: current.value.version, profiles: payload }), tenantId);
     success.value = 'Настройки сохранены';
   } catch (reason) {
     error.value = getApiErrorMessage(reason);
@@ -147,6 +157,7 @@ onMounted(load);
     <button v-if="error" type="button" class="btn-mini-outline" :disabled="loading || saving" @click="load">Обновить настройки</button>
     <p v-if="success" role="status" class="text-sm text-green-700 dark:text-green-400">{{ success }}</p>
     <p v-if="current && !current.entitled" class="text-sm text-slate-500">Право на подключение выдаёт владелец платформы.</p>
+    <a v-if="current?.enabled && current.entitled" href="/manager/tenders" class="inline-block text-sm font-semibold text-brand-700 underline">Найденные закупки</a>
     <fieldset v-if="current?.entitled" class="min-w-0 space-y-4" :disabled="saving">
       <div class="flex flex-wrap items-end gap-2">
         <label v-if="profiles.length" class="grow text-sm">Профиль поиска

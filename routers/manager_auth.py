@@ -14,6 +14,7 @@ from schemas import ManagerAuthStatusResponse, ManagerPasswordChangePayload
 from services.manager_capability_service import ManagerCapabilityService
 from services.staff_avatar_service import staff_avatar_url
 from services.staff_user_service import StaffUserService
+from services.tender_module_service import TenderModuleService
 from services.manager_storefront_selector_service import ManagerStorefrontSelector
 from services.manager_account_credential_service import (
     ManagerAccountCredentialError,
@@ -37,6 +38,11 @@ async def check_auth_status(
     authentication](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).
     """
     user = await StaffUserService.get_by_id(session, auth.staff_user_id) if auth.staff_user_id else None
+    capabilities = ManagerCapabilityService.for_auth(auth)
+    if ManagerCapabilityService.CRM_MANAGE in capabilities and not auth.demo_read_only:
+        module = await TenderModuleService.get(session, auth.tenant_scope().tenant_id)
+        if module.enabled and module.entitled:
+            capabilities.append(ManagerCapabilityService.TENDER_MARKET)
     return {
         "username": auth.username,
         "status": "authenticated",
@@ -49,7 +55,7 @@ async def check_auth_status(
         "storefront_id": auth.storefront_id,
         "tenant_membership_id": auth.tenant_membership_id,
         "is_system_tenant": auth.is_system_tenant,
-        "capabilities": ManagerCapabilityService.for_auth(auth),
+        "capabilities": capabilities,
         "can_change_password": auth.can_change_password,
         "must_change_password": auth.must_change_password,
         "demo_read_only": auth.demo_read_only,

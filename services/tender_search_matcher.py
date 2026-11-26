@@ -48,7 +48,7 @@ def match_tender_lot(profile: TenderSearchProfile, lot: TenderLotSignals) -> Ten
     if not known_direction or (
         profile.excluded_directions
         and (not lot.directions_complete or lot.possible_directions.intersection(profile.excluded_directions))
-    ) or (strict and not lot.directions_complete):
+    ) or (strict and not (lot.directions_complete or lot.verified_native_lot)):
         return TenderLotMatch(lot_key=lot.lot_key, state="review", reason="unconfirmed_direction")
     if not known_place or (
         (profile.excluded_places or strict and profile.included_places) and not lot.places_complete
@@ -57,6 +57,6 @@ def match_tender_lot(profile: TenderSearchProfile, lot: TenderLotSignals) -> Ten
     if not known_activities or (
         profile.excluded_activities
         and (not lot.activities_complete or lot.possible_activities.intersection(profile.excluded_activities))
-    ) or (strict and not lot.activities_complete):
+    ) or (strict and not (lot.activities_complete or lot.verified_native_lot and lot.required_activities)):
         return TenderLotMatch(lot_key=lot.lot_key, state="review", reason="unconfirmed_activity")
     return TenderLotMatch(lot_key=lot.lot_key, state="match", reason="eligible")

@@ -1045,6 +1045,7 @@
     "routers/manager_tender_module.py": [
       ["GET /api/manager/platform/companies/{tenant_id}/tender-module", "get_platform_company_tender_module", false, 41],
       ["GET /api/manager/tender-module", "get_manager_tender_module", false, 41],
+      ["GET /api/manager/tender-market", "list_manager_tender_market", false, 41],
       ["POST /api/manager/tender-module/profile-preview", "preview_manager_tender_profile", false, 41],
       ["PUT /api/manager/platform/companies/{tenant_id}/tender-module", "update_platform_company_tender_module", false, 41],
       ["PUT /api/manager/tender-module", "update_manager_tender_module", false, 41]

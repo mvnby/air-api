@@ -20,6 +20,7 @@ const modules = [
   'OrdersKanbanView',
   'OrderDetailView',
   'LeadsView',
+  'TenderMarketView',
   'PersonalTasksView',
   'CallRecordingsView',
   'CalendarDashboard',

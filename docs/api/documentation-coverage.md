@@ -33,8 +33,8 @@ tenant/storefront, явный выбор, неизменяемая исходн�
 [подпись/повторы витрины](../storefront-context-contract.md),
 [бот](../bot-service-boundary.md), [OAuth/MCP](../chatgpt-connector.md).
 
-[Точная инвентаризация](operation-inventory.json) содержит **738 операций**:
-735 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
+[Точная инвентаризация](operation-inventory.json) содержит **739 операций**:
+736 с путями `/api/*` и 3 well-known OAuth discovery. Строка включает метод и
 полный путь, operation ID, наличие description в исходном baseline и номер
 этапа проверки; записи сгруппированы по фактическому исходному файлу endpoint.
 В формате `schema=2` поле `description_before` сохраняет исторический факт,

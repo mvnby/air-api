@@ -1,21 +1,48 @@
 """Company tender settings and platform-controlled module access."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
 from core.security import (
-    AuthenticatedIdentity, AuthenticatedUser, get_current_platform_identity, require_owner_access,
+    AuthenticatedIdentity, AuthenticatedUser, get_current_platform_identity, require_manager_access, require_owner_access,
 )
 from routers import manager_operation_ids as operation_ids
 from routers.manager_platform_companies import require_company_origin
+from schemas_tender_market import TenderMarketResults
 from schemas_tender_search import (
     TenderModuleAccess, TenderModuleEntitlementUpdate, TenderModuleSettings, TenderModuleUpdate,
     TenderProfilePreview, TenderSearchProfile,
 )
 from services.tender_module_service import TenderModuleError, TenderModuleService
+from services.tender_market_service import TenderMarketService
 
 router = APIRouter(prefix="/api/manager", tags=["manager-tender-module"])
+
+
+@router.get("/tender-market", response_model=TenderMarketResults, operation_id=operation_ids.LIST_MANAGER_TENDER_MARKET)
+async def list_manager_tender_market(
+    desired: Literal["match", "review"] = "match",
+    profile: str | None = Query(None, min_length=1, max_length=96),
+    before_id: int | None = Query(None, gt=0), settings_version: int | None = Query(None, ge=0),
+    limit: int = Query(30, ge=1, le=100),
+    session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access),
+):
+    """Read public results selected by the active company's saved profiles.
+
+    Company entitlement and enablement are required. The response carries the
+    rules version and a cursor for the next bounded candidate scan. A profile
+    change returns 409 for a stale cursor. Reading does not create CRM records.
+    """
+    try:
+        return await TenderMarketService.list(
+            session, auth.tenant_scope(), desired=desired, profile_name=profile,
+            before_id=before_id, settings_version=settings_version, limit=limit,
+        )
+    except TenderModuleError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
 
 
 @router.get(
