@@ -83,7 +83,7 @@ onBeforeUnmount(reset);
       :disabled="disabled || waiting || !documentIds.length || documentIds.length > 8"
       @click="check"
     >
-      {{ report ? 'Проверить ещё раз' : 'Проверить оригиналы' }}
+      {{ report ? 'Обновить проверку' : 'Проверить полноту и цитаты' }}
     </button>
     <p v-if="waiting" role="status" class="mt-2 text-xs text-slate-500">{{ progress }}</p>
     <p v-if="error" role="alert" class="mt-2 text-xs text-red-700">{{ error }}</p>

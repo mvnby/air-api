@@ -179,7 +179,7 @@ reconciles available source evidence through the existing checkpoint lock.
 
 ## Manager review and source documents
 
-The inbox action **Проработать** and the order action **Дозаполнить из источника**
+The tender inbox action **В переговоры** and the order action **Дозаполнить из источника**
 request fresh details for the order's saved provider source and external ID. The
 source API must be deployed before these actions are enabled in Kitlane. Access
 uses the same integration key and tenant/profile scope as the intake feed. A
@@ -194,18 +194,23 @@ Manager checks the recorded native reference to the same procurement on Goszakup
 The preview links to that publication and uses its attachments. Downloads and
 confirmed original attachments retain the native Goszakupki document identity.
 
-When Manager loads these attachments, it automatically analyzes up to eight
-documents and shows an editable draft under **Что хочет заказчик**. Previously
-reviewed drafts open with their saved data. **Обработать ИИ** remains available
-to run a new analysis of a selected set of documents. Automatic analysis reuses
-the draft for the same order, tenant, storefront, model and input text for up to
-30 minutes in the active API process. Identical concurrent requests share a call,
-and at most two automatic calls can run in that process. The order scenario is suggested from the
-procurement title or AI work summary. Ambiguous text requires a manual choice.
-The manager can change the suggestion before saving. It does not set a proposal
-price from the procurement's estimated value.
+When the inbox review finds up to eight attachments, Manager analyzes them
+automatically and brings the work, equipment, addresses and customer into the
+same dialog. Previously reviewed drafts open with their saved data. The
+**Документы** section offers **Перечитать выбранные файлы** when a manager needs
+another selection. Requests with identical input text reuse the draft for the
+same order, tenant, storefront and model for up to 30 minutes in the active API
+process. Identical concurrent requests share a call and the process limits
+concurrent analyses to two.
 
-**Проверить оригиналы** downloads the selected originals from the same verified
+The review proposes a scenario from the procurement title or extracted scope.
+A relocation of the same unit uses **Работы** and preserves the dismantling,
+transfer and installation in the reviewed scope. A missing scenario or customer
+appears next to the action. **В переговоры** confirms the reviewed data and
+opens an editable proposal on the same order. The proposal starts without
+pricing from the tender budget.
+
+**Проверить полноту и цитаты** in **Документы** downloads the selected originals from the same verified
 publication. Manager shows per-file completeness and document quotes with page,
 Word fragment, spreadsheet row or ZIP member. Missing PDFs, pages with low OCR
 confidence, skipped archive members and analysis limits keep coverage partial.

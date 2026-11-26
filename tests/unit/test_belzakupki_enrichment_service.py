@@ -470,6 +470,14 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
         "services.belzakupki_enrichment_service.ServiceAttachmentService.create_and_link_order_attachment",
         storage,
     )
+    ensure_proposal = AsyncMock()
+    bump_revision = AsyncMock()
+    monkeypatch.setattr(
+        "services.belzakupki_enrichment_service.OrderService.ensure_default_proposal", ensure_proposal,
+    )
+    monkeypatch.setattr(
+        "services.belzakupki_enrichment_service.bump_order_workflow_revision", bump_revision,
+    )
     created: list[object] = []
 
     class Session:
@@ -477,6 +485,7 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
         execute = AsyncMock()
         scalar = AsyncMock()
         flush = AsyncMock()
+        refresh = AsyncMock()
         commit = AsyncMock()
 
         def add(self, item):
@@ -537,6 +546,8 @@ async def test_apply_links_customer_two_branches_and_original_once(monkeypatch):
     assert storage.await_count == 1
     assert document.await_count == 1
     assert order.workflow_type == "maintenance"
+    ensure_proposal.assert_awaited_once_with(session, order)
+    bump_revision.assert_awaited_once_with(session, order)
 
 
 @pytest.mark.asyncio

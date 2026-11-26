@@ -11,12 +11,15 @@ class OrderScenario(NamedTuple):
     hint: str = ""
 
 
+WORK_SCENARIO = OrderScenario("Работы", "service_work", None, "Вид работ можно уточнить позже")
+
+
 SCENARIOS = (
     OrderScenario("Продажа + монтаж", "sales_installation", "turnkey"),
     OrderScenario("Монтаж", "service_work", "install_only"),
     OrderScenario("Обслуживание", "maintenance", "maintenance"),
     OrderScenario("Ремонт", "repair", "repair"),
-    OrderScenario("Работы", "service_work", None, "Вид работ можно уточнить позже"),
+    WORK_SCENARIO,
     OrderScenario("Закладка трассы", "service_work", "pre_install"),
     OrderScenario("Демонтаж", "service_work", "dismantling"),
 )
@@ -61,12 +64,20 @@ _TASK_SCENARIO_PATTERNS = (
     ("dismantling", re.compile(r"\bдемонтаж\w*\b", re.I)),
 )
 
+_EQUIPMENT_RELOCATION = re.compile(
+    r"(?<!без )(?<!не )\bперен(?:ос\w*|ести)\s+(?:[а-яё-]+\s+){0,4}"
+    r"(?:кондиционер\w*|сплит[\s-]*систем\w*)\b",
+    re.I,
+)
+
 
 def infer_scenario_from_task(text: str | None) -> OrderScenario | None:
     """Suggest only a clear task; conflicting work descriptions need manager review."""
     value = " ".join(str(text or "").split())
     if not value:
         return None
+    if _EQUIPMENT_RELOCATION.search(value):
+        return WORK_SCENARIO
     matches = {service for service, pattern in _TASK_SCENARIO_PATTERNS if pattern.search(value)}
     sells_equipment = bool(re.search(
         r"\b(?:поставка|продажа|приобретение)(?:\s+\w+){0,8}\s+кондиционер\w*\b",

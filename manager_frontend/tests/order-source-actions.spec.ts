@@ -95,11 +95,25 @@ describe('Order source actions', () => {
     await wrapper.get('button[aria-expanded]').trigger('click');
     expect(wrapper.findAll('th').map((th) => th.text())).toEqual(['Модель', 'Шт.']);
     expect(wrapper.text()).toContain('Длина коммуникаций: 5 м, 8 м, 10 м');
-    expect(wrapper.find('details').attributes('open')).toBeUndefined();
+    expect(wrapper.text()).toContain('Условия и сроки поставки сохранены полностью');
     await wrapper.findAll('button').find((button) => button.text() === 'Техническое задание.pdf')!.trigger('click'); await flushPromises();
     expect(api.originalAccess).toHaveBeenCalledWith(126); expect(click).toHaveBeenCalledTimes(1);
     await wrapper.findAll('button').find((button) => button.text() === 'Проработать')!.trigger('click');
     expect(wrapper.emitted('review')).toHaveLength(1); click.mockRestore();
+  });
+
+  it('shows reviewed scope even when equipment has no structured model rows', async () => {
+    api.card.mockResolvedValueOnce({
+      order_id: 699, external_id: '3876716', title: 'Перенос кондиционера', objects: [], originals: [],
+      work_summary: 'Демонтировать и повторно установить сплит-систему.',
+      equipment_details: 'Одна сплит-система заказчика. Модель не указана.',
+    });
+    const wrapper = mount(OrderRequestSourceCard, { props: { orderId: 699 } });
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('0 шт.');
+    await wrapper.get('button[aria-expanded]').trigger('click');
+    expect(wrapper.text()).toContain('Демонтировать и повторно установить сплит-систему.');
+    expect(wrapper.text()).toContain('Одна сплит-система заказчика.');
   });
 });
 

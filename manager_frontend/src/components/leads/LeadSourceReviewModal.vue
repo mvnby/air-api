@@ -80,7 +80,18 @@ const customerInnError = computed(() => {
   if (!willSendCustomerDraft.value || !customer.value.inn?.trim()) return '';
   return /^\d{9}$/.test(normalizeUnp(customer.value.inn)) ? '' : 'УНП должен содержать ровно 9 цифр';
 });
-const canApply = computed(() => confirmed.value && !loading.value && !analyzing.value && !applying.value && Boolean(selectedScenario.value) && hasCustomerSelection.value && !customerInnError.value && (!isNewLead.value || customerAction.value !== 'skip'));
+const applyBlocker = computed(() => {
+  if (loading.value) return 'Загружаем данные закупки.';
+  if (analyzing.value) return 'Дождитесь разбора ТЗ.';
+  if (!preview.value) return '';
+  if (!selectedScenario.value) return 'Выберите сценарий заказа.';
+  if (!hasCustomerSelection.value || (isNewLead.value && customerAction.value === 'skip')) return 'Укажите заказчика.';
+  if (customerInnError.value) return customerInnError.value;
+  if (!isNewLead.value && !confirmed.value) return 'Подтвердите проверенные данные.';
+  return '';
+});
+const canApply = computed(() => Boolean(preview.value) && !applying.value && !applyBlocker.value);
+const addresses = computed(() => [...new Set(objects.value.map((item) => item.address.trim()).filter(Boolean))]);
 const chooseScenario = () => { scenarioChangedByManager.value = true; confirmed.value = false; };
 const safeExternalUrl = (value?: string | null) => {
   if (!value) return null;
@@ -155,14 +166,13 @@ const analyze = async (automatic = false) => {
   if (!selectedDocumentIds.value.length || analyzing.value || applying.value) return;
   if (draftsChanged.value && !analysisOverwriteConfirmed.value) {
     analysisOverwriteConfirmed.value = true;
-    analysisError.value = 'Черновик уже редактировался. Нажмите «Заменить черновик ИИ», если хотите заменить состав работ и объекты.';
     return;
   }
   analyzing.value = true;
   analysisError.value = '';
   const orderId = props.orderId; const version = scopeVersion;
   try {
-    const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value, automatic);
+    const analyzed = await orderSourceReviewApi.analyze(orderId, selectedDocumentIds.value, true);
     if (!sameScope(orderId, version) || (automatic && draftsChanged.value)) return;
     const customerKeys = ['name', 'inn', 'type', 'phone', 'email', 'legal_address', 'bank_name', 'bic', 'iban'] as const;
     for (const key of relatedCustomerSelected.value ? [] : customerKeys) {
@@ -185,7 +195,7 @@ const analyze = async (automatic = false) => {
     confirmed.value = false;
     preview.value = { ...preview.value!, customer: analyzed.customer, contacts: analyzed.contacts,
       related_customers: analyzed.related_customers, submission: analyzed.submission,
-      field_sources: analyzed.field_sources, warnings: analyzed.warnings };
+      field_sources: analyzed.field_sources, warnings: analyzed.warnings, documents: analyzed.documents };
     preview.value.suggested_scenario = analyzed.suggested_scenario;
     if (isNewLead.value && !scenarioChangedByManager.value) {
       scenarioKey.value = analyzed.suggested_scenario ? keyForScenario(analyzed.suggested_scenario) : '';
@@ -244,7 +254,8 @@ const load = async () => {
     resetFromPreview(source.value);
     if (scenarios.status === 'fulfilled') scenarioOptions.value = scenarios.value.items;
     else error.value = 'Не удалось загрузить сценарии заказов. Повторно откройте проработку.';
-    if (source.value.documents_source_url && source.value.analysis_source !== 'reviewed'
+    if ((isNewLead.value || source.value.documents_source_url)
+      && source.value.analysis_source !== 'reviewed' && source.value.analysis_source !== 'ai'
       && source.value.documents.length > 0 && source.value.documents.length <= 8) {
       void analyze(true);
     }
@@ -321,7 +332,7 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
   <div v-if="open" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" @click.self="close">
     <section class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900" role="dialog" aria-modal="true" aria-label="Проработка источника">
       <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
-        <div><h2 class="text-lg font-bold">Проработка источника</h2><p v-if="preview" class="mt-1 text-xs text-slate-500">{{ preview.source_code }} · {{ preview.external_id || 'без номера' }}</p>
+        <div><h2 class="text-lg font-bold">{{ isNewLead ? `Тендер #${orderId}` : 'Проработка источника' }}</h2>
           <p v-if="preview" class="mt-1 text-xs font-semibold text-slate-700">{{ submissionLabel }}<span v-if="submission.method === 'email' && submission.email"> · {{ submission.email }}</span><a v-else-if="submission.method === 'platform' && safeSubmissionUrl" :href="safeSubmissionUrl" target="_blank" rel="noopener noreferrer" class="ml-1 text-brand-700 underline">Открыть ЭТП</a></p>
           <p v-if="submission.source || submission.evidence" class="mt-1 max-w-xl text-xs text-slate-500">{{ [submission.source, submission.evidence].filter(Boolean).join(' · ') }}</p>
         </div>
@@ -333,25 +344,31 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
         <template v-if="preview">
           <div class="flex flex-wrap gap-3 text-sm">
             <a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">Открыть источник</a>
-            <a v-if="documentsSourceUrl" :href="documentsSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">ТЗ с Госзакупок</a>
-            <span v-if="preview.deadline_at">Срок: {{ new Date(preview.deadline_at).toLocaleDateString('ru-RU') }}</span>
+            <a v-if="documentsSourceUrl && documentsSourceUrl !== safeSourceUrl" :href="documentsSourceUrl" target="_blank" rel="noopener noreferrer" class="font-semibold text-brand-700 underline">ТЗ с Госзакупок</a>
+            <span v-if="preview.deadline_at">
+              Приём до {{ new Date(preview.deadline_at).toLocaleString('ru-RU', {
+                timeZone: 'Europe/Minsk', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+              }) }} по Минску
+            </span>
           </div>
-          <p v-if="preview.title" class="mt-2 font-semibold">{{ preview.title }}</p>
+          <p v-if="preview.title && (analyzing || !workSummary)" class="mt-2 font-semibold">{{ preview.title }}</p>
           <section class="mt-4" aria-labelledby="source-work-heading">
             <h3 id="source-work-heading" class="text-sm font-semibold">Что хочет заказчик</h3>
             <p v-if="analyzing" role="status" class="mt-2 text-xs text-slate-500">Читаем выбранные документы и готовим черновик требований.</p>
             <p v-if="analysisError" role="alert" class="mt-2 text-sm text-red-700">{{ analysisError }}</p>
-            <label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label>
-            <label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label>
-            <TenderOriginalEvidencePanel
-              v-if="preview.documents.length"
-              :order-id="orderId"
-              :document-ids="selectedDocumentIds"
-              :disabled="analyzing || applying"
-              :downloading="Boolean(downloadingDocumentId)"
-              @download="downloadEvidenceOriginal"
-            />
-            <p v-else class="mt-2 text-xs text-slate-500">Перечень оригиналов в источнике пуст. Полнота ТЗ неизвестна.</p>
+            <template v-if="!analyzing">
+              <p v-if="workSummary" class="mt-2 whitespace-pre-line text-sm">{{ documentExcerpt(workSummary) }}</p>
+              <p v-else class="mt-2 text-sm text-slate-500">Состав работ нужно уточнить по источнику.</p>
+              <p v-if="equipmentDetails" class="mt-2 line-clamp-3 text-sm">{{ documentExcerpt(equipmentDetails) }}</p>
+              <ul v-if="addresses.length" class="mt-2 list-disc space-y-1 pl-5 text-sm">
+                <li v-for="address in addresses.slice(0, 3)" :key="address">{{ address }}</li>
+              </ul>
+            </template>
+            <details class="mt-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <summary class="cursor-pointer text-sm font-semibold">Уточнить состав и оборудование</summary>
+              <label class="mt-2 block text-xs">Состав · {{ sourceFor('work_summary') }}<textarea v-model="workSummary" class="field-input mt-1 min-h-20" placeholder="Состав работ" @input="markDraftChanged('work_summary')" /></label>
+              <label class="mt-2 block text-xs">Оборудование · {{ sourceFor('equipment_details') }}<textarea v-model="equipmentDetails" class="field-input mt-1 min-h-16" placeholder="Оборудование" @input="markDraftChanged('equipment_details')" /></label>
+            </details>
           </section>
           <div v-if="preview.warnings.length" class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{{ preview.warnings.join(' ') }}</div>
           <div v-if="preview.equipment_prefill" class="mt-3 text-sm" aria-label="Результат переноса оборудования">
@@ -371,7 +388,11 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
           <p v-else-if="isNewLead" class="mt-1 text-xs text-amber-700">Сценарий не удалось определить однозначно. Выберите его вручную.</p>
           <p v-if="selectedScenario?.workflow_type === 'sales_installation'" class="mt-2 text-xs text-slate-500">При сохранении полные модели с единственным точным совпадением и достаточным наличием добавятся в черновик по текущей цене каталога. Количество по объектам суммируется; остальные позиции останутся для ручного подбора. Остаток не резервируется. Монтаж добавляется отдельно в предложении.</p>
 
-          <section class="mt-4"><h3 class="text-sm font-semibold">Клиент</h3>
+          <section class="mt-4"><h3 class="text-sm font-semibold">Заказчик</h3>
+            <p class="mt-1 text-sm">{{ (customerAction === 'existing' ? selectedExistingCustomer?.name : customer.name) || 'Укажите заказчика' }}</p>
+            <p v-if="isNewLead && customerAction === 'create' && customer.name" class="mt-1 text-xs text-slate-500">Карточка заказчика будет создана при переводе.</p>
+            <details class="mt-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <summary class="cursor-pointer text-sm font-semibold">Выбор заказчика и реквизиты</summary>
             <div class="mt-2 flex flex-wrap gap-2">
               <button type="button" class="btn-mini-outline text-xs" @click="selectMainCustomer">Основной заказчик · {{ preview.customer.name || 'без названия' }}</button>
               <button v-for="(candidate, index) in relatedCustomers" :key="`related-${index}`" type="button" class="btn-mini-outline text-xs" @click="selectRelatedCustomer(candidate)">{{ candidate.name || 'Связанный заказчик' }}{{ candidate.inn ? ` · УНП ${candidate.inn}` : '' }}</button>
@@ -400,10 +421,12 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
               <label class="text-xs">БИК · {{ sourceFor('customer.bic') }}<input v-model="customer.bic" class="field-input mt-1" placeholder="БИК" @input="markCustomerChanged('customer.bic')" /></label>
               <label class="text-xs">IBAN · {{ sourceFor('customer.iban') }}<input v-model="customer.iban" class="field-input mt-1" placeholder="BY…" @input="markCustomerChanged('customer.iban')" /></label>
             </div>
+            </details>
           </section>
 
-          <section class="mt-4">
-            <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold">Объекты</h3><button type="button" class="btn-mini-outline text-xs" @click="addObject">Добавить объект</button></div>
+          <details class="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <summary class="cursor-pointer text-sm font-semibold">Адреса и оборудование по объектам<span v-if="addresses.length > 3"> · {{ addresses.length }}</span></summary>
+            <div class="mt-2 flex justify-end"><button type="button" class="btn-mini-outline text-xs" @click="addObject">Добавить объект</button></div>
             <div v-for="(object, index) in objects" :key="index" class="mt-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <p class="mb-1 text-xs text-slate-500">Адрес · {{ sourceFor(`objects.${index}.address`) }}</p>
               <div class="flex gap-2"><input v-model="object.address" class="field-input min-w-0 flex-1" :aria-label="`Адрес объекта ${index + 1}`" placeholder="Адрес объекта" @input="markDraftChanged(`objects.${index}.address`)" /><button type="button" class="btn-mini-outline text-xs" :aria-label="`Удалить объект ${index + 1}`" @click="removeObject(index)">Удалить</button></div>
@@ -417,12 +440,41 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
               <button type="button" class="mt-2 text-xs font-semibold text-brand-700" @click="addEquipment(object)">Добавить оборудование</button>
             </div>
             <p v-if="!objects.length" class="mt-2 text-sm text-slate-500">Объекты не извлечены из источника.</p>
-          </section>
-          <section class="mt-4"><h3 class="text-sm font-semibold">Исходные документы</h3><label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700"><input v-model="selectedDocumentIds" type="checkbox" :value="document.id" /><span class="min-w-0"><button v-if="safeDocumentUrl(document.download_url)" type="button" :disabled="Boolean(downloadingDocumentId)" class="break-all text-left font-semibold text-brand-700 underline" @click.prevent="downloadDocument(document)">{{ downloadingDocumentId === document.id ? 'Скачиваем…' : document.name }}</button><span v-else class="font-semibold">{{ document.name }}</span><span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span><button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button></span></label></section>
-          <div class="mt-4"><button type="button" class="btn-mini-outline text-xs" :disabled="!selectedDocumentIds.length || selectedDocumentIds.length > 8 || analyzing" @click="analyze()">{{ analyzing ? 'Обрабатываем ИИ…' : analysisOverwriteConfirmed ? 'Заменить черновик ИИ' : 'Обработать ИИ' }}</button><p v-if="selectedDocumentIds.length > 8" class="mt-1 text-xs text-slate-500">Выберите до восьми документов для разбора.</p></div><label class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных.</label>
+          </details>
+          <details v-if="preview.documents.length" class="mt-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <summary class="cursor-pointer text-sm font-semibold">Документы · {{ preview.documents.length }}</summary>
+            <label v-for="document in preview.documents" :key="document.id" class="mt-2 flex gap-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <input v-model="selectedDocumentIds" type="checkbox" :value="document.id" :disabled="analyzing || applying" />
+              <span class="min-w-0">
+                <button v-if="safeDocumentUrl(document.download_url)" type="button" :disabled="Boolean(downloadingDocumentId)" class="break-all text-left font-semibold text-brand-700 underline" @click.prevent="downloadDocument(document)">{{ downloadingDocumentId === document.id ? 'Скачиваем…' : document.name }}</button>
+                <span v-else class="font-semibold">{{ document.name }}</span>
+                <span v-if="document.extracted_text" class="mt-1 block whitespace-pre-line text-xs text-slate-500">{{ expandedDocuments[document.id] ? document.extracted_text : documentExcerpt(document.extracted_text) }}</span>
+                <button v-if="document.extracted_text && document.extracted_text.length > 1200" type="button" class="mt-1 text-xs font-semibold text-brand-700" @click="expandedDocuments[document.id] = !expandedDocuments[document.id]">{{ expandedDocuments[document.id] ? 'Свернуть' : 'Показать полностью' }}</button>
+              </span>
+            </label>
+            <button type="button" data-testid="reread-tender-documents" class="btn-mini-outline mt-3 text-xs" :disabled="!selectedDocumentIds.length || selectedDocumentIds.length > 8 || analyzing || applying" @click="analyze()">{{ analysisOverwriteConfirmed ? 'Заменить черновик из ТЗ' : 'Перечитать выбранные файлы' }}</button>
+            <p v-if="analysisOverwriteConfirmed" role="status" class="mt-1 text-xs text-amber-700">Повторный разбор заменит ваши правки в составе работ, оборудовании и адресах.</p>
+            <p v-if="selectedDocumentIds.length > 8" class="mt-1 text-xs text-slate-500">Выберите до восьми документов для разбора.</p>
+            <TenderOriginalEvidencePanel
+              :order-id="orderId"
+              :document-ids="selectedDocumentIds"
+              :disabled="analyzing || applying"
+              :downloading="Boolean(downloadingDocumentId)"
+              @download="downloadEvidenceOriginal"
+            />
+          </details>
+          <p v-else class="mt-3 text-xs text-slate-500">Перечень оригиналов в источнике пуст. Полнота ТЗ неизвестна.</p>
+          <label v-if="!isNewLead" class="mt-5 flex gap-2 text-sm"><input v-model="confirmed" type="checkbox" />Подтверждаю применение проверенных данных.</label>
         </template>
       </div>
-      <footer class="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700"><button type="button" class="btn-mini-outline" @click="emit('close')">Отмена</button><button type="button" class="btn-mini" :disabled="!canApply" @click="apply">{{ applying ? 'Применяем…' : 'Применить' }}</button></footer>
+      <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">
+        <p v-if="applyBlocker" id="tender-apply-blocker" aria-live="polite" class="mr-auto text-sm text-slate-600 dark:text-slate-300">{{ applyBlocker }}</p>
+        <p v-else-if="isNewLead && canApply" class="mr-auto text-sm text-slate-600 dark:text-slate-300">После перевода откроется черновик предложения.</p>
+        <button type="button" class="btn-mini-outline" :disabled="applying" @click="close">Отмена</button>
+        <button type="button" class="btn-mini" :disabled="!canApply" :aria-describedby="applyBlocker ? 'tender-apply-blocker' : undefined" @click="apply">
+          {{ applying ? 'Сохраняем…' : isNewLead ? 'В переговоры' : 'Сохранить' }}
+        </button>
+      </footer>
     </section>
   </div>
 </template>
