@@ -46,6 +46,7 @@ from .bot_voice import BotVoiceTranscriptionAudit
 from .storefront_settings import StorefrontSettings
 from .tender_module import TenantTenderModule
 from .tender_market import TenderMarketCheckpoint, TenderMarketPublication
+from .tender_market_evidence import TenderMarketEvidence
 from .yandex_business import YandexBusinessFeedSettings
 from .auth_security import AuthLoginThrottle
 from .analytics_connection import AnalyticsConnection

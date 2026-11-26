@@ -202,6 +202,7 @@ class SchedulerService:
         tasks.append(asyncio.create_task(self._belzakupki_import_loop()))
         if settings.BELZAKUPKI_TENDER_MARKET_ENABLED:
             tasks.append(asyncio.create_task(self._tender_market_sync_loop()))
+            tasks.append(asyncio.create_task(self._tender_market_evidence_loop()))
         tasks.append(asyncio.create_task(self._jev_shadow_loop()))
 
         try:
@@ -724,5 +725,17 @@ class SchedulerService:
             except Exception as error:
                 logger.warning("Tender market synchronization failed: %s", type(error).__name__)
             await asyncio.sleep(interval)
+
+    async def _tender_market_evidence_loop(self):
+        from services.tender_market_evidence_service import TenderMarketEvidenceService
+        from services.tender_market_sync_service import TenderMarketSyncService
+
+        while True:
+            try:
+                if TenderMarketSyncService.enabled():
+                    await TenderMarketEvidenceService.run_one()
+            except Exception as error:
+                logger.warning("Tender market evidence worker failed: %s", type(error).__name__)
+            await asyncio.sleep(5)
 
 scheduler_service = SchedulerService()

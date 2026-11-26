@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ManagerTenderModuleService, type TenderMarketItem, type TenderMarketResults } from '../client';
+import TenderMarketEvidencePanel from '../features/tenders/TenderMarketEvidencePanel.vue';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 defineProps<{ canManageSettings?: boolean }>();
@@ -10,6 +11,7 @@ const rows = ref<TenderMarketItem[]>([]);
 const result = ref<TenderMarketResults | null>(null);
 const loading = ref(false);
 const error = ref('');
+const openEvidenceId = ref<number | null>(null);
 const nextId = computed(() => result.value?.next_before_id);
 const portalName: Record<string, string> = {
   goszakupki_by: 'Госзакупки',
@@ -36,7 +38,10 @@ async function load(more = false) {
   const requestVersion = ++version;
   loading.value = true;
   error.value = '';
-  if (!more) rows.value = [];
+  if (!more) {
+    rows.value = [];
+    openEvidenceId.value = null;
+  }
   try {
     const page = await ManagerTenderModuleService.listManagerTenderMarket(
       mode.value, profile.value || undefined, more ? nextId.value ?? undefined : undefined,
@@ -91,6 +96,10 @@ onBeforeUnmount(() => { version++; });
           {{ portalName[row.source] || row.source }}<span v-if="row.deadline_at"> · До {{ formatDate(row.deadline_at) }}</span>
         </p>
         <p class="mt-2 text-xs">{{ row.profiles.map((item) => item.name).join(' · ') }}</p>
+        <button type="button" class="btn-mini-outline mt-2"
+          :aria-expanded="openEvidenceId === row.id" @click="openEvidenceId = openEvidenceId === row.id ? null : row.id"
+        >ТЗ и оригиналы</button>
+        <TenderMarketEvidencePanel v-if="openEvidenceId === row.id" :publication-id="row.id" />
       </li>
     </ul>
     <button v-if="nextId && !error" type="button" class="btn-mini-outline" :disabled="loading" @click="load(true)">Следующие публикации</button>

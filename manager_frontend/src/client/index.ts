@@ -1058,6 +1058,7 @@ export type { TemplateExternalEditSyncResponse } from './models/TemplateExternal
 export type { TenderEvidence } from './models/TenderEvidence';
 export type { TenderLeadPushResult } from './models/TenderLeadPushResult';
 export type { TenderLotMatch } from './models/TenderLotMatch';
+export type { TenderMarketEvidenceResult } from './models/TenderMarketEvidenceResult';
 export type { TenderMarketItem } from './models/TenderMarketItem';
 export type { TenderMarketProfileMatch } from './models/TenderMarketProfileMatch';
 export type { TenderMarketResults } from './models/TenderMarketResults';

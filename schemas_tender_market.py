@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
+from schemas_manager_tender_evidence import ManagerTenderEvidenceReport
 from schemas_tender_search import TenderLotMatch
 
 
@@ -55,3 +56,11 @@ class TenderMarketResults(BaseModel):
     profile_names: list[str]
     last_sync_at: AwareDatetime | None = None
     syncing: bool = False
+
+
+class TenderMarketEvidenceResult(BaseModel):
+    status: Literal["unrequested", "queued", "reading", "completed", "failed"]
+    checked_at: AwareDatetime | None = None
+    documents_source_url: str | None = None
+    report: ManagerTenderEvidenceReport | None = None
+    error: str | None = None

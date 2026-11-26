@@ -34012,6 +34012,102 @@
         }
       }
     },
+    "/api/manager/tender-market/{publication_id}/evidence": {
+      "get": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Get Manager Tender Market Evidence",
+        "description": "Read the public original verification receipt for a publication visible to the active company.",
+        "operationId": "get_manager_tender_market_evidence",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderMarketEvidenceResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "manager-tender-module"
+        ],
+        "summary": "Request Manager Tender Market Evidence",
+        "description": "Start or reuse a bounded original verification for a publication visible to the active company.",
+        "operationId": "request_manager_tender_market_evidence",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderMarketEvidenceResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/tender-module": {
       "get": {
         "tags": [
@@ -110402,6 +110498,70 @@
           "reason"
         ],
         "title": "TenderLotMatch"
+      },
+      "TenderMarketEvidenceResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unrequested",
+              "queued",
+              "reading",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "documents_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documents Source Url"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerTenderEvidenceReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "TenderMarketEvidenceResult"
       },
       "TenderMarketItem": {
         "properties": {

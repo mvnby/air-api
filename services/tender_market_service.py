@@ -7,6 +7,7 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.tender_market import TenderMarketDAO
+from models import TenderMarketPublication
 from models.tenancy import TenantScope
 from schemas_tender_market import TenderMarketItem, TenderMarketProfileMatch, TenderMarketResults
 from services.tender_module_service import TenderModuleError, TenderModuleService
@@ -40,6 +41,20 @@ def _matching_batch(rows, profiles, desired: str, limit: int):
 
 
 class TenderMarketService:
+    @staticmethod
+    async def visible_publication(session: AsyncSession, scope: TenantScope, publication_id: int) -> TenderMarketPublication:
+        settings = await TenderModuleService.get(session, scope.tenant_id)
+        if scope.demo_read_only or not settings.enabled or not settings.entitled:
+            raise TenderModuleError(403, "Подключите модуль тендеров в настройках компании.")
+        row = await TenderMarketDAO.get(session, publication_id)
+        if (row is None or not row.active or row.deadline_at and _aware(row.deadline_at) <= datetime.now(timezone.utc)
+                or not await asyncio.to_thread(_decide, row, settings.profiles)):
+            raise TenderModuleError(404, "Публикация недоступна для профилей компании.")
+        current = await TenderModuleService.get(session, scope.tenant_id)
+        if current.version != settings.version or not current.enabled or not current.entitled:
+            raise TenderModuleError(409, "Настройки модуля изменились. Обновите выдачу.")
+        return row
+
     @staticmethod
     async def list(
         session: AsyncSession, scope: TenantScope, *, desired: Literal["match", "review"],

@@ -12,18 +12,22 @@ from services.tender_search_matcher import match_tender_lot
 _DIRECTIONS = {
     "air_conditioning": r"(?:кондиционер\w*|кондиционировани\w*|сплит[\s-]*систем\w*)",
     "ventilation": r"(?:вентиляц\w*|вентиляционн\w+\s+(?:оборудовани\w*|систем\w*))",
-    "refrigeration": r"(?:холодильник\w*|холодильн\w+\s+(?:оборудовани\w*|камер\w*|шкаф\w*|агрегат\w*|установк\w*))",
+    "refrigeration": r"(?:холодильник\w*|холодильн\w+\s+(?:оборудовани\w*|камер\w*|шкаф\w*|агрегат\w*|установк\w*)|оборудовани\w*\s+холодильн\w*)",
 }
 _DIRECTION_PATTERNS = {key: re.compile(rf"\b{value}\b", re.I) for key, value in _DIRECTIONS.items()}
 _WORK_PATTERNS = {key: _scope_patterns(value) for key, value in _DIRECTIONS.items()}
+_VENTILATION_INSTALLATION = re.compile(
+    r"\bработ\w*\s+по\s+устройств\w*\s+(?:систем\w*\s+)?вентиляц\w*\b", re.I,
+)
+_OBLAST = r"обл(?:аст\w*)?\b"
 _REGION_PATTERNS = {
-    "1": r"\bбрестск\w+ област\w*\b|\b(?:г )?брест\b",
-    "2": r"\bвитебск\w+ област\w*\b|\b(?:г )?витебск\b",
-    "3": r"\bгомельск\w+ област\w*\b|\b(?:г )?гомель\b",
-    "4": r"\bгродненск\w+ област\w*\b|\b(?:г )?гродно\b",
+    "1": rf"\bбрестск\w+ {_OBLAST}|\b(?:г )?брест\b",
+    "2": rf"\bвитебск\w+ {_OBLAST}|\b(?:г )?витебск\b",
+    "3": rf"\bгомельск\w+ {_OBLAST}|\b(?:г )?гомель\b",
+    "4": rf"\bгродненск\w+ {_OBLAST}|\b(?:г )?гродно\b",
     "5": r"\b(?:г )?минск\b",
-    "6": r"\bминск\w+ област\w*\b",
-    "7": r"\bмогилевск\w+ област\w*\b|\b(?:г )?могилев\b",
+    "6": rf"\bминск\w+ (?:{_OBLAST}|район\w*\b|р н\b)",
+    "7": rf"\bмогилевск\w+ {_OBLAST}|\b(?:г )?могилев\b",
 }
 
 
@@ -53,6 +57,8 @@ def _classify(title: str, enrichment: dict) -> TenderLotSignals:
             continue
         for direction in directions:
             found = {kind for kind, pattern in _WORK_PATTERNS[direction].items() if pattern.search(clause)}
+            if direction == "ventilation" and _VENTILATION_INSTALLATION.search(clause):
+                found.add("installation")
             if not found:
                 continue
             confirmed_directions.add(direction)

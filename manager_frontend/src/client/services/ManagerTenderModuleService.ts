@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { TenderMarketEvidenceResult } from '../models/TenderMarketEvidenceResult';
 import type { TenderMarketResults } from '../models/TenderMarketResults';
 import type { TenderModuleAccess } from '../models/TenderModuleAccess';
 import type { TenderModuleEntitlementUpdate } from '../models/TenderModuleEntitlementUpdate';
@@ -44,6 +45,48 @@ export class ManagerTenderModuleService {
                 'before_id': beforeId,
                 'settings_version': settingsVersion,
                 'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Tender Market Evidence
+     * Read the public original verification receipt for a publication visible to the active company.
+     * @param publicationId
+     * @returns TenderMarketEvidenceResult Successful Response
+     * @throws ApiError
+     */
+    public static getManagerTenderMarketEvidence(
+        publicationId: number,
+    ): CancelablePromise<TenderMarketEvidenceResult> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/tender-market/{publication_id}/evidence',
+            path: {
+                'publication_id': publicationId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Request Manager Tender Market Evidence
+     * Start or reuse a bounded original verification for a publication visible to the active company.
+     * @param publicationId
+     * @returns TenderMarketEvidenceResult Successful Response
+     * @throws ApiError
+     */
+    public static requestManagerTenderMarketEvidence(
+        publicationId: number,
+    ): CancelablePromise<TenderMarketEvidenceResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/tender-market/{publication_id}/evidence',
+            path: {
+                'publication_id': publicationId,
             },
             errors: {
                 422: `Validation Error`,

@@ -12,6 +12,7 @@ class TenderMarketPublication(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_tender_market_native_identity"),
         Index("ix_tender_market_active_page", "active", "id"),
+        Index("ix_tender_market_canonical_active", "canonical_url", "active", "id"),
     )
 
     id: int | None = Field(default=None, primary_key=True)

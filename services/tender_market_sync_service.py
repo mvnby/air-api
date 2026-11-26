@@ -123,7 +123,7 @@ class TenderMarketSyncService:
             if updated is None or item.updated_at >= _as_utc(updated):
                 row.title = item.title
                 row.source_url = source_url
-                row.canonical_url = canonical_procurement_url(item.canonical_url)
+                row.canonical_url = canonical_procurement_url(item.canonical_url if item.source == "gias_by" else source_url)
                 row.provider_updated_at = item.updated_at
                 row.published_at = item.published_at
                 row.deadline_at = item.deadline_at

@@ -56,3 +56,19 @@ def test_saved_native_lots_keep_exclusions_and_execution_places_independent():
     (item,) = preview.items
     assert item.result.state == "match" and item.result.lot_key == "1"
     assert [(lot.lot_key, lot.reason) for lot in item.lots] == [("1", "eligible"), ("2", "different_place")]
+
+
+def test_explicit_ventilation_work_and_abbreviated_region_are_not_dropped():
+    title = "Выполнение строительно-монтажных работ по устройству вентиляции и изоляции"
+    profile = TenderSearchProfile(
+        name="Вентиляция в области", included_directions=["ventilation"],
+        included_places=[TenderPlace(region="2")], activity_combinations=[["installation"]],
+    )
+    (found,) = preview_tender_profile([
+        row(1, title, address="Витебская обл., аг. Мазолово, ул. Мелиораторов, 7А"),
+    ], profile).items
+    assert found.result.state == "match"
+    (excluded,) = preview_tender_profile([
+        row(1, title, address="Витебская обл., аг. Мазолово, ул. Мелиораторов, 7А"),
+    ], TenderSearchProfile(name="Без вентиляции", excluded_directions=["ventilation"])).items
+    assert excluded.result.reason == "excluded_direction"

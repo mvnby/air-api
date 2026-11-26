@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session
@@ -11,19 +11,21 @@ from core.security import (
 )
 from routers import manager_operation_ids as operation_ids
 from routers.manager_platform_companies import require_company_origin
-from schemas_tender_market import TenderMarketResults
+from schemas_tender_market import TenderMarketEvidenceResult, TenderMarketResults
 from schemas_tender_search import (
     TenderModuleAccess, TenderModuleEntitlementUpdate, TenderModuleSettings, TenderModuleUpdate,
     TenderProfilePreview, TenderSearchProfile,
 )
 from services.tender_module_service import TenderModuleError, TenderModuleService
 from services.tender_market_service import TenderMarketService
+from services.tender_market_evidence_service import TenderMarketEvidenceService
 
 router = APIRouter(prefix="/api/manager", tags=["manager-tender-module"])
 
 
 @router.get("/tender-market", response_model=TenderMarketResults, operation_id=operation_ids.LIST_MANAGER_TENDER_MARKET)
 async def list_manager_tender_market(
+    response: Response,
     desired: Literal["match", "review"] = "match",
     profile: str | None = Query(None, min_length=1, max_length=96),
     before_id: int | None = Query(None, gt=0), settings_version: int | None = Query(None, ge=0),
@@ -36,11 +38,44 @@ async def list_manager_tender_market(
     rules version and a cursor for the next bounded candidate scan. A profile
     change returns 409 for a stale cursor. Reading does not create CRM records.
     """
+    response.headers["Cache-Control"] = "private, no-store"
     try:
         return await TenderMarketService.list(
             session, auth.tenant_scope(), desired=desired, profile_name=profile,
             before_id=before_id, settings_version=settings_version, limit=limit,
         )
+    except TenderModuleError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+@router.get(
+    "/tender-market/{publication_id}/evidence", response_model=TenderMarketEvidenceResult,
+    operation_id=operation_ids.GET_MANAGER_TENDER_MARKET_EVIDENCE,
+)
+async def get_manager_tender_market_evidence(
+    response: Response, publication_id: int = Path(gt=0),
+    session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access),
+):
+    """Read the public original verification receipt for a publication visible to the active company."""
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return await TenderMarketEvidenceService.get(session, auth.tenant_scope(), publication_id)
+    except TenderModuleError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+@router.post(
+    "/tender-market/{publication_id}/evidence", response_model=TenderMarketEvidenceResult,
+    operation_id=operation_ids.REQUEST_MANAGER_TENDER_MARKET_EVIDENCE, dependencies=[Depends(require_company_origin)],
+)
+async def request_manager_tender_market_evidence(
+    response: Response, publication_id: int = Path(gt=0),
+    session: AsyncSession = Depends(get_session), auth: AuthenticatedUser = Depends(require_manager_access),
+):
+    """Start or reuse a bounded original verification for a publication visible to the active company."""
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return await TenderMarketEvidenceService.request(session, auth.tenant_scope(), publication_id)
     except TenderModuleError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 
