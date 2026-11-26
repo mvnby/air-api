@@ -56,7 +56,7 @@ watch(() => props.sourceEnrichment, () => { void load(); });
     <div class="flex items-center justify-between gap-2">
       <button type="button" class="min-w-0 text-left" :aria-expanded="expanded" @click="expanded = !expanded">
         <span class="block font-semibold">Заявка {{ card ? `№${card.external_id}` : '' }}</span>
-        <span v-if="card" class="block text-xs text-slate-500">{{ unitCount }} шт. · {{ card.originals.length }} {{ card.originals.length === 1 ? 'файл' : 'файла' }} · {{ expanded ? 'Свернуть' : 'Подробности' }}</span>
+        <span v-if="card" class="block text-xs text-slate-500"><template v-if="unitCount > 0">{{ unitCount }} шт. · </template>{{ card.originals.length }} {{ card.originals.length === 1 ? 'файл' : 'файла' }} · {{ expanded ? 'Свернуть' : 'Подробности' }}</span>
       </button>
       <button type="button" class="shrink-0 text-xs font-semibold text-brand-700" @click="review">Проработать</button>
     </div>
@@ -69,10 +69,12 @@ watch(() => props.sourceEnrichment, () => { void load(); });
     <div v-if="expanded && card" class="mt-3 space-y-3">
       <p v-if="card.title" class="text-xs text-slate-600">{{ card.title }}</p>
       <a v-if="safeSourceUrl" :href="safeSourceUrl" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-brand-700 underline">Открыть закупку</a>
+      <div v-if="card.work_summary || card.equipment_details" class="space-y-1 whitespace-pre-line break-words text-xs text-slate-600">
+        <p v-if="card.work_summary">{{ card.work_summary }}</p>
+        <p v-if="card.equipment_details">{{ card.equipment_details }}</p>
+      </div>
       <table v-if="equipment.length" class="w-full text-left text-xs"><thead><tr><th class="pb-2 font-semibold">Модель</th><th class="pb-2 text-right font-semibold">Шт.</th></tr></thead><tbody><tr v-for="(item, index) in equipment" :key="index" class="border-t border-slate-100 align-top"><td class="py-2 pr-2 break-words">{{ [item.brand, item.model].filter(Boolean).join(' ') || 'Модель не указана' }}</td><td class="py-2 text-right">{{ item.quantity ?? '—' }}</td></tr></tbody></table>
-      <p v-else class="text-xs text-slate-500">Проверьте модели и количество в проработке источника.</p>
       <div v-if="card.installation_facts?.length"><p class="text-xs font-semibold">Монтаж по заявке</p><p class="mt-1 text-xs text-slate-500">Сверить по объектам и оригиналам. Длины трасс здесь не меняют цену монтажа автоматически.</p><ul class="mt-2 space-y-1 text-xs text-slate-600"><li v-for="(fact, index) in card.installation_facts" :key="index"><span v-if="fact.is_excerpt">Фрагмент: </span>{{ fact.text }}</li></ul></div>
-      <details v-if="card.work_summary || card.equipment_details" class="text-xs"><summary class="cursor-pointer font-semibold">Текст заявки</summary><p v-if="card.work_summary" class="mt-2 whitespace-pre-line break-words text-slate-600">{{ card.work_summary }}</p><p v-if="card.equipment_details" class="mt-2 whitespace-pre-line break-words text-slate-600">{{ card.equipment_details }}</p></details>
       <div><p class="mb-1 text-xs font-semibold">Исходные файлы</p><button v-for="file in card.originals" :key="file.attachment_id" type="button" :disabled="Boolean(downloadingId)" class="mt-1 block w-full break-all text-left text-xs font-medium text-brand-700 underline" @click="download(file)">{{ downloadingId === file.attachment_id ? 'Скачиваем…' : file.name }}</button><p v-if="!card.originals.length" class="text-xs text-slate-500">Выберите оригиналы в проработке источника и сохраните заявку.</p></div>
     </div>
   </section>
