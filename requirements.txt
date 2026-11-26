@@ -84,6 +84,9 @@ Pygments==2.19.2
 PyJWT==2.11.0
 pymatting==1.1.15
 pypdf==6.4.1
+openpyxl==3.1.5
+xlrd==2.0.2
+striprtf==0.0.35
 reportlab==4.4.10
 pytesseract==0.3.13
 pyparsing==3.3.1

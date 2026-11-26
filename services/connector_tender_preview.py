@@ -73,6 +73,7 @@ async def source_inventory(session, scope, order_id, source_reference=None):
         data = {}
         warnings.append("Свежая карточка источника недоступна. Показаны данные, сохранённые в Kitlane.")
     docs, complete = _doc_inventory(data.get("documents"), card.originals)
+    complete = complete and data.get("document_inventory_complete") is not False
     if not complete:
         warnings.append("Полнота перечня оригиналов не подтверждена.")
     tender = tender_snapshot_for_reference(order, identity)

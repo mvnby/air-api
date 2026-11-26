@@ -32,6 +32,8 @@ import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayl
 import type { ManagerOrderWaitingCommand } from '../models/ManagerOrderWaitingCommand';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
 import type { ManagerStaleWorkStageListResponse } from '../models/ManagerStaleWorkStageListResponse';
+import type { ManagerTenderEvidenceInput } from '../models/ManagerTenderEvidenceInput';
+import type { ManagerTenderEvidenceJob } from '../models/ManagerTenderEvidenceJob';
 import type { OrderProposalCreatePayload } from '../models/OrderProposalCreatePayload';
 import type { OrderProposalUpdatePayload } from '../models/OrderProposalUpdatePayload';
 import type { OrderWorkStageCreatePayload } from '../models/OrderWorkStageCreatePayload';
@@ -1118,6 +1120,64 @@ export class ManagerOrdersService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Manager Order Source Evidence Job
+     * Start read-only verification of up to eight originals from the verified source inventory.
+     *
+     * Requires the live platform owner in the system company and an order in the
+     * selected storefront. Returns 202 with a job ID. Identical selections share
+     * an active job. Returns 404 for an inaccessible order and 429 when both
+     * workers are busy. Verification does not save or apply CRM data.
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerTenderEvidenceJob Successful Response
+     * @throws ApiError
+     */
+    public static startManagerOrderSourceEvidenceJob(
+        orderId: number,
+        requestBody: ManagerTenderEvidenceInput,
+    ): CancelablePromise<ManagerTenderEvidenceJob> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/source-evidence-jobs',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Manager Order Source Evidence Job
+     * Read progress or original evidence for a verification job in the same scope.
+     *
+     * The live platform owner must still have access to the order. A missing,
+     * expired or out-of-scope job returns 404. Finished reports expire after
+     * 30 minutes, subject to the active process cache limit. Polling is read-only.
+     * @param orderId
+     * @param jobId
+     * @returns ManagerTenderEvidenceJob Successful Response
+     * @throws ApiError
+     */
+    public static getManagerOrderSourceEvidenceJob(
+        orderId: number,
+        jobId: string,
+    ): CancelablePromise<ManagerTenderEvidenceJob> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/manager/orders/{order_id}/source-evidence-jobs/{job_id}',
+            path: {
+                'order_id': orderId,
+                'job_id': jobId,
+            },
             errors: {
                 422: `Validation Error`,
             },

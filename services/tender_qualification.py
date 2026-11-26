@@ -67,7 +67,9 @@ _PATTERNS = {
                            r"\b(?:то\b|обслуживание)\s+(?:с|до|в течение)\s+\d",
     "execution_address": r"\b(?:адрес\w*|место)\s+(?:(?:места|фактическ\w+)\s+)?"
                          r"(?:(?:выполнени[яе]|оказани[яе]|проведени[яе])\s+(?:работ|услуг|монтаж\w*)|"
-                         r"(?:установк[аи]|монтаж\w*)(?:\s+оборудования)?)\b|"
+                         r"(?:установк[аи]|монтаж\w*)(?:\s+оборудования)?|"
+                         r"(?:поставк\w*|доставк\w*)\s+(?:товар\w*|оборудован\w*)(?:\s*\([^)]{0,120}\))?)"
+                         r"(?=\W|$)|"
                          r"\bадрес\w*\s+объект\w*|\b(?:работы|монтаж|то)\s+(?:выполня\w*\s+)?по адресу\b",
     "installation_lines": r"\b(?:трасс\w*|межблочн\w*|фреонопровод\w*|дренаж\w*)\b",
     "installation_access": r"\b(?:доступ\w*|автовышк\w*|высотн\w*|фасад\w*|альпинист\w*|кровл\w*|"
@@ -97,13 +99,14 @@ _VENTILATION = r"вентиляц\w*"
 _OBJECT_MODIFIERS = (
     r"(?:\d+\s*(?:ед\.?\s*|шт\.?\s*)?|(?:систем\w*|бытов\w*|настенн\w*|промышленн\w*|"
     r"кассетн\w*|канальн\w*|существующ\w*|установленн\w*|нов\w*|внутренн\w*|наружн\w*|"
-    r"блок\w*|оборудовани\w*|воздуха)\s+)"
+    r"исправн\w*|фреонов\w*|блок\w*|оборудовани\w*|воздуха)\s+)"
 )
+_RELOCATION = r"(?:перенос(?:а|е|ом|у)?|перенести)"
 _ACTIONS = {
     "maintenance": r"(?:техническ\w+\s+обслуживани\w*|обслуживани\w*|обслужить|то)",
     "diagnostics": r"(?:диагностик\w*|диагностировать)",
     "repair": r"(?:ремонт\w*|отремонтировать)",
-    "installation": r"(?:пусконалад\w*|установк\w*|монтаж\w*|установить|смонтировать)",
+    "installation": rf"(?:пусконалад\w*|установк\w*|монтаж\w*|установить|смонтировать|{_RELOCATION})",
     "supply_only": r"(?:поставк\w*|закупк\w*|продаж\w*)",
 }
 _NO_WORKS = re.compile(
@@ -174,18 +177,26 @@ def _scope_patterns(equipment: str) -> dict[str, re.Pattern[str]]:
 
 _CONDITION_SCOPE = _scope_patterns(_CONDITION)
 _VENTILATION_SCOPE = _scope_patterns(_VENTILATION)
+_REMOUNT_SCOPE = re.compile(
+    rf"\bдемонт(?:аж\w*|ировать)\s+{_OBJECT_MODIFIERS}{{0,5}}{_CONDITION}\b"
+    r"[^;!?]{0,350}?\b(?:и|с)\s+(?:(?:последующ\w+|повторн\w+)\s+)?"
+    r"(?:монтаж\w*|установк\w*|смонтировать|установить)\s+(?:указанн\w+\s+оборудован\w*|его|е[её])\b", re.I,
+)
+_WRAPPED_SCOPE_PATTERNS = (*_CONDITION_SCOPE.values(), *_VENTILATION_SCOPE.values(), _REMOUNT_SCOPE)
 _INSTALL_INCLUDED = re.compile(
     r"\b(?:с\s+(?:последующ\w+\s+)?(?:монтаж\w*|установк\w*)|"
     r"и\s+(?:монтаж\w*|установк\w*)|включая\s+(?:монтаж\w*|установк\w*))\b", re.I,
 )
 _NON_OBLIGATION = re.compile(
     r"\b(?:место|адрес|дата|стоимость|цена|кронштейн\w*|материал\w*|для|после|до)\s+"
-    r"(?:монтаж\w*|установк\w*|обслуживани\w*|ремонт\w*)\b", re.I,
+    rf"(?:монтаж\w*|установк\w*|обслуживани\w*|ремонт\w*|{_RELOCATION})\b", re.I,
 )
 
 
 def _work_types(quote: str) -> list[tuple[TenderWorkType, bool]]:
     found = {kind for kind, regex in _CONDITION_SCOPE.items() if regex.search(quote)}
+    if _REMOUNT_SCOPE.search(quote):
+        found.add("installation")
     if _NO_WORKS.search(quote) and "supply_only" in found:
         return [("supply_only", True)] if not found & {"maintenance", "diagnostics", "repair"} and not _INSTALL_INCLUDED.search(quote) else []
     if _NON_OBLIGATION.search(quote):
@@ -354,6 +365,13 @@ def _scan_facts(
             facts.extend(_validate_fact("work_scope", evidence))
             for kind in other_kinds:
                 facts.extend(_validate_fact(kind, evidence))
+        # PDF often wraps a technical clause in the middle of an equipment name.
+        for pattern in _WRAPPED_SCOPE_PATTERNS:
+            for match in pattern.finditer(fragment.text):
+                if "\n" in match.group():
+                    evidence = _evidence(fragment, match.start(), match.end())
+                    if evidence:
+                        facts.extend(_validate_fact("work_scope", evidence))
     return facts
 
 
