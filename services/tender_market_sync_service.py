@@ -40,6 +40,17 @@ def _source_url(publication: MarketPublicationInput) -> str | None:
     return publication.url if host == expected or host.endswith(f".{expected}") else None
 
 
+def _canonical_url(publication: MarketPublicationInput, source_url: str) -> str | None:
+    if publication.source == "gias_by":
+        return canonical_procurement_url(publication.canonical_url)
+    if publication.source == "icetrade_by":
+        # The collector only exports an explicit, unambiguous notice reference.
+        original = canonical_procurement_url(publication.canonical_url)
+        if original and urlsplit(original).hostname in {_HOSTS["goszakupki_by"], _HOSTS["butb_by"]}:
+            return original
+    return canonical_procurement_url(source_url)
+
+
 async def _pull_page(cursor: str | None) -> MarketPageInput:
     root = settings.BELZAKUPKI_API_BASE_URL.rstrip("/")
     params = {"limit": 100}
@@ -123,7 +134,7 @@ class TenderMarketSyncService:
             if updated is None or item.updated_at >= _as_utc(updated):
                 row.title = item.title
                 row.source_url = source_url
-                row.canonical_url = canonical_procurement_url(item.canonical_url if item.source == "gias_by" else source_url)
+                row.canonical_url = _canonical_url(item, source_url)
                 row.provider_updated_at = item.updated_at
                 row.published_at = item.published_at
                 row.deadline_at = item.deadline_at

@@ -1,10 +1,18 @@
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select, tuple_, update
+from sqlalchemy import and_, case, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from models import TenderMarketCheckpoint, TenderMarketPublication
+
+
+def _source_priority(publication):
+    return case(
+        (publication.source.in_(("goszakupki_by", "butb_by")), 0),
+        (publication.source == "icetrade_by", 1),
+        else_=2,
+    )
 
 
 def _with_current_gias_mirror(query, now: datetime):
@@ -74,16 +82,14 @@ class TenderMarketDAO:
     ) -> list[tuple[TenderMarketPublication, TenderMarketPublication | None]]:
         publication = TenderMarketPublication
         alternative = aliased(publication)
-        better_source = and_(
-            alternative.source != "gias_by", publication.source == "gias_by",
-        )
-        equivalent_source = or_(alternative.source == publication.source, and_(
-            alternative.source != "gias_by", publication.source != "gias_by",
-        ))
+        priority = _source_priority(publication)
+        alternative_priority = _source_priority(alternative)
         preferred = select(alternative.id).where(
             alternative.canonical_url == publication.canonical_url, alternative.active.is_(True),
             (alternative.deadline_at.is_(None)) | (alternative.deadline_at > now),
-            or_(better_source, and_(equivalent_source, alternative.id > publication.id)),
+            or_(alternative_priority < priority, and_(
+                alternative_priority == priority, alternative.id > publication.id,
+            )),
         ).correlate(publication)
         conditions = (
             publication.active.is_(True),
