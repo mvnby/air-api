@@ -28,7 +28,7 @@ from services.tender_module_service import TenderModuleError
 from services.tender_original_evidence import TenderOriginalEvidence
 from services.tender_qualification import qualify_tender_documents
 
-_READER_VERSION = 1
+_READER_VERSION = 2
 _MAX_PENDING = 24
 _MAX_FILES = 8
 _MAX_ATTEMPTS = 2

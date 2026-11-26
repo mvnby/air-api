@@ -80,6 +80,21 @@ async def test_facts_have_source_offsets_and_budget_is_not_offer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_work_scope_accepts_documented_obligations(monkeypatch):
+    classifier = (
+        "Работы по установке оборудования, техническому обслуживанию и ремонту систем вентиляции и кондиционирования воздуха"
+    )
+    obligation = "Установка кондиционеров на первом этаже пятиэтажного жилого здания."
+    citations(monkeypatch, {"kind": "work_scope", "fragment": 0, "quote": classifier})
+    result = await qualify_documents([
+        fragment(f"Наименование в соответствии с ОКРБ 007-2012 | {classifier}\n{obligation}\n{TERMS}"),
+    ], profile=PROFILE)
+    assert [(fact.work_type, fact.evidence.quote) for fact in result.facts if fact.kind == "work_scope"] == [
+        ("installation", obligation),
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("scope", "decision", "work_type"), [
     ("Поставка сплит-систем с монтажом.", "recommend", "supply_with_installation"),
     ("Поставка кондиционеров без монтажа.", "skip", "supply_only"),

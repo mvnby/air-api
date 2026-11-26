@@ -30,9 +30,14 @@ _INSTALL_AFTER_SUPPLY = re.compile(
     rf"(?:\s+воздуха\b)?(?:{_EQUIPMENT_JOIN}{_OBJECT_MODIFIERS}{{0,5}}{_EQUIPMENT_OBJECT}){{0,2}}"
     rf"\s*(?:,\s*)?{_INSTALL_INCLUDED.pattern}", re.I,
 )
+_INSTALL_WITH_EQUIPMENT = re.compile(
+    r"\s+с\s+(?:последующ\w+\s+)?(?:монтажом|установкой|установкою)\b"
+    r"(?=\s*(?:$|[,.;:(]|(?:в|на|по)\s+))", re.I,
+)
 _VENTILATION_INSTALLATION = re.compile(
     r"\bработ\w*\s+по\s+устройств\w*\s+(?:систем\w*\s+)?вентиляц\w*\b", re.I,
 )
+_NAMED_EXECUTION_CITY = re.compile(r"\bв\s+г\.\s*([а-яё][а-яё-]+)\b", re.I)
 _OBLAST = r"обл(?:аст\w*)?\b"
 _REGION_PATTERNS = {
     "1": rf"\bбрестск\w+ {_OBLAST}|\b(?:г )?брест\b",
@@ -59,6 +64,19 @@ def _places(objects) -> tuple[list[TenderPlace], bool]:
     return places, bool(places) and len(places) == len(objects)
 
 
+def _delivery_place_agrees_with_lot(name: str, address: str) -> bool:
+    normalized_address = f" {normalized_place(address)} "
+    for match in _NAMED_EXECUTION_CITY.finditer(name):
+        city = normalized_place(match[1])
+        variants = {city}
+        if city.endswith("е"):
+            stem = city[:-1]
+            variants.update((stem, stem + "а", stem + "я"))
+        if not any(f" {variant} " in normalized_address for variant in variants):
+            return False
+    return True
+
+
 def _installation_for_direction(clause: str, direction: str) -> bool:
     for supply in _WORK_PATTERNS[direction]["supply_only"].finditer(clause):
         installation = _INSTALL_AFTER_SUPPLY.match(clause, supply.end())
@@ -77,6 +95,7 @@ def _classify(title: str, enrichment: dict, *, verified_lot: bool = False, headl
     directions = {key for key, pattern in _DIRECTION_PATTERNS.items() if pattern.search(subject) or pattern.search(headline)}
     activities_by_direction = {}
     for clause in re.split(r"[;\n]", subject):
+        clause = clause.lstrip()
         if _NON_OBLIGATION.search(clause) or _ALTERNATIVE_SCOPE.search(clause):
             continue
         negation = _SCOPE_NEGATION.search(clause)
@@ -87,6 +106,10 @@ def _classify(title: str, enrichment: dict, *, verified_lot: bool = False, headl
             clause = clause[:no_works.start()]
         for direction in directions:
             found = {kind for kind, pattern in _WORK_PATTERNS[direction].items() if pattern.search(clause)}
+            if verified_lot:
+                equipment = _DIRECTION_PATTERNS[direction].match(clause)
+                if equipment and _INSTALL_WITH_EQUIPMENT.match(clause, equipment.end()):
+                    found.add("installation")
             if direction == "ventilation" and _VENTILATION_INSTALLATION.search(clause):
                 found.add("installation")
             if "supply_only" in found:
@@ -135,10 +158,11 @@ def publication_signals(
         if active_lots_only and lot.get("status", "").casefold() in {"отменен", "отменён", "отменена", "завершен", "завершён", "завершена"}:
             continue
         lot_context = dict(context) if one_lot else {}
-        if lot.get("delivery_place"):
+        delivery_place = lot.get("delivery_place")
+        if delivery_place and (not verified_lots or _delivery_place_agrees_with_lot(lot["name"], delivery_place)):
             objects = lot_context.get("objects")
             known = objects if isinstance(objects, list) else []
-            lot_context["objects"] = [*known, {"address": lot["delivery_place"]}]
+            lot_context["objects"] = [*known, {"address": delivery_place}]
         lot_signals = _classify(lot["name"], lot_context, verified_lot=verified_lots, headline=title if one_lot else "")
         lot_signals.lot_key = lot["number"]
         signals.append(lot_signals)
