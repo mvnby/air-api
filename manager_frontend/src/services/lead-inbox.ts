@@ -23,6 +23,7 @@ export const inboxSourceOptions: { value: InboxSource; label: string }[] = [
   { value: 'referral', label: 'Рекомендация' },
   { value: 'other', label: 'Другое' },
 ];
+export const globalIncomingCapturedEvent = 'manager:global-incoming-captured';
 export const inboxChangedEvent = 'manager:inbox-changed';
 export const notifyInboxChanged = () => window.dispatchEvent(new Event(inboxChangedEvent));
 const path = (kind: 'order' | 'lead' = 'order') => `/api/manager/leads/inbox/${kind === 'lead' ? 'raw/' : ''}{order_id}`;

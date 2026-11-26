@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Bell, Loader2, Plus } from 'lucide-vue-next';
 
 import PersonalTaskCard from '../components/tasks/PersonalTaskCard.vue';
@@ -8,6 +8,7 @@ import {
   createPersonalTask,
   getPersonalTask,
   listPersonalTaskAssignees,
+  personalTasksChangedEvent,
   listPersonalTasks,
   newPersonalTaskCommandKey,
   updatePersonalTask,
@@ -182,7 +183,10 @@ const save = (task: PersonalTask, payload: PersonalTaskUpdate) => mutate(
   'Поручение обновлено',
 );
 
+const refreshExternalTask = () => { void load(); };
+onBeforeUnmount(() => window.removeEventListener(personalTasksChangedEvent, refreshExternalTask));
 onMounted(() => {
+  window.addEventListener(personalTasksChangedEvent, refreshExternalTask);
   void load();
   void loadStaff();
 });

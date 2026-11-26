@@ -33,7 +33,8 @@ const tabs: Array<{ id: Tab; label: string }> = [
 const serviceLabels: Record<StorefrontServiceSettings['key'], string> = {
   installation: 'Монтаж', pre_install: 'Предмонтаж', dismantling: 'Демонтаж', maintenance: 'Обслуживание', repair: 'Ремонт',
 };
-const activeTab = ref<Tab>('company');
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref<Tab>(tabs.find(tab => tab.id === requestedTab)?.id || 'company');
 const settings = ref<StorefrontSettings | null>(null);
 const draft = ref<StorefrontSettings | null>(null);
 const loading = ref(true);

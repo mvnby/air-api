@@ -1,9 +1,18 @@
 """Exact procurement URL identities; never infer equality from tender text."""
 
+import hashlib
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 GOS_KINDS = r"marketing|etrade|request|single-source|single-source-reference|limited"
+
+
+def procurement_native_fingerprint(*, source: str, external_id: str) -> str:
+    return hashlib.sha256(f"belzakupki|{source.casefold()}|{external_id}".encode()).hexdigest()
+
+
+def procurement_canonical_fingerprint(url: str) -> str:
+    return hashlib.sha256(f"belzakupki|canonical-url|{url}".encode()).hexdigest()
 
 
 def canonical_procurement_url(value: object) -> str | None:

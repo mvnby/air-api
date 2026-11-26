@@ -23,7 +23,7 @@ describe('catalog decision basket actions', () => {
     const wrapper = mount(CatalogDecisionSelectionTray, { props: { items: selection, invalidIds: [], validating: false, validationError: '' } });
     const buttons = wrapper.findAll('button');
 
-    await buttons.find(button => button.text() === 'Создать подборку')!.trigger('click');
+    await buttons.find(button => button.text() === 'Подборка сайта')!.trigger('click');
     await buttons.find(button => button.text() === 'В существующий заказ')!.trigger('click');
     await buttons.find(button => button.text() === 'Новый заказ')!.trigger('click');
 

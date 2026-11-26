@@ -101,7 +101,7 @@ const save = () => {
           <span v-if="task.assignee_name">Исполнитель: {{ task.assignee_name }}</span>
           <a v-if="task.order_id" class="text-brand-700 hover:underline dark:text-brand-300" :href="`/manager/orders/kanban?orderId=${task.order_id}`">Заказ #{{ task.order_id }}</a>
           <a v-if="task.customer_id" class="text-brand-700 hover:underline dark:text-brand-300" :href="`/manager/customers/profile?customerId=${task.customer_id}`">Клиент #{{ task.customer_id }}</a>
-          <a v-if="task.lead_id" class="text-brand-700 hover:underline dark:text-brand-300" href="/manager/leads">Входящее #{{ task.lead_id }}</a>
+          <a v-if="task.lead_id" class="text-brand-700 hover:underline dark:text-brand-300" :href="`/manager/leads?kind=lead&itemId=${task.lead_id}&taskId=${task.id}`">Входящее #{{ task.lead_id }}</a>
         </div>
       </div>
       <button type="button" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" :aria-label="editing ? 'Закрыть редактирование' : 'Редактировать поручение'" @click="editing = !editing">

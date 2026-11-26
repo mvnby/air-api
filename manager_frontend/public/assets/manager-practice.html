@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Kitlane Manager · Учебные сценарии</title>
+<style>body{margin:0;padding:clamp(12px,3vw,36px);background:light-dark(#f8f9fc,#0d1520);color-scheme:light dark}#kitlane-practice{max-width:1120px;margin:auto}button:focus-visible,summary:focus-visible{outline:3px solid #83a8ff;outline-offset:2px}</style>
+</head>
+<body>
+<!-- Lucide icons
+ISC License
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2026 as part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2026.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+---
+
+The MIT License (MIT) (for portions derived from Feather)
+
+Copyright (c) 2013-2026 Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+<template id="icon-inbox"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-inbox-icon lucide-inbox"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg></template>
+<template id="icon-folder-open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-folder-open-icon lucide-folder-open"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path></svg></template>
+<template id="icon-sliders-horizontal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-sliders-horizontal-icon lucide-sliders-horizontal"><path d="M10 5H3"></path><path d="M12 19H3"></path><path d="M14 3v4"></path><path d="M16 17v4"></path><path d="M21 12h-9"></path><path d="M21 19h-5"></path><path d="M21 5h-7"></path><path d="M8 10v4"></path><path d="M8 12H3"></path></svg></template>
+<template id="icon-users-round"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-users-round-icon lucide-users-round"><path d="M18 21a8 8 0 0 0-16 0"></path><circle cx="10" cy="8" r="5"></circle><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"></path></svg></template>
+<template id="icon-list-todo"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-list-todo-icon lucide-list-todo"><path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><rect x="3" y="4" width="6" height="6" rx="1"></rect></svg></template>
+<template id="icon-search-check"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-search-check-icon lucide-search-check"><path d="m8 11 2 2 4-4"></path><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></template>
+<template id="icon-file-text"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-file-text-icon lucide-file-text"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></template>
+<template id="icon-layout-grid"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-layout-grid-icon lucide-layout-grid"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></template>
+<template id="icon-list-checks"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-list-checks-icon lucide-list-checks"><path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path></svg></template>
+<template id="icon-plus"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-plus-icon lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></template>
+<template id="icon-chevron-right"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-chevron-right-icon lucide-chevron-right"><path d="m9 18 6-6-6-6"></path></svg></template>
+<template id="icon-arrow-left"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-arrow-left-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg></template>
+<template id="icon-pin"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-pin-icon lucide-pin"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></template>
+<template id="icon-check"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-check-icon lucide-check"><path d="M20 6 9 17l-5-5"></path></svg></template>
+<template id="icon-x"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></template>
+<template id="icon-link"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-link-icon lucide-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></template>
+<script>
+window.lucide={createIcons(){
+  document.querySelectorAll("i[data-lucide]").forEach(slot=>{
+    const glyph=document.getElementById("icon-"+slot.dataset.lucide);
+    if(glyph){slot.removeAttribute("data-lucide");slot.replaceChildren(glyph.content.cloneNode(true));}
+  });
+}};
+</script>
+<div id="kitlane-practice" lang="ru">
+  <div class="practice-tools">
+    <details id="practice-guide"><summary>Сценарии <span id="practice-count">0 / 5</span></summary><div id="practice-goals"></div></details>
+    <div class="practice-devices" aria-label="Размер экрана">
+      <button type="button" data-act="size" data-key="desktop" aria-pressed="true">Компьютер</button>
+      <button type="button" data-act="size" data-key="phone" aria-pressed="false">Телефон</button>
+    </div>
+  </div>
+  <div class="practice-stage"><div id="practice-app" class="practice-app">
+    <aside class="practice-rail"><div class="practice-brand"><b>K</b><strong>Kitlane</strong></div><nav id="practice-nav" aria-label="Разделы кабинета"></nav></aside>
+    <div class="practice-body"><header class="practice-header"><span>Учебная компания</span><div id="practice-create"></div></header>
+      <main id="practice-main"></main>
+    </div>
+    <nav id="practice-dock" aria-label="Быстрая навигация"></nav>
+    <div id="practice-overlay" hidden></div>
+  </div></div>
+  <div class="practice-status" role="status" aria-live="polite"></div>
+</div>
+<style>
+#kitlane-practice{--paper:light-dark(#fff,#172334);--base:light-dark(#f4f6fa,#111a28);--ink:light-dark(#17273c,#eaf1ff);--muted-ink:light-dark(#55677c,#afbdd2);--line:light-dark(#dbe2eb,#38465b);--blue-ink:light-dark(#224fc4,#a0bdff);--blue-soft:light-dark(#e9efff,#263958);--blue-button:#295bd4;--rail:#13243d;--green-ink:light-dark(#166047,#99dabd);--green-soft:light-dark(#e5f6ed,#223e36);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,sans-serif;min-width:0}
+#kitlane-practice *{box-sizing:border-box}
+#kitlane-practice [hidden]{display:none!important}
+#kitlane-practice button,#kitlane-practice input,#kitlane-practice textarea,#kitlane-practice select{font:inherit}
+#kitlane-practice button,#kitlane-practice summary{cursor:pointer}
+#kitlane-practice button{border:0;background:transparent;color:inherit}
+#kitlane-practice button:disabled{opacity:.5;cursor:default}
+#kitlane-practice h1,#kitlane-practice h2,#kitlane-practice h3,#kitlane-practice p{margin:0}
+#kitlane-practice h1{font-size:clamp(21px,3vw,30px);line-height:1.17;letter-spacing:-.035em;font-weight:680}
+#kitlane-practice h2{font-size:20px;line-height:1.22;font-weight:650}
+#kitlane-practice h3{font-size:15px;line-height:1.36;font-weight:650}
+#kitlane-practice .practice-tools{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+#kitlane-practice .practice-tools details{flex:1;min-width:min(190px,100%)}
+#kitlane-practice summary{width:fit-content;padding:7px 1px;font-weight:650}
+#practice-count{font-size:12px;color:var(--muted-ink);padding-left:5px}
+#practice-goals{display:grid;gap:3px;margin:6px 0 10px}
+#kitlane-practice .goal{display:flex;align-items:center;padding:7px 8px;text-align:left;border-radius:6px;gap:8px}
+#kitlane-practice .goal:hover{background:var(--blue-soft)}
+#kitlane-practice .goal small{margin-left:auto;color:var(--muted-ink)}
+#kitlane-practice .practice-devices{display:flex;gap:2px;border:1px solid var(--line);padding:2px;border-radius:8px;background:var(--paper)}
+#kitlane-practice .practice-devices button{padding:4px 9px;border-radius:5px;font-size:12px}
+#kitlane-practice .practice-devices [aria-pressed=true]{color:var(--blue-ink);background:var(--blue-soft);font-weight:650}
+#kitlane-practice .practice-app{position:relative;container-type:inline-size;width:100%;margin-inline:auto;border:1px solid var(--line);border-radius:13px;overflow:clip;background:var(--base);display:grid;grid-template-columns:minmax(155px,22%) minmax(0,1fr);align-items:stretch}
+#kitlane-practice .practice-app.phone{max-width:390px;grid-template-columns:minmax(0,1fr)}
+#kitlane-practice .practice-rail{padding:18px 10px;color:#e6eefc;background:var(--rail)}
+#kitlane-practice .practice-brand{display:flex;gap:11px;align-items:center;margin:2px 8px 24px;font-size:21px;letter-spacing:-.04em}
+#kitlane-practice .practice-brand b{display:grid;place-items:center;width:31px;height:33px;border-radius:9px;font-size:21px;font-style:italic;color:white;background:#3b6ee6}
+#kitlane-practice .practice-rail nav{display:grid;gap:3px}
+#kitlane-practice .nav-item{display:flex;align-items:center;gap:9px;width:100%;min-height:42px;padding:7px 10px;text-align:left;border-radius:6px;font-size:13px}
+#kitlane-practice .practice-rail .nav-item[aria-current=page],#kitlane-practice .practice-rail .nav-item:hover{background:#263e61;color:#fff}
+#kitlane-practice .practice-rail .nav-item[aria-current=page]{box-shadow:inset 3px 0 #85b0ff}
+#kitlane-practice .rail-rule{margin:8px 4px;border-top:1px solid #344661}
+#kitlane-practice .practice-body{min-width:0}
+#kitlane-practice .practice-header{display:flex;min-height:52px;padding:6px 19px;align-items:center;justify-content:space-between;gap:10px;background:var(--paper);border-bottom:1px solid var(--line);font-size:13px;font-weight:580}
+#practice-main{display:grid;align-content:start;gap:16px;min-height:390px;padding:24px;min-width:0}
+#kitlane-practice .list-top,#kitlane-practice .actions,#kitlane-practice .tags,#kitlane-practice .entry,#kitlane-practice .modal-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#kitlane-practice .list-top{justify-content:space-between;align-items:baseline}
+#kitlane-practice .lede,#kitlane-practice .dim,#kitlane-practice .entry small{color:var(--muted-ink)}
+#kitlane-practice .lede{margin-top:4px;font-size:13px}
+#kitlane-practice .dim,#kitlane-practice .entry small{font-size:12px}
+#kitlane-practice .cmd,#kitlane-practice .pill,#kitlane-practice .back{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;border-radius:7px;padding:7px 11px;background:var(--paper);border:1px solid var(--line);font-size:13px;font-weight:580}
+#kitlane-practice .cmd.primary{background:var(--blue-button);border-color:var(--blue-button);color:#fff}
+#kitlane-practice .cmd.link,#kitlane-practice .back{color:var(--blue-ink);background:none;border:0;padding-inline:3px;justify-self:start}
+#kitlane-practice .pill{min-height:34px;border-radius:20px;font-size:12px}
+#kitlane-practice .pill[aria-pressed=true],#kitlane-practice .cmd[aria-pressed=true]{color:var(--blue-ink);border-color:var(--blue-ink);background:var(--blue-soft)}
+#kitlane-practice .list,#kitlane-practice .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px}
+#kitlane-practice .panel{display:grid;gap:12px;padding:16px;min-width:0}
+#kitlane-practice .entry{width:100%;text-align:left;padding:12px 14px;justify-content:space-between;min-height:58px;overflow-wrap:anywhere}
+#kitlane-practice .entry+.entry{border-top:1px solid var(--line)}
+#kitlane-practice button.entry:hover{background:var(--blue-soft)}
+#kitlane-practice .entry-body{display:grid;gap:2px;flex:1;min-width:100px}
+#kitlane-practice .entry strong{font-weight:620}
+#kitlane-practice .queue-card{display:grid;gap:7px;padding:11px 14px}
+#kitlane-practice .queue-card+.queue-card{border-top:1px solid var(--line)}
+#kitlane-practice .queue-card .entry{padding:0;min-height:40px}
+#kitlane-practice .tag{display:inline-flex;border-radius:4px;padding:2px 6px;color:var(--muted-ink);background:var(--base);font-size:11.5px;font-weight:600}
+#kitlane-practice .tag.green{color:var(--green-ink);background:var(--green-soft)}
+#kitlane-practice .list-caption{margin-bottom:6px;font-weight:620;color:var(--muted-ink);font-size:12px}
+#kitlane-practice .field{display:grid;gap:4px;color:var(--muted-ink);font-size:13px;font-weight:580;min-width:0}
+#kitlane-practice input,#kitlane-practice textarea,#kitlane-practice select{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+#kitlane-practice textarea{resize:vertical}
+#kitlane-practice .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px}
+#kitlane-practice .pick{display:flex;gap:9px;align-items:center;min-height:52px;padding:8px 13px}
+#kitlane-practice .pick+.pick{border-top:1px solid var(--line)}
+#kitlane-practice .pick input{width:18px;height:18px}
+#kitlane-practice .pick span{min-width:0;flex:1}
+#kitlane-practice .pick small{display:block;color:var(--muted-ink)}
+#kitlane-practice .dir-links{display:grid;gap:3px}
+#kitlane-practice .dir-links button{justify-content:flex-start}
+#kitlane-practice .dir-row{display:flex;align-items:center;gap:4px}
+#kitlane-practice .dir-row .nav-item{flex:1}
+#kitlane-practice .dir-row [aria-pressed=true]{color:var(--blue-ink);background:var(--blue-soft)}
+#kitlane-practice .mark{display:inline-grid;place-items:center;width:18px;height:18px;flex:none;font-style:normal;font-size:15px;line-height:1}
+#kitlane-practice .mark svg,#kitlane-practice svg.mark{width:17px;height:17px}
+#practice-overlay{position:absolute;inset:0;z-index:2;background:rgb(10 24 45 / .43);display:grid;place-items:center;padding:12px}
+#kitlane-practice .practice-dialog{width:min(100%,420px);border-radius:12px;padding:17px;display:grid;gap:12px;background:var(--paper);min-width:0;box-shadow:0 15px 40px rgb(0 0 0 / .16)}
+#kitlane-practice .modal-head{justify-content:space-between}
+#kitlane-practice .practice-status{min-height:22px;padding:4px 1px;color:var(--green-ink);font-size:13px}
+#practice-dock{display:none}
+#kitlane-practice .practice-app:has(#practice-overlay:not([hidden])){min-height:435px}
+@container (max-width:600px){
+  #kitlane-practice .practice-rail{display:none}
+  #kitlane-practice .practice-body{grid-column:1/-1}
+  #kitlane-practice #practice-main{min-height:365px;padding:15px;gap:13px}
+  #kitlane-practice .practice-header{padding:6px 13px}
+  #kitlane-practice #practice-dock{display:flex;grid-column:1/-1;align-self:end;background:var(--paper);border-top:1px solid var(--line)}
+  #kitlane-practice #practice-dock .nav-item{flex:1;min-width:0;flex-direction:column;gap:2px;padding:5px 0;justify-content:center;min-height:48px;font-size:11px}
+  #kitlane-practice #practice-dock [aria-current=page]{color:var(--blue-ink);background:var(--blue-soft)}
+  #kitlane-practice #practice-overlay{align-items:end;padding:0}
+  #kitlane-practice .practice-dialog{width:100%;border-radius:12px 12px 0 0}
+  #kitlane-practice .cmd,#kitlane-practice .back,#kitlane-practice .pill{min-height:44px}
+  #kitlane-practice input,#kitlane-practice textarea,#kitlane-practice select{font-size:16px}
+  #kitlane-practice .pick{flex-wrap:wrap}
+}
+@media(max-width:620px){#kitlane-practice .practice-devices{display:none}}
+@media(prefers-reduced-motion:no-preference){#kitlane-practice .cmd,#kitlane-practice .nav-item{transition:background-color .14s ease}}
+</style>
+<script>
+(() => {
+  const root = document.getElementById('kitlane-practice');
+  const get = id => root.querySelector('#practice-' + id);
+  const app = get('app'), main = get('main'), overlay = get('overlay');
+  const clients = [
+    { id: 1, name: 'ООО «Северный офис»', person: 'Анна Лис', object: 'Офис на Ясной, 8', tax: '000000101' },
+    { id: 2, name: 'УК «Ясень»', person: 'Игорь Мирный', object: 'Учебный корпус № 2', tax: '000000102' },
+    { id: 3, name: 'Студия «Линия»', person: 'Ольга Сосна', object: 'Переговорная на Лесной, 4', tax: '000000103' }
+  ];
+  const incoming = [
+    { id: 701, title: 'Кондиционеры для учебного корпуса', source: 'Тендеры', customer: 2, text: 'Поставка трёх настенных кондиционеров с монтажом. В ведомости указаны помещения и мощность.' },
+    { id: 702, title: 'Подбор для переговорной', source: 'Сайт', customer: 3, text: 'Нужны два варианта для переговорной площадью 28 м².' },
+    { id: 703, title: 'Сроки монтажа в офисе', source: 'Почта', customer: 1, text: 'Уточнить сроки установки после поставки оборудования.' },
+    { id: 704, title: 'Запрос на обслуживание', source: 'Бот', customer: 1, text: 'Клиент запросил обслуживание двух внутренних блоков.' }
+  ];
+  const models = [
+    { id: 1, name: 'Nord 09', info: 'Настенная система · 25 м²', price: 1690 },
+    { id: 2, name: 'Nord 12', info: 'Настенная система · 35 м²', price: 1980 },
+    { id: 3, name: 'Aero 12 Quiet', info: 'Тихий режим · 35 м²', price: 2240 }
+  ];
+  const goals = [
+    ['Взять тендер для учебного корпуса в работу', 'inbox'],
+    ['Найти в мониторинге публикацию с неясным местом монтажа', 'inbox'],
+    ['Во время звонка по заказу № 420 записать поручение', 'order'],
+    ['Подобрать две модели и подготовить ссылку клиенту', 'catalog'],
+    ['Найти контакт ООО «Северный офис»', 'customers']
+  ];
+  const links = [
+    ['inbox','Входящие','inbox','Входящие'],['orders','Заказы','folder-open','Заказы'],
+    ['catalog','Подбор оборудования','sliders-horizontal','Подбор'],['customers','Клиенты','users-round','Клиенты'],
+    ['tasks','Поручения','list-todo','Поручения'],['market','Мониторинг тендеров','search-check','Мониторинг'],
+    ['offers','Предложения клиентам','file-text','Предложения']
+  ];
+  const glyphs = { 'inbox':'▤', 'folder-open':'▱', 'sliders-horizontal':'≋', 'users-round':'♧', 'list-todo':'☑', 'search-check':'⌕', 'file-text':'▧', 'layout-grid':'⊞', 'list-checks':'☷', 'plus':'+', 'chevron-right':'›', 'arrow-left':'←', 'pin':'⌖', 'check':'✓', 'x':'×', 'link':'↗' };
+  const icon = name => '<i class="mark" data-lucide="' + name + '" aria-hidden="true">' + (glyphs[name] || '') + '</i>';
+  const esc = val => String(val ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const initial = () => ({ version:1, page:'inbox', row:701, order:420, client:1, filter:'Все', mode:'Подходят', size:'desktop', query:'', selection:[], offer:[], converted:[], tasks:[], pins:[], complete:[], arrivedFromInbox:false });
+  const allowedPages = ['inbox','incoming','qualify','orders','order','market','publication','catalog','offer','offers','preview','customers','customer','tasks'];
+  const ids = (arr,allowed) => Array.isArray(arr) ? [...new Set(arr.filter(x=>allowed.includes(x)))] : [];
+  const data = initial();
+  function restore(v) {
+    if (!v || v.version !== 1) return;
+    const d = initial();
+    d.page = allowedPages.includes(v.page) ? v.page : d.page;
+    d.row = incoming.some(x=>x.id===v.row) ? v.row : d.row;
+    d.client = clients.some(x=>x.id===v.client) ? v.client : d.client;
+    d.converted = ids(v.converted, incoming.map(x=>x.id));
+    d.order = [420,...d.converted].includes(v.order) ? v.order : 420;
+    d.filter = ['Все','Тендеры','Сайт','Почта','Бот'].includes(v.filter) ? v.filter : 'Все';
+    d.mode = v.mode==='На проверке' ? v.mode : 'Подходят';
+    d.size = v.size==='phone' ? 'phone' : 'desktop';
+    d.query = typeof v.query==='string' ? v.query.slice(0,80) : '';
+    d.selection = ids(v.selection,[1,2,3]); d.offer = ids(v.offer,[1,2,3]); d.complete = ids(v.complete,[0,1,2,3,4]);
+    d.pins = ids(v.pins, ['tasks','market','offers']); d.arrivedFromInbox = v.arrivedFromInbox===true;
+    d.tasks = Array.isArray(v.tasks) ? v.tasks.filter(t=>t && typeof t.text==='string').slice(-12).map(t=>({text:t.text.slice(0,250),order:[420,...d.converted].includes(t.order)?t.order:null,due:typeof t.due==='string'?t.due.slice(0,20):''})) : [];
+    d.manual=Array.isArray(v.manual)?v.manual.filter(t=>typeof t==='string').slice(-5).map(t=>t.slice(0,180)):[];
+    d.results={};
+    for(let i=0;i<goals.length;i++){
+      const r=v.results?.[i];
+      if(r && Number.isSafeInteger(r.seconds) && r.seconds>0 && Number.isSafeInteger(r.clicks) && r.clicks>=0)
+        d.results[i]={seconds:r.seconds,clicks:r.clicks};
+    }
+    Object.assign(data,d);
+  }
+  const storageKey = 'kitlane:practice:v1';
+  const shareBase = 'https://api.mvn.by/manager/assets/manager-practice.html';
+  const shared = /^#offer=([1-3](?:,[1-3]){0,2})$/.exec(location.hash);
+  if(!shared)try { restore(window.openai?.widgetState?.privateContent || JSON.parse(localStorage.getItem(storageKey) || 'null')); } catch {}
+  if(shared){data.offer=ids(shared[1].split(',').map(Number),[1,2,3]); data.page='preview';}
+  let modal='', stack=[], draft='', draftOrder=null, deadline='', showTime=false, directoryQuery='', evidence=false;
+  let trial=null;
+  let lastSaved='';
+  let opener=null;
+  const selectedModels = a => models.filter(x=>a.includes(x.id));
+  const mark = n => {
+    if(!data.complete.includes(n)) data.complete.push(n);
+    if(trial?.n===n){
+      data.results={...data.results,[n]:{seconds:Math.max(1,Math.round((Date.now()-trial.start)/1000)),clicks:trial.clicks}};
+      trial=null;
+    }
+  };
+  function persist(){
+    const snap=JSON.parse(JSON.stringify(data));
+    lastSaved=JSON.stringify(snap);
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent:{completed: snap.complete.map(i=>goals[i][0])},privateContent:snap }).catch(()=>{});
+    else try{localStorage.setItem(storageKey,JSON.stringify(snap));}catch{}
+  }
+  const notice = message => {root.querySelector('.practice-status').textContent=message;};
+  function btn(act,label,key='',kind='',name=''){
+    return '<button type="button" data-act="'+act+'" data-key="'+esc(key)+'" class="cmd '+kind+'">'+(name?icon(name):'')+esc(label)+'</button>';
+  }
+  const tag = (name,green=false) => '<span class="tag'+(green?' green':'')+'">'+esc(name)+'</span>';
+  const heading = (title,detail='') => '<div><h1>'+esc(title)+'</h1>'+(detail?'<p class="lede">'+esc(detail)+'</p>':'')+'</div>';
+  const back = label => btn('back',label,'','back','arrow-left');
+  const block = (label,contents) => '<div><div class="list-caption">'+esc(label)+'</div><div class="list">'+contents+'</div></div>';
+  const clientBy = id => clients.find(c=>c.id===id) || clients[0];
+  const rowBy = id => incoming.find(r=>r.id===id) || incoming[0];
+  const orderName = id => id===420?'Климат для офиса':rowBy(id).title;
+  const orderClient = id => clientBy(id===420?1:rowBy(id).customer);
+  function entry(act,key,title,detail,end=''){
+    return '<button type="button" class="entry" data-act="'+act+'" data-key="'+esc(key)+'"><span class="entry-body"><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></span>'+end+icon('chevron-right')+'</button>';
+  }
+  const chips = (arr,current,act) => '<div class="tags">'+arr.map(x=>'<button type="button" class="pill" data-act="'+act+'" data-key="'+esc(x)+'" aria-pressed="'+(current===x)+'">'+esc(x)+'</button>').join('')+'</div>';
+  const linkForOffer = ()=>shareBase+'#offer='+data.offer.join(',');
+  const navActive = ()=>({incoming:'inbox',qualify:'inbox',order:'orders',customer:'customers',offer:'catalog',preview:'catalog',offers:'catalog',publication:'market'}[data.page] || data.page);
+  function navItem(key,label,name,compact=false){
+    const cls='nav-item'; const active=key===navActive()?' aria-current="page"':'';
+    return '<button type="button" class="'+cls+'" data-act="nav" data-key="'+key+'" aria-label="'+esc(label)+'"'+active+'>'+icon(name)+'<span>'+esc(compact?(links.find(x=>x[0]===key)?.[3]||label):label)+'</span></button>';
+  }
+  function drawChrome(){
+    app.classList.toggle('phone',data.size==='phone');
+    root.querySelectorAll('[data-act=size]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.key===data.size?'true':'false'));
+    const basics=links.slice(0,4);
+    get('nav').innerHTML=basics.map(l=>navItem(...l.slice(0,3))).join('')+'<div class="rail-rule"></div>'+navItem('personal','Моя работа','list-checks')+navItem('all','Все разделы','layout-grid')+
+      (data.pins.length?'<div class="rail-rule"></div>'+data.pins.map(k=>navItem(...links.find(x=>x[0]===k).slice(0,3))).join(''):'');
+    get('dock').innerHTML=basics.map(l=>navItem(l[0],l[1],l[2],true)).join('')+navItem('all','Ещё','layout-grid',true);
+    get('create').innerHTML=data.page==='order'?btn('note','Поручение','','primary','list-todo'):btn('create','Создать','','primary','plus');
+    get('count').textContent=data.complete.length+' / 5';
+    get('goals').innerHTML=goals.map(([g],i)=>{
+      const r=data.results?.[i];
+      const status=r?r.seconds+' с · нажатий '+r.clicks:data.complete.includes(i)?'Пройдено':'Начать';
+      return '<button type="button" class="goal" data-act="goal" data-key="'+i+'"><span>'+esc(g)+'</span><small>'+esc(status)+'</small></button>';
+    }).join('')+(data.complete.length?btn('reset','Начать заново','','link'):'');
+  }
+  function inbox(){
+    const visible=incoming.filter(r=>!data.converted.includes(r.id)&&(data.filter==='Все'||r.source===data.filter));
+    const manual=data.filter==='Все'?(data.manual||[]):[];
+    const added=manual.map(t=>'<div class="entry"><span class="entry-body"><strong>'+esc(t)+'</strong><small>Создано вручную</small></span>'+tag('Менеджер')+'</div>').join('');
+    return heading('Входящие','Заявки с сайтов, из ботов, почты и от менеджеров')+chips(['Все','Тендеры','Сайт','Почта','Бот'],data.filter,'filter')+
+      (data.filter==='Тендеры'?btn('monitor','Мониторинг тендеров','','link','search-check'):'')+
+      block('Активные · '+(visible.length+manual.length),added+visible.map(r=>'<div class="queue-card">'+entry('row',r.id,r.title,'№ '+r.id+' · '+clientBy(r.customer).name,tag(r.source))+'<div class="actions">'+btn('qualify','В переговоры',r.id)+'</div></div>').join('')||'<div class="entry">Входящих по этому фильтру нет.</div>');
+  }
+  function incomingPage(){
+    const r=rowBy(data.row),converted=data.converted.includes(r.id);
+    return back('Назад')+heading(r.title,'Входящее № '+r.id+' · '+r.source)+'<div class="panel"><h3>'+esc(clientBy(r.customer).name)+'</h3><p>'+esc(r.text)+'</p></div><div class="actions">'+
+      (converted?btn('order','Открыть заказ',r.id,'primary'):btn('qualify','В переговоры',r.id,'primary'))+
+      (r.source==='Тендеры'?btn('monitor','Мониторинг тендеров','','link'):'')+'</div>';
+  }
+  function qualifyPage(){
+    const r=rowBy(data.row);
+    return back('Назад')+heading('Проверка источника','Входящее № '+r.id)+'<div class="panel"><h3>Заказчик</h3><p>'+esc(clientBy(r.customer).name)+'</p><h3>Предмет заказа</h3><p>'+esc(r.text)+'</p></div>'+btn('convert','В переговоры','','primary');
+  }
+  function orderPage(){
+    const c=orderClient(data.order);
+    return back('Назад')+heading('Заказ № '+data.order+' · '+orderName(data.order),c.name)+'<div class="panel"><div class="tags">'+tag('Переговоры',true)+'</div><p>'+esc(c.object)+'</p><p class="dim">Контакт · '+esc(c.person)+'</p></div>';
+  }
+  function market(){
+    const review=data.mode==='На проверке';
+    return (data.arrivedFromInbox?btn('to-inbox','Ко входящим','','back','arrow-left'):'')+heading('Мониторинг тендеров','Публикации по профилю «Климат и монтаж»')+
+      chips(['Подходят','На проверке'],data.mode,'mode')+block(review?'Требуют уточнения':'Подходящие публикации',entry('publication','',review?'Монтаж систем в районном центре':incoming[0].title,review?'ГИАС · Не указано место монтажа':'Госзакупки · Соответствует профилю',tag(review?'На проверке':'Подходит',!review)));
+  }
+  function publication(){
+    const review=data.mode==='На проверке';
+    return back('К мониторингу')+heading(review?'Монтаж систем в районном центре':incoming[0].title,review?'Публикация № 318 · ГИАС':'Публикация № 317 · Госзакупки')+
+      '<div class="panel"><h3>'+ (review?'Нужно уточнение':'Соответствует профилю')+'</h3><p>'+(review?'Поставка подходит по направлению. Место монтажа в извещении не указано.':esc(incoming[0].text))+'</p><div class="actions">'+btn('evidence',evidence?'Скрыть оригиналы':'ТЗ и оригиналы')+
+      (!review?(data.converted.includes(701)?btn('order','Открыть заказ №701',701,'link'):btn('row','Открыть во входящих №701',701,'link')):'')+'</div>'+
+      (evidence?'<div class="panel"><h3>Извещение · учебный фрагмент</h3><p>'+(review?'Пункт 3. Адрес выполнения монтажных работ согласуется с заказчиком.':'Пункт 2. Поставка и монтаж в учебном корпусе № 2.')+'</p></div>':'')+'</div>';
+  }
+  function catalog(){
+    return heading('Подбор оборудования','Настенные сплит-системы')+'<div class="list">'+models.map(m=>'<label class="pick"><input type="checkbox" data-pick="'+m.id+'" '+(data.selection.includes(m.id)?'checked':'')+'><span><strong>'+m.name+'</strong><small>'+m.info+'</small></span><strong>'+m.price.toLocaleString('ru')+' BYN</strong></label>').join('')+'</div>'+
+      '<div class="panel"><h3>Выбрано моделей · '+data.selection.length+'</h3><div class="actions"><button class="cmd primary" type="button" data-act="prepare" '+(!data.selection.length?'disabled':'')+'>Подготовить предложение</button>'+btn('nav','Предложения клиентам','offers','link')+'</div></div>';
+  }
+  function offerPage(preview){
+    const list=selectedModels(preview?data.offer:data.selection);
+    if (!list.length) return back('Назад')+heading('Предложение')+btn('nav','К подбору оборудования','catalog');
+    return back(preview?'Назад':'К подбору')+heading(preview?'Предложение для клиента':'Предложение клиенту',preview?'Учебная ссылка · вид клиента':'Альтернативы для переговорной')+
+      block('Модели',list.map(m=>'<div class="entry"><span class="entry-body"><strong>'+m.name+'</strong><small>'+m.info+'</small></span><strong>'+m.price.toLocaleString('ru')+' BYN</strong></div>').join(''))+
+      (preview?'':data.offer.join(',')===data.selection.join(',')?'<div class="panel"><label class="field">Ссылка для клиента<input id="practice-url" readonly value="'+esc(linkForOffer())+'"></label><div class="actions">'+btn('copy','Скопировать ссылку','','primary','link')+btn('preview','Открыть как клиент')+'</div></div>':btn('publish','Опубликовать учебное предложение','','primary'));
+  }
+  function customerRows(){
+    const q=data.query.toLocaleLowerCase('ru').trim();
+    const matches=clients.filter(c=>[c.name,c.person,c.tax].join(' ').toLocaleLowerCase('ru').includes(q));
+    return matches.map(c=>entry('client',c.id,c.name,'УНП '+c.tax)).join('')||'<div class="entry">Клиентов по запросу нет.</div>';
+  }
+  function customers(){
+    return heading('Клиенты','Контрагенты и контактные лица')+'<label class="field">Найти клиента<input id="practice-query" type="search" maxlength="80" placeholder="Название, контакт или УНП" value="'+esc(data.query)+'"></label><div class="list" id="practice-results">'+customerRows()+'</div>';
+  }
+  function customerPage(){
+    const c=clientBy(data.client);
+    return back('К клиентам')+heading(c.name,'Контрагент · УНП '+c.tax)+'<div class="panel"><h3>Контактное лицо</h3><p>'+esc(c.person)+'</p><p class="dim">'+esc(c.object)+'</p></div>';
+  }
+  function screen(){
+    switch(data.page){
+      case 'inbox':return inbox(); case 'incoming':return incomingPage();case 'qualify':return qualifyPage();
+      case 'order':return orderPage();
+      case 'orders':return heading('Заказы','В работе')+block('Переговоры',[420,...data.converted].map(id=>entry('order',id,'№ '+id+' · '+orderName(id),orderClient(id).name)).join(''));
+      case 'market':return market();case 'publication':return publication();case 'catalog':return catalog();
+      case 'offer':return offerPage(false);case 'preview':return offerPage(true);
+      case 'offers':return heading('Предложения клиентам')+(data.offer.length?block('Опубликовано',entry('preview','','Предложение для переговорной',data.offer.length+' модели')):btn('nav','Подобрать оборудование','catalog'));
+      case 'customers':return customers();case 'customer':return customerPage();
+      case 'tasks':return heading('Поручения','Моя работа')+(data.tasks.length?block('Активные',data.tasks.map(t=>t.order?entry('order',t.order,t.text,'Заказ № '+t.order+(t.due?' · '+t.due:'')):'<div class="entry">'+esc(t.text)+'</div>').join('')):'<div class="panel">Активных поручений пока нет.</div>')+btn('note','Новое поручение','','link');
+    }
+  }
+  const norm = s=>s.toLocaleLowerCase('ru').replace(/ё/g,'е');
+  function directoryRows(){
+    const labels={inbox:'заявки лиды',customers:'контрагенты заказчик',market:'тендеры закупки',tasks:'мои дела задачи напоминания',offers:'КП ссылка',catalog:'модели кондиционеры',orders:'сделки'};
+    const q=norm(directoryQuery.trim());
+    const options=links.filter(l=>modal==='personal'?l[0]==='tasks':q?norm(l[1]+' '+labels[l[0]]).includes(q):links.indexOf(l)>=4);
+    const row=l=>'<div class="dir-row">'+navItem(l[0],l[1],l[2])+(links.indexOf(l)<4?'':'<button class="cmd" data-act="pin" data-key="'+l[0]+'" type="button" aria-pressed="'+data.pins.includes(l[0])+'" aria-label="'+(data.pins.includes(l[0])?'Открепить ':'Закрепить ')+l[1]+'">'+icon('pin')+'</button>')+'</div>';
+    return options.length?options.map(row).join(''):'<p class="dim">Раздел не найден.</p>';
+  }
+  function modalBody(){
+    if(modal==='note')return (draftOrder?'<p class="dim">Связано с карточкой · Заказ №'+draftOrder+'</p>':'')+
+      '<form id="practice-note-form"><label class="field">Что нужно сделать<textarea id="practice-text" maxlength="250" rows="3" required placeholder="Выслать письмо после звонка">'+esc(draft)+'</textarea></label><div class="actions">'+btn('time','Срок поручения','','link')+'</div>'+
+      (showTime?'<label class="field">Срок<input id="practice-date" type="date" value="'+esc(deadline)+'"></label>':'')+
+      '<div class="actions"><button type="button" data-act="save-note" class="cmd primary" '+(!draft.trim()?'disabled':'')+'>Сохранить поручение</button></div></form>';
+    if(modal==='all'||modal==='personal') return (modal==='all'?'<label class="field">Найти раздел<input id="practice-dirquery" type="search" value="'+esc(directoryQuery)+'"></label>':'')+'<div class="dir-links" id="practice-dirs">'+directoryRows()+'</div>';
+    if(modal==='reset')return '<p>Сбросить прогресс и учебные записи на этом устройстве?</p><div class="actions">'+btn('confirm-reset','Начать заново','','primary')+btn('close','Продолжить тренировку')+'</div>';
+    if(modal==='capture')return '<form id="practice-incoming-form"><label class="field">Текст обращения<textarea maxlength="180" id="practice-capture" required></textarea></label><button type="button" data-act="save-incoming" class="cmd primary">Сохранить обращение</button></form>';
+    return '<div class="actions">'+btn('note','Поручение','','','list-todo')+btn('capture','Обращение','','','inbox')+'</div>';
+  }
+  function drawModal(){
+    overlay.hidden=!modal;
+    [main,get('dock'),get('nav'),get('create')].forEach(el=>el.inert=Boolean(modal));
+    if(!modal){overlay.innerHTML='';return;}
+    const names={all:'Все разделы',personal:'Моя работа',note:'Новое поручение',create:'Создать',reset:'Начать заново',capture:'Новое обращение'};
+    overlay.innerHTML='<section class="practice-dialog" role="dialog" aria-modal="true" aria-labelledby="practice-modal-heading"><div class="modal-head"><h2 id="practice-modal-heading">'+names[modal]+'</h2><button type="button" data-act="close" class="cmd" aria-label="Закрыть">'+icon('x')+'</button></div>'+modalBody()+'</section>';
+  }
+  function icons(){ if(window.lucide?.createIcons)window.lucide.createIcons({attrs:{width:17,height:17}}); }
+  function draw(){drawChrome();main.innerHTML=screen();drawModal();icons();}
+  function pop(name){
+    if(!modal)opener={act:document.activeElement?.dataset?.act,key:document.activeElement?.dataset?.key};
+    modal=name;directoryQuery='';drawModal();icons();
+    (overlay.querySelector('textarea,input,button[data-act=note]')||overlay.querySelector('button'))?.focus({preventScroll:true});
+  }
+  function close(){
+    modal='';drawModal();
+    const source=[...root.querySelectorAll('[data-act]')].find(el=>el.dataset.act===opener?.act && el.dataset.key===opener?.key && el.getClientRects().length);
+    source?.focus({preventScroll:true});
+  }
+  function go(page){
+    if(data.page!==page){stack.push(data.page);if(stack.length>20)stack.shift();}
+    data.page=page;modal='';evidence=false;notice('');
+  }
+  function backPage(){
+    data.page=stack.pop()||({incoming:'inbox',qualify:'incoming',order:'orders',publication:'market',offer:'catalog',preview:'offers',customer:'customers'}[data.page]||'inbox');
+    modal='';evidence=false;
+  }
+  function beginNote(){
+    const id=data.page==='order'?data.order:null;
+    if(draftOrder!==id){draft='';deadline='';showTime=false;}
+    draftOrder=id;pop('note');
+  }
+  root.addEventListener('input',ev=>{
+    const el=ev.target;
+    if(el.id==='practice-text'){draft=el.value;el.form.querySelector('[data-act=save-note]').disabled=!draft.trim();}
+    if(el.id==='practice-date')deadline=el.value;
+    if(el.id==='practice-query'){data.query=el.value;get('results').innerHTML=customerRows();icons();}
+    if(el.id==='practice-dirquery'){directoryQuery=el.value;get('dirs').innerHTML=directoryRows();icons();}
+  });
+  root.addEventListener('change',ev=>{
+    if(ev.target.matches('[data-pick]')){
+      if(trial)trial.clicks++;
+      const id=Number(ev.target.dataset.pick);
+      data.selection=ev.target.checked?[...new Set([...data.selection,id])]:data.selection.filter(x=>x!==id);
+      draw();persist();main.querySelector('[data-pick="'+id+'"]')?.focus({preventScroll:true});
+    }
+  });
+  function save(){
+    if(modal==='note' && draft.trim()){
+      data.tasks.push({text:draft.trim(),order:draftOrder,due:deadline});data.tasks=data.tasks.slice(-12);
+      if(draftOrder===420)mark(2);draft='';deadline='';showTime=false;close();draw();notice('Поручение сохранено');persist();
+      get('create').querySelector('button')?.focus({preventScroll:true});
+    }
+    if(modal==='capture'){
+      const text=get('capture').value.trim();if(!text)return;
+      data.manual=[...(data.manual||[]),text.slice(0,180)].slice(-5);close();go('inbox');data.filter='Все';draw();notice('Учебное обращение сохранено');persist();
+    }
+  }
+  root.addEventListener('submit',ev=>{ev.preventDefault();save();});
+  root.addEventListener('click',async ev=>{
+    if(ev.target===overlay){close();return;}
+    const b=ev.target.closest('button[data-act]');if(!b||b.disabled)return;
+    const a=b.dataset.act,k=b.dataset.key;
+    if(trial&&a!=='goal'&&a!=='size')trial.clicks++;
+    if(a==='save-note'||a==='save-incoming'){save();return;}
+    if(a==='close'){close();return;}
+    if(a==='note'){beginNote();return;}
+    if(['create','capture','reset'].includes(a)){pop(a);return;}
+    if(a==='time'){showTime=!showTime;drawModal();icons();(get('date')||get('text'))?.focus();return;}
+    if(a==='pin'){data.pins=data.pins.includes(k)?data.pins.filter(x=>x!==k):[...data.pins,k];drawChrome();get('dirs').innerHTML=directoryRows();icons();get('dirs').querySelector('[data-act=pin][data-key="'+k+'"]')?.focus();persist();return;}
+    if(a==='size')data.size=k==='phone'?'phone':'desktop';
+    if(a==='goal'){const n=Number(k);trial={n,start:Date.now(),clicks:0};get('guide').open=false;stack=[];modal='';data.filter='Все';data.mode='Подходят';data.arrivedFromInbox=false;data.order=420;data.query='';data.page=goals[n][1];if(n===0)data.converted=data.converted.filter(id=>id!==701);if(n===3){data.offer=[];data.selection=[];}notice(goals[n][0]);}
+    if(a==='nav'){if(k==='all'||k==='personal'){pop(k);return;}if(k==='market')data.arrivedFromInbox=false;go(k);}
+    if(a==='back')backPage();
+    if(a==='filter')data.filter=k;
+    if(a==='row'){data.row=Number(k);go('incoming');}
+    if(a==='qualify'){data.row=Number(k);go('qualify');}
+    if(a==='convert'){if(!data.converted.includes(data.row))data.converted.push(data.row);if(data.row===701)mark(0);data.order=data.row;go('order');notice('Входящее взято в работу');}
+    if(a==='order'){data.order=Number(k);go('order');}
+    if(a==='monitor'){data.arrivedFromInbox=true;go('market');}
+    if(a==='to-inbox'){go('inbox');data.filter='Тендеры';}
+    if(a==='mode')data.mode=k;
+    if(a==='publication'){go('publication');if(data.mode==='На проверке'&&data.arrivedFromInbox)mark(1);}
+    if(a==='evidence')evidence=!evidence;
+    if(a==='prepare'&&data.selection.length)go('offer');
+    if(a==='publish'){data.offer=[...data.selection];notice('Предложение опубликовано в учебном режиме');}
+    if(a==='preview'){go('preview');if(data.offer.length>=2)mark(3);}
+    if(a==='copy'){
+      const input=get('url');let copied=false;
+      try{await navigator.clipboard.writeText(linkForOffer());copied=true;}catch{input.focus();input.select();try{copied=document.execCommand('copy');}catch{}}
+      if(copied&&data.offer.length>=2)mark(3);
+      drawChrome();icons();notice(copied?'Учебная ссылка скопирована':'Ссылка выделена. Скопируйте её или откройте вид клиента.');persist();return;
+    }
+    if(a==='client'){data.client=Number(k);go('customer');if(data.client===1)mark(4);}
+    if(a==='confirm-reset'){Object.assign(data,initial());delete data.manual;delete data.results;trial=null;stack=[];modal='';draft='';draftOrder=null;deadline='';showTime=false;get('guide').open=false;notice('Учебные данные восстановлены');}
+    draw();persist();
+  });
+  root.addEventListener('keydown',ev=>{
+    if(!modal)return;
+    if(ev.key==='Escape'){ev.preventDefault();close();return;}
+    if(ev.key==='Tab'){const els=[...overlay.querySelectorAll('button:not(:disabled),input,textarea,select')];if(ev.shiftKey&&document.activeElement===els[0]){ev.preventDefault();els.at(-1)?.focus();}else if(!ev.shiftKey&&document.activeElement===els.at(-1)){ev.preventDefault();els[0]?.focus();}}
+  });
+  if(shared){
+    root.querySelector('.practice-tools').hidden=true;
+    root.querySelector('.practice-rail').hidden=true;get('dock').hidden=true;
+    get('create').hidden=true;root.querySelector('.practice-body').style.gridColumn='1 / -1';
+    draw();main.querySelector('.back')?.remove();return;
+  }
+  window.addEventListener('openai:set_globals',ev=>{const v=ev.detail?.globals?.widgetState?.privateContent;if(v&&JSON.stringify(v)!==lastSaved){restore(v);draw();}});
+  draw();
+})();
+</script>
+
+</body>
+</html>

@@ -27,6 +27,7 @@ from services.tender_lot_snapshot import native_lot_snapshot
 
 from services.belzakupki_canonical_identity import (
     canonical_procurement_url, canonical_tender_url, original_native_identities,
+    procurement_canonical_fingerprint, procurement_native_fingerprint,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,6 @@ class BelzakupkiImportService:
     """
 
     META_KEY = "belzakupki"
-    SOURCE_NAMESPACE = "belzakupki"
 
     @classmethod
     def is_configured(cls) -> bool:
@@ -120,10 +120,7 @@ class BelzakupkiImportService:
             raise ValueError("Belzakupki tender source and external_id are required")
         return source, external_id
 
-    @classmethod
-    def _order_fingerprint(cls, *, source: str, external_id: str) -> str:
-        raw = f"{cls.SOURCE_NAMESPACE}|{source.casefold()}|{external_id}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    _order_fingerprint = staticmethod(procurement_native_fingerprint)
 
     @classmethod
     def _match_snapshot(cls, item: dict[str, Any]) -> dict[str, Any]:
@@ -306,9 +303,7 @@ class BelzakupkiImportService:
         ))
         return ordered if len(ordered) <= 20 else [ordered[0], *ordered[-19:]]
 
-    @classmethod
-    def _canonical_fingerprint(cls, url: str) -> str:
-        return hashlib.sha256(f"{cls.SOURCE_NAMESPACE}|canonical-url|{url}".encode()).hexdigest()
+    _canonical_fingerprint = staticmethod(procurement_canonical_fingerprint)
 
     @classmethod
     async def _identity_order(cls, session: AsyncSession, *, tenant_scope: TenantScope,

@@ -7,13 +7,15 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
 
-from models import Tenant, TenantTenderModule, TenderMarketCheckpoint, TenderMarketEvidence, TenderMarketPublication
+from models import Customer, LeadSource, Order, OrderStatus, Tenant, TenantTenderModule, TenderMarketCheckpoint, TenderMarketEvidence, TenderMarketPublication
+from models.leads_inbox import InboxTriageState
 from models.tenancy import TenantScope
 from schemas_tender_market import MarketPageInput
 from schemas_tender_search import TenderPlace, TenderSearchProfile
 from services import tender_market_sync_service
 from services import tender_market_evidence_service as verification
 from services import tender_document_reader, tender_qualification
+from services.belzakupki_canonical_identity import procurement_canonical_fingerprint, procurement_native_fingerprint
 from services.belzakupki_enrichment_service import BelzakupkiEnrichmentService
 from services.tender_market_evidence_service import TenderMarketEvidenceService as Evidence
 from services.tender_market_service import TenderMarketService
@@ -27,7 +29,7 @@ async def database():
     engine = create_async_engine("sqlite+aiosqlite://")
     async with engine.begin() as connection:
         await connection.run_sync(lambda db: SQLModel.metadata.create_all(db, tables=[
-            Tenant.__table__, TenantTenderModule.__table__,
+            Tenant.__table__, TenantTenderModule.__table__, Customer.__table__, Order.__table__, InboxTriageState.__table__,
             TenderMarketCheckpoint.__table__, TenderMarketPublication.__table__, TenderMarketEvidence.__table__,
         ]))
     sessions = async_sessionmaker(engine, expire_on_commit=False)
@@ -154,6 +156,42 @@ async def test_companies_find_independent_lots_and_reject_stale_pages(database):
     with pytest.raises(TenderModuleError) as stale:
         await list_results(11, before_id=first.next_before_id, version=first.settings_version)
     assert stale.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_market_links_only_one_verified_and_visible_crm_record(database):
+    publications = [notice(number, "Поставка кондиционеров") for number in range(1, 9)]
+    await put(database, (None, 1), *publications)
+    scope = TenantScope(tenant_id=11, storefront_id=42)
+
+    def order(number, order_id, *, native=False, metadata=None, **override):
+        publication = publications[number - 1]
+        fingerprint = (procurement_native_fingerprint(source=publication["source"], external_id=str(number))
+                       if native else procurement_canonical_fingerprint(publication["url"]))
+        fields = dict(tenant_id=11, storefront_id=42, lead_source=LeadSource.BELZAKUPKI,
+                      source_fingerprint=fingerprint, technical_meta={"belzakupki": {
+                          "tender": {"source": publication["source"], "url": publication["url"]}, **(metadata or {}),
+                      }})
+        return Order(id=order_id, **(fields | override))
+
+    async with database.begin() as session:
+        session.add(TenantTenderModule(tenant_id=11, entitled=True, enabled=True, version=1,
+                                       profiles=[TenderSearchProfile(name="Кондиционеры").model_dump(mode="json")]))
+        session.add(Customer(id=75, tenant_id=12, name="Другой клиент", phone="000"))
+        session.add_all([
+            order(1, 101, native=True), order(2, 102, status=OrderStatus.NEGOTIATION),
+            order(3, 103, tenant_id=12), order(4, 104, storefront_id=43), order(5, 105, customer_id=75),
+            order(6, 106, metadata={"identity_conflicts": ["different-record"]}),
+            order(7, 107), order(7, 207, native=True),
+            order(8, 108, native=True, metadata={"canonical_url": publications[0]["url"]}),
+        ])
+    async with database() as session:
+        result = await TenderMarketService.list(session, scope, desired="match", profile_name=None,
+                                               before_id=None, settings_version=None, limit=20)
+    assert len(result.items) == len(publications)
+    assert {item.source_url: (item.crm_link.kind, item.crm_link.id) for item in result.items if item.crm_link} == {
+        publications[0]["url"]: ("incoming", 101), publications[1]["url"]: ("order", 102),
+    }
 
 
 async def enable_evidence_for_two_companies(database, monkeypatch):

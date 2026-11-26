@@ -11,6 +11,7 @@ from models import TenderMarketPublication
 from models.tenancy import TenantScope
 from schemas_tender_market import TenderMarketItem, TenderMarketProfileMatch, TenderMarketResults
 from services.tender_module_service import TenderModuleError, TenderModuleService
+from services.tender_market_crm_links import market_crm_links
 from services.tender_profile_preview import match_publication_signals, publication_signals
 
 _BATCH_SIZE = 100
@@ -87,11 +88,13 @@ class TenderMarketService:
             raise TenderModuleError(404, "Профиль поиска не найден.")
         now = datetime.now(timezone.utc)
         entries = []
+        publications = []
         next_id = before_id
         for _ in range(_MAX_BATCHES):
             rows = await TenderMarketDAO.candidates(session, before_id=next_id, now=now, limit=_BATCH_SIZE)
             batch, next_id = await asyncio.to_thread(_matching_batch, rows, profiles, desired, limit - len(entries))
             for row, profiles_match in batch:
+                publications.append(row)
                 entries.append(TenderMarketItem(
                     id=row.id, title=row.title, source=row.source, source_url=row.source_url,
                     deadline_at=_aware(row.deadline_at), profiles=profiles_match,
@@ -103,6 +106,9 @@ class TenderMarketService:
             if len(rows) < _BATCH_SIZE:
                 next_id = None
                 break
+        crm_links = await market_crm_links(session, scope, publications)
+        for item in entries:
+            item.crm_link = crm_links.get(item.id)
         latest = await TenderMarketDAO.checkpoint(session)
         current = await TenderModuleService.get(session, scope.tenant_id)
         if current.version != settings.version or not current.enabled or not current.entitled:

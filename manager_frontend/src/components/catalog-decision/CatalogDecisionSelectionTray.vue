@@ -29,7 +29,7 @@ const selectionBlocked = computed(() => props.validating || Boolean(props.valida
       <template v-else>
         <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('attachOrder')">В существующий заказ</button>
         <button type="button" :class="expanded ? '' : 'hidden sm:block'" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('createOrder')">Новый заказ</button>
-        <button type="button" class="min-h-10 flex-1 rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('createCollection')">Создать подборку</button>
+        <button type="button" class="min-h-10 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold text-brand-700 disabled:opacity-50" :disabled="busy || selectionBlocked" @click="emit('createCollection')">Подборка сайта</button>
       </template>
       </slot>
     </div>

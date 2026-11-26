@@ -42,6 +42,7 @@ import KitlaneShell from '../src/components/kitlane/KitlaneShell.vue';
 import ManagerAccountMenu from '../src/components/manager/ManagerAccountMenu.vue';
 import { managerSession } from '../src/services/manager-session';
 import { managerStorefrontSelection } from '../src/services/manager-storefront-selection';
+import { leadInboxApi } from '../src/services/lead-inbox';
 
 const response = (items: Array<Record<string, unknown>>) => ({
   items,
@@ -74,6 +75,27 @@ describe('LeadInbox usability', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     window.history.replaceState({}, '', '/manager/leads');
+  });
+
+  it('opens the exact raw incoming referenced by a task without reading another item or the queue', async () => {
+    window.history.replaceState({}, '', '/manager/leads?kind=lead&itemId=17&taskId=3');
+    const fetchItem = vi.spyOn(leadInboxApi, 'detail').mockResolvedValue({ ...activeItem, id: 17, entity_kind: 'lead' } as never);
+    const view = mount(LeadInbox);
+    await flushPromises();
+    expect(fetchItem).toHaveBeenCalledWith(17, 'lead');
+    expect(mocks.getLeadsInbox).not.toHaveBeenCalled();
+    expect(view.get('h1').text()).toBe('Входящее №17');
+    expect(view.get('a[href="/manager/tasks?taskId=3"]').text()).toBe('К поручению');
+    view.unmount();
+  });
+
+  it('keeps an enabled monitoring module reachable when no tenders have entered CRM', async () => {
+    managerSession.auth.value = { username: 'preview', tenant_id: 11, capabilities: ['crm.manage', 'tender.market'] } as never;
+    const view = mount(LeadInbox);
+    await flushPromises();
+    await view.findAll('button').find(button => button.text().startsWith('Тендеры'))!.trigger('click');
+    expect(view.get('a[href="/manager/tenders?from=inbox"]').text()).toContain('Мониторинг тендеров');
+    view.unmount();
   });
 
   it('searches on the server and switches scope directly', async () => {

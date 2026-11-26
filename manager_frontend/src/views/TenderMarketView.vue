@@ -2,11 +2,17 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ManagerTenderModuleService, type TenderMarketItem, type TenderMarketResults } from '../client';
 import TenderMarketEvidencePanel from '../features/tenders/TenderMarketEvidencePanel.vue';
+import { openManagerChild, replaceManagerLocation, returnToManager } from '../services/manager-navigation-history';
+import { orderPageUrl } from '../services/order-navigation';
 import { getApiErrorMessage } from '../utils/api-errors';
 
 defineProps<{ canManageSettings?: boolean }>();
-const mode = ref<'match' | 'review'>('match');
-const profile = ref('');
+const params = new URLSearchParams(window.location.search);
+const fromInbox = params.get('from') === 'inbox';
+const inboxReturn = window.history.state?.managerReturn?.href;
+const inboxPath = typeof inboxReturn === 'string' && inboxReturn.split('?')[0] === '/manager/leads' ? inboxReturn : '/manager/leads?source=belzakupki';
+const mode = ref<'match' | 'review'>(params.get('show') === 'review' ? 'review' : 'match');
+const profile = ref((params.get('profile') || '').slice(0, 96));
 const rows = ref<TenderMarketItem[]>([]);
 const result = ref<TenderMarketResults | null>(null);
 const loading = ref(false);
@@ -19,6 +25,8 @@ const portalName: Record<string, string> = {
   icetrade_by: 'ICETRADE',
   butb_by: 'БУТБ',
 };
+const crmPath = (link: NonNullable<TenderMarketItem['crm_link']>) => link.kind === 'incoming'
+  ? `/manager/leads?kind=order&itemId=${link.id}&from=market` : orderPageUrl(link.id, window.location.pathname + window.location.search);
 const formatDate = (value: string) => new Intl.DateTimeFormat('ru-BY', {
   timeZone: 'Europe/Minsk', dateStyle: 'medium',
 }).format(new Date(value));
@@ -57,7 +65,15 @@ async function load(more = false) {
   }
 }
 
-watch([mode, profile], () => void load());
+watch([mode, profile], () => {
+  const url = new URL(window.location.href);
+  if (url.pathname === '/manager/tenders') {
+    if (mode.value === 'review') url.searchParams.set('show', 'review'); else url.searchParams.delete('show');
+    if (profile.value) url.searchParams.set('profile', profile.value); else url.searchParams.delete('profile');
+    replaceManagerLocation(url.pathname + url.search);
+  }
+  void load();
+});
 onMounted(() => void load());
 onBeforeUnmount(() => { version++; });
 </script>
@@ -65,8 +81,8 @@ onBeforeUnmount(() => { version++; });
 <template>
   <main class="mx-auto max-w-5xl space-y-5 p-4 sm:p-8">
     <header class="flex flex-wrap items-baseline justify-between gap-3">
-      <h1 class="text-2xl font-bold">Тендеры</h1>
-      <a v-if="canManageSettings" href="/manager/settings" class="text-sm font-semibold text-brand-700 underline">Настройки поиска</a>
+      <div><a v-if="fromInbox" :href="inboxPath" class="text-sm font-semibold text-brand-700 underline" @click.exact.prevent="returnToManager(inboxPath)">Ко входящим</a><h1 class="text-2xl font-bold">Мониторинг тендеров</h1></div>
+      <a v-if="canManageSettings" href="/manager/settings?tab=modules" @click.exact.prevent="openManagerChild('/manager/settings?tab=modules')" class="text-sm font-semibold text-brand-700 underline">Настройки поиска</a>
     </header>
     <div class="flex flex-wrap items-end gap-3">
       <div class="flex gap-2" aria-label="Выдача тендеров">
@@ -96,6 +112,7 @@ onBeforeUnmount(() => { version++; });
           {{ portalName[row.source] || row.source }}<span v-if="row.deadline_at"> · До {{ formatDate(row.deadline_at) }}</span>
         </p>
         <p class="mt-2 text-xs">{{ row.profiles.map((item) => item.name).join(' · ') }}</p>
+        <a v-if="row.crm_link" :href="crmPath(row.crm_link)" class="mr-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand-700 underline" @click.exact.prevent="openManagerChild(crmPath(row.crm_link))">{{ row.crm_link.kind === 'incoming' ? 'Открыть во входящих' : 'Открыть заказ' }} №{{ row.crm_link.id }}</a>
         <button type="button" class="btn-mini-outline mt-2"
           :aria-expanded="openEvidenceId === row.id" @click="openEvidenceId = openEvidenceId === row.id ? null : row.id"
         >ТЗ и оригиналы</button>

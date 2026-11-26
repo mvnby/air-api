@@ -234,7 +234,8 @@ onBeforeUnmount(() => { disposed = true; compareGeneration += 1; selectionCheckG
           <div class="selection-heading"><h1 ref="pickerHeading" :tabindex="picker ? -1 : undefined">{{ picker ? picker.title : 'Подбор сплит-систем' }}</h1><p aria-live="polite">Найдено: {{ total }}</p></div>
           <button v-if="picker" type="button" class="selection-order-return" @click="emit('cancelPick', queryWithFilters(''))">К предложению</button>
           <template v-else>
-            <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="text-sm font-semibold text-brand-700 underline">Персональные предложения</a>
+            <a :href="target.context.value ? personalOffersPath + '?orderId=' + target.context.value.orderId : personalOffersPath" class="text-sm font-semibold text-brand-700 underline">Предложения клиентам</a>
+            <a v-if="hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.storefrontCollectionsManage)" href="/manager/product-collections" class="text-sm font-semibold text-brand-700 underline" @click.exact.prevent="openManagerChild('/manager/product-collections')">Подборки сайта</a>
             <button v-if="canPrepareOffer && !Object.keys(selected).length" type="button" class="selection-order-return" @click="openManagerChild(personalOfferSelectionUrl([], target.context.value?.orderId))">Новое предложение</button>
             <a v-if="target.context.value" :href="target.context.value.returnTo" class="selection-order-return" @click.prevent="!target.saving.value && returnToManager(target.context.value!.returnTo)">К заказу #{{ target.context.value.orderId }}</a>
           </template>

@@ -20,6 +20,7 @@ import TelegramLoginChallenge from './components/manager/TelegramLoginChallenge.
 import ManagerSessionRecoveryModal from './components/manager/ManagerSessionRecoveryModal.vue';
 import KitlaneShell from './components/kitlane/KitlaneShell.vue';
 import KitlaneNavigation from './components/kitlane/KitlaneNavigation.vue';
+import ManagerQuickCreate from './components/manager/ManagerQuickCreate.vue';
 import { useKitlaneIdentity } from './composables/useKitlaneIdentity';
 import { confirmDialog } from './services/ui-feedback';
 import { navigateManager, replaceManagerLocation, startManagerNavigation } from './services/manager-navigation-history';
@@ -33,21 +34,9 @@ import {
 } from './services/manager-session';
 import { useDemoReadOnly } from './services/manager-demo';
 import {
-  coreNavItems,
-  installerWorkNavItem,
-  installerMoneyNavItem,
-  installerPayNavItem,
-  defaultExpandedNavSections,
-  navSections,
-  type NavItem,
-  type NavSection,
-  type NavSectionId,
-} from './manager-navigation';
-import {
   MANAGER_CAPABILITY,
   hasManagerCapability,
   isManagerPathAllowed,
-  canReadOwnInstallerWorks,
 } from './manager-capabilities';
 const WorkerPayView = defineManagerAsyncComponent('WorkerPayView', () => import('./views/WorkerPayView.vue'));
 const WorkerMoneyView = defineManagerAsyncComponent('WorkerMoneyView', () => import('./views/WorkerMoneyView.vue'));
@@ -141,7 +130,6 @@ const currentLocation = ref(normalizeOrderLocation());
 const orderPage = computed(() => readOrderPage(currentLocation.value));
 const viewRevision = ref(0);
 const THEME_STORAGE_KEY = 'manager_theme';
-const NAV_SECTIONS_STORAGE_KEY = 'manager_nav_sections_v1';
 let webRebuildStatusInterval: ReturnType<typeof window.setInterval> | null = null;
 type WebRebuildStatus = {
   current_revision: number;
@@ -154,7 +142,6 @@ type WebRebuildStatus = {
   state: string;
   last_error?: string | null;
 };
-const expandedNavSections = ref<Record<NavSectionId, boolean>>({ ...defaultExpandedNavSections });
 const normalizePath = (path: string) => {
   if (path.length > 1 && path.endsWith('/')) {
     return path.slice(0, -1);
@@ -169,54 +156,6 @@ const canManageDocuments = computed(() => hasManagerCapability(auth.value, MANAG
 const canManageSettings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.settingsManage));
 const canManageCallRecordings = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.callRecordingsManage));
 const isInstallerWorkspace = computed(() => hasManagerCapability(auth.value, MANAGER_CAPABILITY.installerWorksRead));
-const visibleCoreNavItems = computed(() => [
-  ...coreNavItems.filter(item => (!isInstallerWorkspace.value || item.path !== '/manager')
-    && (!item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability))),
-  ...(canReadOwnInstallerWorks(auth.value) ? [installerWorkNavItem, installerMoneyNavItem, installerPayNavItem] : []),
-]);
-const visibleNavSections = computed<NavSection[]>(() => navSections
-  .map(section => ({
-    ...section,
-    items: section.items.filter(
-      item => !item.requiredCapability || hasManagerCapability(auth.value, item.requiredCapability),
-    ),
-  }))
-  .filter(section => section.items.length > 0));
-const isNavItemActive = (item: NavItem) => {
-  if (item.match === 'exact') return currentPath.value === item.path;
-  return currentPath.value === item.path || currentPath.value.startsWith(`${item.path}/`);
-};
-const isNavSectionActive = (section: NavSection) => section.items.some(isNavItemActive);
-const loadExpandedNavSections = () => {
-  try {
-    const storedValue = window.localStorage.getItem(NAV_SECTIONS_STORAGE_KEY);
-    if (!storedValue) return;
-    const parsed = JSON.parse(storedValue) as Partial<Record<NavSectionId, boolean>>;
-    expandedNavSections.value = {
-      ...defaultExpandedNavSections,
-      ...Object.fromEntries(
-        Object.entries(parsed).filter(([, value]) => typeof value === 'boolean'),
-      ),
-    } as Record<NavSectionId, boolean>;
-  } catch {
-    expandedNavSections.value = { ...defaultExpandedNavSections };
-  }
-};
-const expandActiveNavSection = () => {
-  const activeSection = visibleNavSections.value.find(isNavSectionActive);
-  if (activeSection && !expandedNavSections.value[activeSection.id]) {
-    expandedNavSections.value = {
-      ...expandedNavSections.value,
-      [activeSection.id]: true,
-    };
-  }
-};
-const toggleNavSection = (sectionId: NavSectionId) => {
-  expandedNavSections.value = {
-    ...expandedNavSections.value,
-    [sectionId]: !expandedNavSections.value[sectionId],
-  };
-};
 const defaultView = computed(() => isInstallerWorkspace.value ? 'installer-works' : hasManagerCapability(auth.value, MANAGER_CAPABILITY.crmManage)
   ? 'home' : canEditCatalog.value ? 'products' : 'profile-security');
 const currentView = computed(() => {
@@ -309,7 +248,7 @@ const stopNavigation = startManagerNavigation((location) => {
   viewRevision.value += 1;
 }, normalizeOrderLocation);
 const navigate = async (path: string) => {
-  if (window.location.pathname !== path && !await navigateManager(path)) return;
+  if (currentLocation.value !== path && !await navigateManager(path)) return;
   isMobileNavOpen.value = false;
 };
 const enforceAuthorizedLocation = () => {
@@ -443,8 +382,6 @@ onMounted(() => {
   } else {
     applyTheme('light');
   }
-  loadExpandedNavSections();
-  expandActiveNavSection();
   if (window.location.pathname === '/manager') {
     navigate('/manager');
   }
@@ -473,13 +410,7 @@ watch(recoveryRequired, (required) => {
   isMobileNavOpen.value = false;
   toast.value = '';
 }, { flush: 'sync' });
-watch(expandedNavSections, (value) => {
-  window.localStorage.setItem(NAV_SECTIONS_STORAGE_KEY, JSON.stringify(value));
-}, { deep: true });
-watch(currentPath, () => {
-  if (enforceAuthorizedLocation()) return;
-  expandActiveNavSection();
-});
+watch(currentPath, enforceAuthorizedLocation);
 </script>
 
 <template>
@@ -510,7 +441,7 @@ watch(currentPath, () => {
   >
     <KitlaneShell :workspace="authorizedView === 'orders' && Boolean(orderPage)" :name="partnerName" :logo-url="partnerLogoUrl" :compact-logo-url="partnerCompactLogoUrl" :context-key="partnerContextKey" v-model:collapsed="isDesktopNavCollapsed" v-model:mobile-open="isMobileNavOpen" :theme="theme" @toggle-theme="toggleTheme" @home="navigate('/manager')">
       <template #navigation>
-        <KitlaneNavigation :items="visibleCoreNavItems" :sections="visibleNavSections" :collapsed="isDesktopNavCollapsed" :leads-count="leadsCount" :expanded="expandedNavSections" :is-nav-item-active="isNavItemActive" :is-nav-section-active="isNavSectionActive" @navigate="navigate" @toggle-section="toggleNavSection" />
+        <KitlaneNavigation v-if="auth" :auth="auth" :path="currentPath" :collapsed="isDesktopNavCollapsed" :mobile-open="isMobileNavOpen" :leads-count="leadsCount" @navigate="navigate" @close-drawer="isMobileNavOpen = false" />
       </template>
       <template #footer>
       <div v-if="canManagePlatform" class="p-3 border-t border-[var(--kitlane-sidebar-border)] mt-auto">
@@ -554,6 +485,7 @@ watch(currentPath, () => {
       </div>
       </template>
       <template #account="{ compact }">
+        <ManagerQuickCreate v-if="auth && hasManagerCapability(auth, MANAGER_CAPABILITY.crmManage) && !demoReadOnly && !auth.must_change_password" :key="[partnerContextKey, auth.staff_user_id || auth.username].join(':')" :compact="compact" :location="currentLocation" :can-create-task="Boolean(auth.staff_user_id)" @notice="setToast($event, 'success')" />
         <ManagerAccountMenu
           v-if="auth"
           :auth="auth"

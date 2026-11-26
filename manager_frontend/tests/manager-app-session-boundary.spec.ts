@@ -561,15 +561,16 @@ describe('supplier navigation entry points', () => {
   it('opens prices separately from the supplier profile and highlights only that entry', async () => {
     await mountApp('/manager/suppliers');
     expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('profile');
-    const prices = wrapper!.findAll('button').find(button => button.attributes('aria-label') === 'Прайсы поставщиков');
-    expect(prices).toBeDefined();
-    await prices!.trigger('click');
+    const directory = wrapper!.get('button[aria-label="Все разделы"]');
+    await directory.trigger('click');
+    const panel = () => document.querySelector<HTMLElement>('.section-directory')!;
+    panel().querySelector<HTMLAnchorElement>('a[href="/manager/suppliers/prices"]')!.click();
     await flushPromises();
     expect(window.location.pathname).toBe('/manager/suppliers/prices');
     expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('prices');
-    expect(wrapper!.findAll('[aria-current="page"]').map(button => button.attributes('aria-label'))).toEqual(['Прайсы поставщиков']);
-    const suppliers = wrapper!.findAll('button').find(button => button.attributes('aria-label') === 'Поставщики');
-    await suppliers!.trigger('click');
+    await directory.trigger('click');
+    expect([...panel().querySelectorAll('a[aria-current="page"]')].map(link => link.textContent?.trim())).toEqual(['Прайсы поставщиков']);
+    panel().querySelector<HTMLAnchorElement>('a[href="/manager/suppliers"]')!.click();
     await flushPromises();
     expect(wrapper!.get('[data-testid="supplier-entry"]').text()).toBe('profile');
   });

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Inbox, Loader2 } from 'lucide-vue-next';
 import { api } from '../api';
-import { inboxSourceOptions, leadInboxApi, notifyInboxChanged, type InboxItem, type InboxContactRequest, type InboxScope, type InboxSource } from '../services/lead-inbox';
+import { globalIncomingCapturedEvent, inboxSourceOptions, leadInboxApi, notifyInboxChanged, type InboxItem, type InboxContactRequest, type InboxScope, type InboxSource } from '../services/lead-inbox';
+import { hasManagerCapability, MANAGER_CAPABILITY } from '../manager-capabilities';
+import { navigateManager, openManagerChild, replaceManagerLocation, returnToManager } from '../services/manager-navigation-history';
 import { managerSession } from '../services/manager-session';
 import { managerStorefrontSelection, managerStorefrontStorageKey } from '../services/manager-storefront-selection';
 import LeadInboxCard from '../components/leads/LeadInboxCard.vue';
@@ -39,12 +42,30 @@ let summaryRequestId = 0;
 let disposed = false;
 let ready = false;
 
+const params = new URLSearchParams(window.location.search);
+const requestedKind = params.get('kind');
+const requestedId = Number(params.get('itemId'));
+const focusItem = (requestedKind === 'lead' || requestedKind === 'order') && Number.isSafeInteger(requestedId) && requestedId > 0
+  ? { id: requestedId, kind: requestedKind } as const : null;
+const originTask = Number(params.get('taskId'));
+const marketParent = window.history.state?.managerReturn?.href;
+const marketPath = typeof marketParent === 'string' && marketParent.split('?')[0] === '/manager/tenders' ? marketParent : '/manager/tenders';
+const canMonitor = computed(() => hasManagerCapability(managerSession.auth.value, MANAGER_CAPABILITY.tenderMarket));
+let restoreScroll = 0;
+const toMonitor = () => { rememberPosition(); void openManagerChild('/manager/tenders?from=inbox'); };
+const reloadGlobalCapture = () => { void load(); };
 const contextStorageKey = () => {
   const auth = managerSession.auth.value;
   const storefront = managerStorefrontSelection.selectedSlug.value;
   return auth && storefront ? `${managerStorefrontStorageKey(auth)}:${storefront}:lead-inbox` : null;
 };
+const rememberPosition = () => {
+  const key = contextStorageKey();
+  if (!key || focusItem) return;
+  try { window.sessionStorage.setItem(key + ':top', String(window.scrollY)); } catch { /* Optional list position. */ }
+};
 const saveContext = () => {
+  if (focusItem) return;
   const key = contextStorageKey();
   if (!key) return;
   try { window.sessionStorage.setItem(key, JSON.stringify({ scope: scope.value, source: source.value, search: appliedSearch.value, page: page.value, unreadOnly: unreadOnly.value, sort: sort.value })); }
@@ -54,6 +75,7 @@ const restoreContext = () => {
   const key = contextStorageKey();
   if (!key) return;
   try {
+    restoreScroll = Math.max(0, Number(window.sessionStorage.getItem(key + ':top')) || 0);
     const saved = JSON.parse(window.sessionStorage.getItem(key) || '{}');
     if (saved.scope === 'active' || saved.scope === 'archive') scope.value = saved.scope;
     if (inboxSourceOptions.some(option => option.value === saved.source)) source.value = saved.source;
@@ -84,6 +106,13 @@ const load = async () => {
   loadError.value = '';
   saveContext();
   try {
+    if (focusItem) {
+      const item = await leadInboxApi.detail(focusItem.id, focusItem.kind);
+      if (disposed || requestId !== loadRequestId) return;
+      items.value = [item];
+      total.value = 1;
+      return;
+    }
     const result = await api.getLeadsInbox(scope.value, page.value, pageLimit, appliedSearch.value || undefined, source.value || undefined, unreadOnly.value, sort.value);
     if (disposed || requestId !== loadRequestId) return;
     const nextTotal = result.meta?.total ?? result.total;
@@ -99,14 +128,18 @@ const load = async () => {
   } catch (e) {
     if (disposed || requestId !== loadRequestId) return;
     console.error(e);
-    loadError.value = 'Не удалось загрузить входящие. Проверьте соединение и повторите попытку.';
+    loadError.value = focusItem ? 'Обращение недоступно в выбранной компании и витрине.' : 'Не удалось загрузить входящие. Проверьте соединение и повторите попытку.';
   } finally {
     if (requestId === loadRequestId) loading.value = false;
   }
 };
 
 onMounted(async () => {
+  window.addEventListener(globalIncomingCapturedEvent, reloadGlobalCapture);
   restoreContext();
+  if (params.get('source') === 'belzakupki' && source.value !== 'belzakupki') {
+    source.value = 'belzakupki'; scope.value = 'active'; unreadOnly.value = false; search.value = appliedSearch.value = ''; page.value = 1; restoreScroll = 0;
+  }
   const deepLinkedId = Number(new URLSearchParams(window.location.search).get('incomingId'));
   if (Number.isSafeInteger(deepLinkedId) && deepLinkedId > 0) {
     editingIncomingId.value = deepLinkedId;
@@ -115,6 +148,7 @@ onMounted(async () => {
   await nextTick();
   ready = true;
   await load();
+  if (!disposed && !focusItem && restoreScroll > 0) { await nextTick(); window.scrollTo(0, restoreScroll); }
 });
 watch([scope, source, unreadOnly, sort], () => {
   if (inboxSearchTimeout) clearTimeout(inboxSearchTimeout);
@@ -136,6 +170,8 @@ watch(search, (value) => {
   }, 300);
 });
 onBeforeUnmount(() => {
+  rememberPosition();
+  window.removeEventListener(globalIncomingCapturedEvent, reloadGlobalCapture);
   disposed = true;
   ready = false;
   loadRequestId += 1;
@@ -145,7 +181,7 @@ onBeforeUnmount(() => {
 const clearIncomingDeepLink = () => {
   const url = new URL(window.location.href);
   url.searchParams.delete('incomingId');
-  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  replaceManagerLocation(url.pathname + url.search);
 };
 const closeIncomingCapture = () => {
   showIncomingCapture.value = false;
@@ -161,7 +197,7 @@ const openIncomingEdit = (item: InboxItem) => {
   editingIncomingId.value = item.id;
   const url = new URL(window.location.href);
   url.searchParams.set('incomingId', String(item.id));
-  window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  replaceManagerLocation(url.pathname + url.search);
   showIncomingCapture.value = true;
 };
 const isQuickIncoming = (item: InboxItem) => Boolean(
@@ -194,8 +230,7 @@ const handleQualifySuccess = async (orderId: number) => {
   qualifyTarget.value = null;
   notifyInboxChanged();
   setToast(`Сделка #${orderId} создана, открываем карточку`);
-  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${orderId}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  void openManagerChild(`/manager/orders/${orderId}?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
 };
 
 const handleSourceApplied = async (result: SourceAppliedEvent) => {
@@ -207,8 +242,7 @@ const handleSourceApplied = async (result: SourceAppliedEvent) => {
     return;
   }
   setToast([`Данные из источника применены, открываем сделку #${result.orderId}.`, sourceEquipmentPrefillMessage(result.equipmentPrefill)].filter(Boolean).join(' '));
-  window.history.pushState({}, '', `/manager/orders/kanban?orderId=${result.orderId}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  void openManagerChild(`/manager/orders/${result.orderId}?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
 };
 
 const markNoAnswer = async ({ item, note, nextFollowupAt }: InboxContactRequest) => {
@@ -265,7 +299,14 @@ const onEmailImported = async () => {
 
 <template>
   <div class="inbox-workspace">
-    <LeadInboxToolbar
+    <header v-if="focusItem" class="mb-4 flex flex-wrap items-center gap-3">
+      <h1 class="text-xl font-bold">Входящее №{{ focusItem.id }}</h1>
+      <a v-if="canMonitor && params.get('from') === 'market'" :href="marketPath" class="text-sm font-semibold text-brand-700 underline" @click.exact.prevent="returnToManager(marketPath)">К мониторингу</a>
+      <a v-if="Number.isSafeInteger(originTask) && originTask > 0" :href="`/manager/tasks?taskId=${originTask}`" class="text-sm font-semibold text-brand-700 underline" @click.exact.prevent="returnToManager(`/manager/tasks?taskId=${originTask}`)">К поручению</a>
+      <a href="/manager/leads" class="text-sm font-semibold text-brand-700 underline" @click.exact.prevent="navigateManager('/manager/leads')">К списку входящих</a>
+    </header>
+    <LeadInboxToolbar v-else
+      :show-tender-source="canMonitor"
       v-model:scope="scope" v-model:source="source" v-model:search="search"
       v-model:unread-only="unreadOnly" v-model:sort="sort"
       :pending-count="pendingCount" :unread-count="unreadCount" :source-counts="sourceCounts"
@@ -275,9 +316,10 @@ const onEmailImported = async () => {
       <template #email-import><EmailLeadImportPanel v-if="showEmailImport" @notice="setToast" @imported="onEmailImported" /></template>
     </LeadInboxToolbar>
 
+    <a v-if="canMonitor && params.get('from') !== 'market' && (focusItem ? items[0]?.source === 'belzakupki' : source === 'belzakupki')" href="/manager/tenders?from=inbox" class="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-700 underline dark:text-brand-300" @click.exact.prevent="toMonitor">Мониторинг тендеров <span aria-hidden="true">→</span></a>
     <!-- Loading -->
     <div v-if="loading" class="flex items-center gap-3 text-slate-500 dark:text-slate-400 py-12 justify-center">
-      <span class="material-icons-round animate-spin text-brand-500">refresh</span>
+      <Loader2 class="animate-spin text-brand-500" :size="22" aria-hidden="true" />
       Загрузка...
     </div>
 
@@ -291,7 +333,7 @@ const onEmailImported = async () => {
       v-else-if="items.length === 0"
       class="text-center py-16 text-slate-400 dark:text-slate-500"
     >
-      <span class="material-icons-round text-5xl mb-3 block opacity-30">inbox</span>
+      <Inbox class="mx-auto mb-3 opacity-30" :size="42" aria-hidden="true" />
       <p class="text-lg font-medium">
         {{ search || source || unreadOnly ? 'По этому запросу обращений нет' : (scope === 'active' ? 'Входящих нет — всё обработано!' : 'Архив пуст') }}
       </p>
@@ -303,9 +345,9 @@ const onEmailImported = async () => {
         v-for="item in items"
         :key="`${item.entity_kind || 'order'}:${item.id}`"
         :item="item"
-        :is-archive="scope === 'archive'"
+        :is-archive="focusItem ? Boolean(item.archive || item.linked_order_id) : scope === 'archive'"
         :contact-saving="contactSaving"
-        :quick-incoming="scope !== 'archive' && !item.linked_order_id && isQuickIncoming(item)"
+        :quick-incoming="(focusItem ? !item.archive : scope !== 'archive') && !item.linked_order_id && isQuickIncoming(item)"
         @qualify="openQualification"
         @link-changed="notifyInboxChanged(); load()"
         @updated="updateItem"
