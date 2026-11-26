@@ -696,6 +696,7 @@ class Settings(BaseSettings):
     BELZAKUPKI_LEAD_PUSH_ENABLED: bool = False
     BELZAKUPKI_LEAD_PUSH_API_KEY: str = Field(default="", repr=False, exclude=True)
     BELZAKUPKI_IMPORT_ENABLED: bool = False
+    BELZAKUPKI_TENDER_MARKET_ENABLED: bool = False
     BELZAKUPKI_API_BASE_URL: str = ""
     BELZAKUPKI_INTEGRATION_KEY: str = Field(default="", repr=False, exclude=True)
     BELZAKUPKI_IMPORT_TENANT_SLUG: str = ""

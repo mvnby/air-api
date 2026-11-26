@@ -2,6 +2,7 @@ import type { ManagerAuthStatusResponse } from './client';
 
 export const MANAGER_CAPABILITY = {
   crmManage: 'crm.manage',
+  tenderMarket: 'tender.market',
   workerPayRead: 'worker.pay.read',
   workerPayManage: 'worker.pay.manage',
   installerWorksRead: 'installer.works.read',
@@ -35,6 +36,7 @@ export const canReadOwnInstallerWorks = (
 
 export const requiredCapabilityForManagerPath = (path: string): ManagerCapability | null => {
   if (path === '/manager' || path === '/manager/' || path === '/manager/profile') return null;
+  if (path === '/manager/tenders' || path === '/manager/tenders/') return MANAGER_CAPABILITY.tenderMarket;
   if (path === '/manager/my-pay' || path === '/manager/my-money' || path === '/manager/my-work' || path.startsWith('/manager/my-work/')) return MANAGER_CAPABILITY.installerWorksRead;
   if (path.startsWith('/manager/worker-pay')) return MANAGER_CAPABILITY.workerPayRead;
   if (path.startsWith('/manager/settings/calls') || path.startsWith('/manager/calls')) {

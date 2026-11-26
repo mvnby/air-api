@@ -271,6 +271,7 @@ async def test_provider_selection_is_explicit_and_failure_retains_local_evidence
     assert preferred.extraction_status == "completed"
     openai.assert_awaited_once()
     deepseek.assert_awaited_once()
+    assert deepseek.await_args.kwargs["thinking_enabled"] is False
 
 
 @pytest.mark.asyncio

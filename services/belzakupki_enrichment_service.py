@@ -205,6 +205,7 @@ class BelzakupkiEnrichmentService:
     @staticmethod
     async def _fetch(
         source: str, external_id: str, document_id: str | None = None, *, max_bytes: int | None = None,
+        market: bool = False,
     ) -> httpx.Response:
         base = str(settings.BELZAKUPKI_API_BASE_URL or "").strip().rstrip("/")
         key = settings.BELZAKUPKI_INTEGRATION_KEY
@@ -212,7 +213,8 @@ class BelzakupkiEnrichmentService:
             raise RuntimeError("Belzakupki integration is not configured")
         if {source, external_id, document_id} & {".", ".."}:
             raise ValueError("Invalid Belzakupki source identity")
-        path = f"/api/v1/tenders/{quote(source, safe='')}/{quote(external_id, safe='')}"
+        scope_path = "/tender-market" if market else ""
+        path = f"/api/v1{scope_path}/tenders/{quote(source, safe='')}/{quote(external_id, safe='')}"
         if document_id is not None:
             path += f"/documents/{quote(document_id, safe='')}"
         if max_bytes is None:
@@ -524,6 +526,7 @@ class BelzakupkiEnrichmentService:
     @classmethod
     async def _download_document(
         cls, detail: dict[str, Any], identity: tuple[str, str], document_id: str, *, max_bytes: int | None = None,
+        market: bool = False,
     ) -> tuple[bytes, str, str]:
         candidates = [item for item in cls._documents(detail) if str(item["id"]) == document_id]
         if not candidates:
@@ -532,7 +535,8 @@ class BelzakupkiEnrichmentService:
             raise SourceDocumentInventoryUnavailable("Belzakupki source returned ambiguous document IDs")
         attachment_limit = int(settings.SERVICE_ATTACHMENT_MAX_SIZE_BYTES)
         limit = attachment_limit if max_bytes is None else min(max_bytes, attachment_limit)
-        response = await cls._fetch(*identity, document_id, max_bytes=limit)
+        scope_options = {"market": True} if market else {}
+        response = await cls._fetch(*identity, document_id, max_bytes=limit, **scope_options)
         content_type = response.headers.get("content-type", "application/octet-stream").split(";", 1)[0]
         if len(response.content) > limit:
             raise SourceDocumentTooLarge("Source document exceeds the configured size limit")

@@ -48,7 +48,7 @@ MAX_PARSER_SECONDS = 45
 EXTRACTION_CACHE_TTL_SECONDS = 30 * 60
 EXTRACTION_CACHE_ENTRIES = 16
 _parser_slots = asyncio.Semaphore(2)
-_extraction_cache: OrderedDict[tuple[int, int, str, str], tuple[float, dict]] = OrderedDict()
+_extraction_cache: OrderedDict[tuple[int | None, int | None, str, str], tuple[float, dict]] = OrderedDict()
 _extraction_locks: WeakValueDictionary = WeakValueDictionary()
 
 WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -538,8 +538,9 @@ def fragment_location(fragment: TenderDocumentFragment) -> str:
     return f"{fragment.section[:260]} · {position}" if fragment.section else position
 
 
-async def _cached_extraction(content: bytes, document_format: str, sha256: str, scope: TenantScope) -> dict:
-    key = (scope.tenant_id, scope.storefront_id, document_format, sha256)
+async def _cached_extraction(content: bytes, document_format: str, sha256: str, scope: TenantScope | None) -> dict:
+    tenant_key = (scope.tenant_id, scope.storefront_id) if scope is not None else (None, None)
+    key = (*tenant_key, document_format, sha256)
     lock = _extraction_locks.setdefault(key, asyncio.Lock())
     async with lock:
         cached = _extraction_cache.get(key)
@@ -553,6 +554,47 @@ async def _cached_extraction(content: bytes, document_format: str, sha256: str, 
             if len(_extraction_cache) > EXTRACTION_CACHE_ENTRIES:
                 _extraction_cache.popitem(last=False)
         return extraction
+
+
+async def _parse_original(
+    content: bytes, filename: str, mime_type: str, identity: dict, scope: TenantScope | None,
+) -> TenderDocumentReadResult:
+    sha256 = await asyncio.to_thread(lambda: hashlib.sha256(content).hexdigest())
+    identity.update(filename=filename, mime_type=mime_type, sha256=sha256)
+    document_format = _format_for(filename, mime_type)
+    if not document_format:
+        return TenderDocumentReadResult(
+            **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC, DOCX, RTF, XLS, XLSX и ZIP."],
+        )
+    try:
+        extraction = await _cached_extraction(content, document_format, sha256, scope)
+    except (OSError, TimeoutError, UnicodeError, json.JSONDecodeError):
+        extraction = {"status": "unreadable", "diagnostics": ["Чтение остановлено из-за ошибки или лимита времени."]}
+    return TenderDocumentReadResult(**identity, **extraction)
+
+
+async def load_public_tender_original(
+    publication_id: int, document_id: str, review: TenderReviewSource,
+) -> TenderDocumentReadResult:
+    from services.belzakupki_enrichment_service import (
+        BelzakupkiEnrichmentService, SourceDocumentInventoryUnavailable, SourceDocumentNotFound, SourceDocumentTooLarge,
+    )
+
+    reference = {"order_id": publication_id, "document_id": document_id}
+    async with _parser_slots:
+        try:
+            content, filename, mime_type = await BelzakupkiEnrichmentService._download_document(
+                review.detail, review.document_identity, document_id, max_bytes=MAX_ORIGINAL_BYTES, market=True,
+            )
+        except SourceDocumentTooLarge:
+            return TenderDocumentReadResult(
+                **reference, status="oversized", diagnostics=["Ответ источника превышает лимит размера."],
+            )
+        except (SourceDocumentInventoryUnavailable, SourceDocumentNotFound, httpx.HTTPError, RuntimeError):
+            return TenderDocumentReadResult(
+                **reference, status="unavailable", diagnostics=["Оригинал недоступен через источник закупки."],
+            )
+        return await _parse_original(content, filename, mime_type, {**reference, "origin": "source"}, None)
 
 
 async def _read_saved_original(
@@ -649,18 +691,7 @@ async def load_tender_document(
             return TenderDocumentReadResult(
                 **identity, status="oversized", diagnostics=["Ответ источника превышает лимит размера."],
             )
-        sha256 = await asyncio.to_thread(lambda: hashlib.sha256(content).hexdigest())
-        identity.update(filename=filename, mime_type=mime_type, sha256=sha256)
-        document_format = _format_for(filename, mime_type)
-        if not document_format:
-            return TenderDocumentReadResult(
-                **identity, status="unsupported", diagnostics=["Для чтения доступны PDF, DOC, DOCX, RTF, XLS, XLSX и ZIP."],
-            )
-        try:
-            extraction = await _cached_extraction(content, document_format, sha256, scope)
-        except (OSError, TimeoutError, UnicodeError, json.JSONDecodeError):
-            extraction = {"status": "unreadable", "diagnostics": ["Чтение остановлено из-за ошибки или лимита времени."]}
-        return TenderDocumentReadResult(**identity, **extraction)
+        return await _parse_original(content, filename, mime_type, identity, scope)
     finally:
         _parser_slots.release()
 
