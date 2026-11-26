@@ -284,6 +284,45 @@ async def test_market_deduplicates_only_verified_canonical_publications(database
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("original_source,original_url", [
+    ("goszakupki_by", "https://goszakupki.by/marketing/view/3880632"),
+    ("butb_by", "https://zakupki.butb.by/auctions/viewinvitation.html?auction=RQ20261125402772"),
+])
+async def test_market_prefers_native_publication_over_linked_icetrade(database, original_source, original_url):
+    original = dict(notice(1, "Поставка кондиционеров"), source=original_source, url=original_url)
+    mirror = dict(
+        original, source="icetrade_by", external_id="2", url="https://icetrade.by/tenders/all/view/2",
+        canonical_url=original_url,
+    )
+    independent = dict(
+        mirror, external_id="3", url="https://icetrade.by/tenders/all/view/3",
+        canonical_url="https://icetrade.by/tenders/all/view/2",
+    )
+    await put(database, (None, 1), original, dict(mirror, canonical_url=None), independent)
+    # A normal resync must apply the newly recognized reference even when the
+    # upstream publication timestamp did not change.
+    await put(database, (None, 2), original, mirror, independent)
+    async with database.begin() as session:
+        session.add(TenantTenderModule(
+            tenant_id=11, entitled=True, enabled=True, version=2,
+            profiles=[TenderSearchProfile(name="Все HVAC").model_dump(mode="json")],
+        ))
+    scope = TenantScope(tenant_id=11, storefront_id=42)
+
+    async def visible_urls():
+        async with database() as session:
+            result = await TenderMarketService.list(
+                session, scope, desired="match", profile_name=None, before_id=None,
+                settings_version=None, limit=20,
+            )
+            return [item.source_url for item in result.items]
+
+    assert await visible_urls() == [independent["url"], original_url]
+    await put(database, (None, 3), mirror, independent)
+    assert await visible_urls() == [independent["url"], mirror["url"]]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mismatch", [None, "deadline", "title", "older_mirror", "previous_sweep"])
 async def test_market_filters_original_using_current_mirror_lots(database, mismatch):
     at = datetime.now(timezone.utc).replace(second=0, microsecond=0)
