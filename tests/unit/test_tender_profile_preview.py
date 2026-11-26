@@ -107,6 +107,59 @@ def test_required_ventilation_is_excluded_within_the_verified_lot():
     assert unverified.state == "review"
 
 
+def test_native_lot_confirms_supply_and_exhaust_ventilation_repair():
+    name = "Текущий ремонт приточно-вытяжной системы вентиляции в помещениях тира"
+    tender = {
+        "source": "gias_by",
+        "lot_inventory_complete": True,
+        "lots": [{"number": "1", "name": name}],
+    }
+    profile = TenderSearchProfile(
+        name="Ремонт вентиляции", mode="strict", included_directions=["ventilation"],
+        activity_combinations=[["repair"]],
+    )
+    assert match_publication(name, tender, profile)[0].state == "match"
+    excluded = TenderSearchProfile(name="Без вентиляции", excluded_directions=["ventilation"])
+    assert match_publication(name, tender, excluded)[0].reason == "excluded_direction"
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("Кондиционеры с установкой в г. Бобруйск", "match"),
+    ("Кондиционеры с установкой вентиляции", "review"),
+    ("Кондиционеры с установкой при необходимости", "review"),
+    ("Кронштейны для кондиционеров с установкой в г. Бобруйск", "review"),
+])
+def test_native_lot_installation_qualifier_stays_with_the_named_equipment(name, expected):
+    tender = {"source": "goszakupki_by", "lot_inventory_complete": True, "lots": [{"number": "1", "name": name}]}
+    profile = TenderSearchProfile(
+        name="Установка кондиционеров", mode="strict", included_directions=["air_conditioning"],
+        activity_combinations=[["installation"]],
+    )
+    assert match_publication(name, tender, profile)[0].state == expected
+    combination = profile.model_copy(update={"activity_combinations": [["supply", "installation"]]})
+    assert match_publication(name, tender, combination)[0].state == "review"
+
+
+def test_conflicting_native_delivery_city_stays_in_review():
+    name = "кондиционеры с установкой в г.Бобруйск"
+    lot = {
+        "number": "1", "name": name,
+        "delivery_place": "Республика Беларусь, Могилевская область, 212030, Могилёв, ул.Тимирязевская, д.29",
+    }
+    tender = {"source": "goszakupki_by", "lot_inventory_complete": True, "lots": [lot]}
+    bobruisk = TenderPlace(region="7", locality="Бобруйск")
+    selected = TenderSearchProfile(
+        name="Установка в Бобруйске", mode="strict", included_places=[bobruisk], activity_combinations=[["installation"]],
+    )
+    excluded = TenderSearchProfile(name="Кроме Бобруйска", excluded_places=[bobruisk])
+    assert match_publication(name, tender, selected)[0].reason == "unconfirmed_place"
+    assert match_publication(name, tender, excluded)[0].reason == "unconfirmed_place"
+
+    localized = {**lot, "name": "Кондиционеры с установкой в г. Бобруйске",
+                 "delivery_place": "Могилевская область, г. Бобруйск, ул. Минская, 20"}
+    assert match_publication(name, {**tender, "lots": [localized]}, selected)[0].state == "match"
+
+
 @pytest.mark.parametrize(
     ("title", "reason"),
     [
