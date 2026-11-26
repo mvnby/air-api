@@ -284,6 +284,71 @@ async def test_market_deduplicates_only_verified_canonical_publications(database
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mismatch", [None, "deadline", "title", "older_mirror", "previous_sweep"])
+async def test_market_filters_original_using_current_mirror_lots(database, mismatch):
+    at = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    deadline = at + timedelta(days=1)
+    original = {**notice(3876716, "Монтаж кондиционера", at=at, lots=[]), "deadline_at": deadline}
+    mirror = {
+        **notice(699, original["title"], at=at, place="Витебская область, г. Лепель"),
+        "source": "gias_by",
+        "url": "https://gias.by/gias/#/purchase/current/699",
+        "canonical_url": original["url"],
+        "deadline_at": deadline + timedelta(seconds=59),
+    }
+    if mismatch == "deadline":
+        mirror["deadline_at"] += timedelta(days=1)
+    elif mismatch == "title":
+        mirror["title"] = "Монтаж вентиляции"
+    elif mismatch == "older_mirror":
+        mirror["updated_at"] -= timedelta(hours=1)
+    await put(database, (None, 1), original, mirror)
+    if mismatch == "previous_sweep":
+        await put(database, (None, 2), original, next_cursor="mirror-pending")
+    without_lepel = TenderSearchProfile(
+        name="Без Лепеля", excluded_places=[TenderPlace(region="2", locality="Лепель")],
+    )
+    lepel = TenderSearchProfile(
+        name="Монтаж в Лепеле", mode="strict", included_places=[TenderPlace(region="2", locality="Лепель")],
+        activity_combinations=[["installation"]],
+    )
+    async with database.begin() as session:
+        for company_id, profile in ((11, without_lepel), (12, lepel)):
+            session.add(TenantTenderModule(
+                tenant_id=company_id, entitled=True, enabled=True, profiles=[profile.model_dump(mode="json")],
+            ))
+
+    async with database() as session:
+        publication_id = await session.scalar(select(TenderMarketPublication.id).where(
+            TenderMarketPublication.source == "goszakupki_by",
+        ))
+        excluded_scope = TenantScope(tenant_id=11, storefront_id=42)
+        allowed_scope = TenantScope(tenant_id=12, storefront_id=43)
+        excluded = await TenderMarketService.list(
+            session, excluded_scope, desired="review", profile_name=None,
+            before_id=None, settings_version=None, limit=20,
+        )
+        included = await TenderMarketService.list(
+            session, allowed_scope, desired="match", profile_name=None,
+            before_id=None, settings_version=None, limit=20,
+        )
+        if mismatch is None:
+            assert not excluded.items
+            (result,) = included.items
+            assert result.id == publication_id and result.source_url == original["url"]
+            assert result.profiles[0].lots[0].lot_key == "1"
+            with pytest.raises(TenderModuleError) as rejected:
+                await Evidence.get(session, excluded_scope, publication_id)
+            assert rejected.value.status_code == 404
+            assert (await Evidence.get(session, allowed_scope, publication_id)).status == "unrequested"
+        else:
+            assert not included.items
+            (result,) = excluded.items
+            assert result.source_url == original["url"]
+            assert result.profiles[0].result.reason == "unconfirmed_place"
+
+
+@pytest.mark.asyncio
 async def test_market_reads_delegated_inventory_with_the_scoped_gias_identity(monkeypatch):
     publication = TenderMarketPublication(
         source="gias_by", external_id="699", source_url="https://gias.by/gias/#/purchase/current/699",
