@@ -34,6 +34,7 @@ const modules = [
   'SettingsBackupView',
   'DocumentsSettingsView',
   'TariffsView',
+  'InstallationMaterialCostsView',
   'InstallationRatesView',
   'InstallationDiscountsView',
   'ServiceEstimatesView',

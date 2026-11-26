@@ -53,6 +53,7 @@ from routers import manager_specs
 from routers import manager_installers
 from routers import manager_installation_rates
 from routers import manager_installation_discounts
+from routers import manager_installation_materials
 from routers import manager_settings
 from routers import manager_platform_ai
 from routers import manager_jev
@@ -140,6 +141,7 @@ router.include_router(manager_storefront_settings.router)
 router.include_router(manager_tender_module.router)
 router.include_router(manager_service_catalog.router)
 router.include_router(manager_installation_rates.router)
+router.include_router(manager_installation_materials.router)
 router.include_router(manager_installation_discounts.router)
 router.include_router(manager_tariffs.router)
 router.include_router(manager_service_estimates.router)

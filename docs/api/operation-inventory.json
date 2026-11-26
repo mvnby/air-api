@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "43": "Installation material purchase prices: private company scope, exact pack and fractional consumption values, optimistic versions and bounded lists and calculations. Reviewed 2026-11-26",
     "42": "Public tender evidence: active company profile and entitlement checks, durable public-only receipt, verified scope for original downloads, bounded worker leases and exact-content reuse. Reviewed 2026-11-26",
     "41": "Company tender module controls: separate audited platform entitlement, optimistic company profile updates, scoped preview and bounded public market discovery. Reviewed 2026-11-26 for issue 1303",
     "40": "Tender original verification: scoped platform owner, verified publication, bounded background jobs, per-file coverage and literal evidence. Reviewed 2026-11-26 for issue 1302",
@@ -645,6 +646,12 @@
       ["POST /api/manager/installation-estimates/resolve", "resolve_manager_installation_tariff", false, 3],
       ["POST /api/manager/installation-estimates/standard-suggestions", "suggest_manager_installation_standard_tariffs", false, 3],
       ["POST /api/manager/installation-estimates/{estimate_id}/orders/{order_id}/proposals/{proposal_id}/attach", "attach_manager_installation_estimate", false, 3]
+    ],
+    "routers/manager_installation_materials.py": [
+      ["GET /api/manager/installation-materials", "list_manager_installation_material_prices", false, 43],
+      ["POST /api/manager/installation-materials", "create_manager_installation_material_price", false, 43],
+      ["POST /api/manager/installation-materials/calculate", "calculate_manager_installation_material_cost", false, 43],
+      ["PUT /api/manager/installation-materials/{price_id}", "update_manager_installation_material_price", false, 43]
     ],
     "routers/manager_installation_rates.py": [
       ["GET /api/manager/installation-rates", "list_manager_installation_rates", false, 3],

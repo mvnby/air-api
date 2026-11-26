@@ -78,6 +78,7 @@ const PlatformSettingsView = defineManagerAsyncComponent('PlatformSettingsView',
 const SettingsBackupView = defineManagerAsyncComponent('SettingsBackupView', () => import('./views/SettingsBackupView.vue'));
 const DocumentsSettingsView = defineManagerAsyncComponent('DocumentsSettingsView', () => import('./views/DocumentsSettingsView.vue'));
 const TariffsView = defineManagerAsyncComponent('TariffsView', () => import('./views/TariffsView.vue'));
+const InstallationMaterialCostsView = defineManagerAsyncComponent('InstallationMaterialCostsView', () => import('./views/InstallationMaterialCostsView.vue'));
 const InstallationRatesView = defineManagerAsyncComponent('InstallationRatesView', () => import('./views/InstallationRatesView.vue'));
 const InstallationDiscountsView = defineManagerAsyncComponent('InstallationDiscountsView', () => import('./views/InstallationDiscountsView.vue'));
 const ServiceEstimatesView = defineManagerAsyncComponent('ServiceEstimatesView', () => import('./views/ServiceEstimatesView.vue'));
@@ -252,6 +253,7 @@ const currentView = computed(() => {
   if (path.startsWith('/manager/settings')) return 'settings';
   if (path.startsWith('/manager/installation-rates')) return 'installation-rates';
   if (path.startsWith('/manager/installation-discounts')) return 'installation-discounts';
+  if (path === '/manager/tariffs/materials' || path === '/manager/tariffs/materials/') return 'installation-materials';
   if (path.startsWith('/manager/tariffs')) return 'tariffs';
   if (path.startsWith('/manager/service-estimates')) return 'service-estimates';
   if (path.startsWith('/manager/mail')) return 'mail';
@@ -601,6 +603,7 @@ watch(currentPath, () => {
       <SettingsView v-else-if="authorizedView === 'settings' && canManageSettings" :key="currentLocation" :can-manage-call-recordings="canManageCallRecordings" />
       <InstallationRatesView v-else-if="authorizedView === 'installation-rates'" :key="currentLocation" />
       <InstallationDiscountsView v-else-if="authorizedView === 'installation-discounts'" :key="currentLocation" />
+      <InstallationMaterialCostsView v-else-if="authorizedView === 'installation-materials'" :key="currentLocation" />
       <TariffsView v-else-if="authorizedView === 'tariffs'" :key="currentLocation" />
       <ServiceEstimatesView v-else-if="authorizedView === 'service-estimates'" :key="currentLocation" />
       <MailView v-else-if="authorizedView === 'mail'" :key="currentLocation" />
