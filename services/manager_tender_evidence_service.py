@@ -23,6 +23,7 @@ from services.tender_source_reference import source_for_manager_review
 _MAX_ACTIVE_JOBS = 2
 _MAX_RECENT_JOBS = 24
 _TTL_SECONDS = 30 * 60
+_FALLBACK_TTL_SECONDS = 5 * 60
 _READ_TIMEOUT_SECONDS = 80
 _ANALYSIS_TIMEOUT_SECONDS = 40
 _ACTIVE_STATUSES = {"reading", "analyzing"}
@@ -181,8 +182,9 @@ class ManagerTenderEvidenceService:
         analysis = await qualify_tender_documents(
             evidence.fragments, complete=coverage, provider="deepseek", provider_timeout_seconds=_ANALYSIS_TIMEOUT_SECONDS,
         )
-        if key is not None and analysis.extraction_status == "completed":
-            cls._analyses[key] = (time.monotonic() + _TTL_SECONDS, analysis)
+        if key is not None and analysis.extraction_status in {"completed", "local_evidence_only"}:
+            ttl = _TTL_SECONDS if analysis.extraction_status == "completed" else _FALLBACK_TTL_SECONDS
+            cls._analyses[key] = (time.monotonic() + ttl, analysis)
             if len(cls._analyses) > _MAX_RECENT_JOBS:
                 cls._analyses.popitem(last=False)
         return analysis, False

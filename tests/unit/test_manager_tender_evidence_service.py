@@ -116,6 +116,10 @@ async def test_provider_failure_has_evidence_and_can_retry_without_rereading_unc
     assert failed.status == "completed" and failed.report.analysis_status == "local_evidence_only"
     assert failed.report.unselected_count == 1 and not failed.report.document_coverage_complete
     assert any(fact.evidence.quote == WORK for fact in failed.report.findings)
+    repeat = await _finish(Evidence.start(order_id=699, scope=SCOPE, document_ids=["a"]))
+    assert repeat.report == failed.report and provider.await_count == 1
+    key, (_, analysis) = next(iter(Evidence._analyses.items()))
+    Evidence._analyses[key] = (0, analysis)
     recovered = await _finish(Evidence.start(order_id=699, scope=SCOPE, document_ids=["a"]))
     assert recovered.report.analysis_status == "completed"
     assert parse.await_count == 1 and provider.await_count == 2

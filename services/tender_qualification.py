@@ -687,7 +687,9 @@ async def _request_candidates(
         )
     else:
         model = settings.DEEPSEEK_MODEL
-        response = await request_deepseek_completion(prompt=prompt, system_prompt=_SYSTEM_PROMPT, temperature=0.05)
+        response = await request_deepseek_completion(
+            prompt=prompt, system_prompt=_SYSTEM_PROMPT, temperature=0.05, thinking_enabled=False,
+        )
     parsed = json.loads(response)
     candidates = parsed.get("facts") if isinstance(parsed, dict) else None
     if not isinstance(candidates, list) or len(candidates) > 80:
