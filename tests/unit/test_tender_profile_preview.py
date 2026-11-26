@@ -1,3 +1,5 @@
+import pytest
+
 from schemas_tender_search import TenderPlace, TenderSearchProfile
 from services.tender_profile_preview import preview_tender_profile
 from services.belzakupki_import_service import BelzakupkiImportService
@@ -38,9 +40,10 @@ def test_preview_does_not_combine_unlinked_actions_or_separate_lots():
     assert [item.result.state for item in results.items] == ["review", "review", "review", "match"]
 
 
-def test_saved_native_lots_keep_exclusions_and_execution_places_independent():
+@pytest.mark.parametrize("source", ["goszakupki_by", "gias_by"])
+def test_saved_native_lots_keep_exclusions_and_execution_places_independent(source):
     native = {
-        "source": "goszakupki_by", "external_id": "snapshot", "title": "Разные работы",
+        "source": source, "external_id": "snapshot", "title": "Разные работы",
         "lot_inventory_complete": True, "lots": [
             {"number": "1", "name": "Техническое обслуживание кондиционеров",
              "delivery_place": "Витебская область, г. Витебск", "unrelated_field": "ignore"},

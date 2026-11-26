@@ -119,7 +119,7 @@ async def test_companies_find_independent_lots_and_reject_stale_pages(database):
                   {"number": "2", "name": "Монтаж кондиционеров", "delivery_place": "г. Витебск"},
               ]),
               notice(5, title, active=False),
-              notice(6, title))
+              {**notice(6, title), "source": "gias_by", "url": "https://gias.by/gias/#/purchase/current/6"})
 
     async def list_results(company, *, desired="match", profile=None, before_id=None, version=None, limit=30):
         async with database() as session:
@@ -131,6 +131,7 @@ async def test_companies_find_independent_lots_and_reject_stale_pages(database):
     first = await list_results(11, limit=1)
     assert first.profile_names == [climate.name] and first.last_sync_at is not None
     assert [row.source_url.rsplit("/", 1)[-1] for row in first.items] == ["6"]
+    assert first.items[0].source == "gias_by"
     assert first.next_before_id == first.items[0].id
     second = await list_results(11, before_id=first.next_before_id, version=first.settings_version)
     assert [row.source_url.rsplit("/", 1)[-1] for row in second.items] == ["1"]

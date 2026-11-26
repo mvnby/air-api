@@ -11,7 +11,7 @@ _LOT_LIMIT = 20
 
 def native_lot_snapshot(tender: dict) -> dict:
     value = tender.get("lots")
-    if tender.get("source") != "goszakupki_by" or not isinstance(value, list) or not value:
+    if tender.get("source") not in {"goszakupki_by", "gias_by"} or not isinstance(value, list) or not value:
         return {}
     lots = []
     numbers = set()
