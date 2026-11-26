@@ -31,7 +31,11 @@ def match_tender_lot(profile: TenderSearchProfile, lot: TenderLotSignals) -> Ten
 
     desired_directions = (set(profile.included_directions) or _HVAC_DIRECTIONS).difference(profile.excluded_directions)
     desired_activities = [set(item) for item in profile.activity_combinations]
-    activity_groups = lot.activity_evidence_groups if lot.activity_evidence_groups is not None else [lot.required_activities]
+    activity_groups = [
+        group
+        for direction in desired_directions
+        for group in lot.activity_evidence_by_direction.get(direction, [])
+    ] if lot.activity_evidence_by_direction is not None else [lot.required_activities]
     known_direction = bool(lot.confirmed_directions & desired_directions)
     known_activities = not desired_activities or any(
         required <= confirmed for required in desired_activities for confirmed in activity_groups
@@ -45,10 +49,11 @@ def match_tender_lot(profile: TenderSearchProfile, lot: TenderLotSignals) -> Ten
         return TenderLotMatch(lot_key=lot.lot_key, state="excluded", reason="different_direction")
     if not known_activities and lot.activities_complete:
         return TenderLotMatch(lot_key=lot.lot_key, state="excluded", reason="different_activity")
+    direction_scope_known = lot.directions_complete or lot.verified_native_lot
     if not known_direction or (
         profile.excluded_directions
-        and (not lot.directions_complete or lot.possible_directions.intersection(profile.excluded_directions))
-    ) or (strict and not (lot.directions_complete or lot.verified_native_lot)):
+        and (not direction_scope_known or lot.possible_directions.intersection(profile.excluded_directions))
+    ) or (strict and not direction_scope_known):
         return TenderLotMatch(lot_key=lot.lot_key, state="review", reason="unconfirmed_direction")
     if not known_place or (
         (profile.excluded_places or strict and profile.included_places) and not lot.places_complete

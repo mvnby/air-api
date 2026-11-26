@@ -6,7 +6,9 @@ from schemas_tender_search import (
     TenderLotSignals, TenderPlace, TenderProfilePreview, TenderProfilePreviewItem, TenderSearchProfile, normalized_place,
 )
 from services.tender_lot_snapshot import native_lot_snapshot
-from services.tender_qualification import _INSTALL_INCLUDED, _NO_WORKS, _NON_OBLIGATION, _SCOPE_NEGATION, _scope_patterns
+from services.tender_qualification import (
+    _INSTALL_INCLUDED, _NO_WORKS, _NON_OBLIGATION, _OBJECT_MODIFIERS, _SCOPE_NEGATION, _scope_patterns,
+)
 from services.tender_search_matcher import match_tender_lot
 
 _DIRECTIONS = {
@@ -15,7 +17,19 @@ _DIRECTIONS = {
     "refrigeration": r"(?:холодильник\w*|холодильн\w+\s+(?:оборудовани\w*|камер\w*|шкаф\w*|агрегат\w*|установк\w*)|оборудовани\w*\s+холодильн\w*)",
 }
 _DIRECTION_PATTERNS = {key: re.compile(rf"\b{value}\b", re.I) for key, value in _DIRECTIONS.items()}
-_WORK_PATTERNS = {key: _scope_patterns(value) for key, value in _DIRECTIONS.items()}
+_EQUIPMENT = "(?:" + "|".join(_DIRECTIONS.values()) + ")"
+_EQUIPMENT_OBJECT = rf"{_EQUIPMENT}\b(?:\s+воздуха\b)?"
+_EQUIPMENT_JOIN = r"(?:\s*,\s*(?:и\s+)?|\s+и\s+)"
+_RELATED_EQUIPMENT = rf"(?:{_EQUIPMENT_OBJECT}{_EQUIPMENT_JOIN}{_OBJECT_MODIFIERS}{{0,5}}){{0,2}}"
+_WORK_PATTERNS = {key: _scope_patterns(_RELATED_EQUIPMENT + value) for key, value in _DIRECTIONS.items()}
+_ALTERNATIVE_SCOPE = re.compile(
+    rf"\b{_EQUIPMENT_OBJECT}(?:\s+(?:или|либо)\s+|\s+и\s*\(\s*или\s*\)\s*|\s*/\s*)"
+    rf"{_OBJECT_MODIFIERS}{{0,5}}{_EQUIPMENT}\b|\b(?:при\s+необходимости|опциональн\w*)\b", re.I,
+)
+_INSTALL_AFTER_SUPPLY = re.compile(
+    rf"(?:\s+воздуха\b)?(?:{_EQUIPMENT_JOIN}{_OBJECT_MODIFIERS}{{0,5}}{_EQUIPMENT_OBJECT}){{0,2}}"
+    rf"\s*(?:,\s*)?{_INSTALL_INCLUDED.pattern}", re.I,
+)
 _VENTILATION_INSTALLATION = re.compile(
     r"\bработ\w*\s+по\s+устройств\w*\s+(?:систем\w*\s+)?вентиляц\w*\b", re.I,
 )
@@ -45,46 +59,64 @@ def _places(objects) -> tuple[list[TenderPlace], bool]:
     return places, bool(places) and len(places) == len(objects)
 
 
-def _classify(title: str, enrichment: dict) -> TenderLotSignals:
+def _installation_for_direction(clause: str, direction: str) -> bool:
+    for supply in _WORK_PATTERNS[direction]["supply_only"].finditer(clause):
+        installation = _INSTALL_AFTER_SUPPLY.match(clause, supply.end())
+        if installation and not any(
+            other != direction and pattern.search(clause, installation.end())
+            for other, pattern in _DIRECTION_PATTERNS.items()
+        ):
+            return True
+    return False
+
+
+def _classify(title: str, enrichment: dict, *, verified_lot: bool = False, headline: str = "") -> TenderLotSignals:
     summary = enrichment.get("work_summary")
     reviewed = summary if isinstance(summary, str) else ""
     subject = f"{title}\n{reviewed}"
-    directions = {key for key, pattern in _DIRECTION_PATTERNS.items() if pattern.search(subject)}
-    confirmed_directions = set()
-    activity_groups = []
+    directions = {key for key, pattern in _DIRECTION_PATTERNS.items() if pattern.search(subject) or pattern.search(headline)}
+    activities_by_direction = {}
     for clause in re.split(r"[;\n]", subject):
-        if (_SCOPE_NEGATION.search(clause) and not _NO_WORKS.search(clause)) or _NON_OBLIGATION.search(clause):
+        if _NON_OBLIGATION.search(clause) or _ALTERNATIVE_SCOPE.search(clause):
             continue
+        negation = _SCOPE_NEGATION.search(clause)
+        no_works = _NO_WORKS.search(clause)
+        if negation:
+            if not no_works or not no_works.start() <= negation.start() < no_works.end():
+                continue
+            clause = clause[:no_works.start()]
         for direction in directions:
             found = {kind for kind, pattern in _WORK_PATTERNS[direction].items() if pattern.search(clause)}
             if direction == "ventilation" and _VENTILATION_INSTALLATION.search(clause):
                 found.add("installation")
-            if not found:
-                continue
-            confirmed_directions.add(direction)
             if "supply_only" in found:
                 found.remove("supply_only")
                 found.add("supply")
-                if _INSTALL_INCLUDED.search(clause) and not _NO_WORKS.search(clause):
+                if not no_works and _installation_for_direction(clause, direction):
                     found.add("installation")
-                elif _NO_WORKS.search(clause):
-                    found.discard("installation")
-            activity_groups.append(found)
+            if no_works:
+                found.discard("installation")
+            if found:
+                activities_by_direction.setdefault(direction, []).append(found)
     places, places_complete = _places(enrichment.get("objects"))
-    # Order snapshots lack per-lot conditions. Keep separately worded actions
-    # separate and route mixed directions to review until lots can be checked.
-    mixed_scope = len(confirmed_directions) > 1 or re.search(r"\bлот\s*(?:№\s*)?\d+", subject, re.I) is not None
+    confirmed_directions = set(activities_by_direction)
+    # A mixed procedure heading cannot establish which obligations share a lot.
+    mixed_scope = not verified_lot and (
+        len(confirmed_directions) > 1 or re.search(r"\bлот\s*(?:№\s*)?\d+", subject, re.I) is not None
+    )
+    activity_groups = [group for groups in activities_by_direction.values() for group in groups]
     distinct_activity_groups = {frozenset(group) for group in activity_groups}
     return TenderLotSignals(
         lot_key="procedure",
         confirmed_directions=set() if mixed_scope else confirmed_directions,
         possible_directions=directions if mixed_scope else directions - confirmed_directions,
         required_activities=set() if mixed_scope else set().union(*activity_groups),
-        activity_evidence_groups=[] if mixed_scope else activity_groups,
+        activity_evidence_by_direction={} if mixed_scope else activities_by_direction,
         execution_places=[] if mixed_scope else places,
         places_complete=places_complete and not mixed_scope,
         directions_complete=bool(reviewed and confirmed_directions) and not mixed_scope,
         activities_complete=bool(reviewed and len(distinct_activity_groups) == 1) and not mixed_scope,
+        verified_native_lot=verified_lot,
     )
 
 
@@ -96,7 +128,8 @@ def publication_signals(
     lots = snapshot.get("lots", [])
     if not lots:
         return [_classify(title, context)], False
-    one_lot = snapshot["lot_inventory_complete"] and len(lots) == 1
+    verified_lots = snapshot["lot_inventory_complete"]
+    one_lot = verified_lots and len(lots) == 1
     signals = []
     for lot in lots:
         if active_lots_only and lot.get("status", "").casefold() in {"отменен", "отменён", "отменена", "завершен", "завершён", "завершена"}:
@@ -106,10 +139,8 @@ def publication_signals(
             objects = lot_context.get("objects")
             known = objects if isinstance(objects, list) else []
             lot_context["objects"] = [*known, {"address": lot["delivery_place"]}]
-        subject = f"{title}\n{lot['name']}" if one_lot else lot["name"]
-        lot_signals = _classify(subject, lot_context)
+        lot_signals = _classify(lot["name"], lot_context, verified_lot=verified_lots, headline=title if one_lot else "")
         lot_signals.lot_key = lot["number"]
-        lot_signals.verified_native_lot = snapshot["lot_inventory_complete"]
         signals.append(lot_signals)
     if not signals:
         return [TenderLotSignals(

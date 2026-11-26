@@ -93,7 +93,7 @@ class TenderLotSignals(BaseModel):
     confirmed_directions: set[TenderDirection] = Field(default_factory=set)
     possible_directions: set[TenderDirection] = Field(default_factory=set)
     required_activities: set[TenderActivity] = Field(default_factory=set)
-    activity_evidence_groups: list[set[TenderActivity]] | None = None
+    activity_evidence_by_direction: dict[TenderDirection, list[set[TenderActivity]]] | None = None
     possible_activities: set[TenderActivity] = Field(default_factory=set)
     places_complete: bool = False
     directions_complete: bool = False
