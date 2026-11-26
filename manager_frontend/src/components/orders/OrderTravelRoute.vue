@@ -93,7 +93,7 @@ const legs = computed(() => result.value ? [
           </div>
         </dl>
         <p v-if="result.approximate_destination" class="text-slate-600 dark:text-slate-300">
-          До центра населённого пункта. Точный адрес можно открыть в Google Maps.
+          До центра населённого пункта. Сверьте номер дома в Google Maps.
         </p>
         <p class="text-slate-500 dark:text-slate-400">
           Время в дороге без учёта пробок и работ на объекте.

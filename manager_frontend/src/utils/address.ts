@@ -34,12 +34,19 @@ export const buildVitebskRoundTripUrl = (address: string) => {
   if (objectAddress.length < 3 || objectAddress.length > 240
     || !/[a-zа-яёіў]/i.test(objectAddress) || objectAddress.includes('@')) return '';
 
+  const cleanAddress = objectAddress.replace(/\|/g, ' ');
+  const [place, street, ...premises] = cleanAddress.split(',').map(part => part.trim());
+  const streetAddress = street && premises.length
+    && /^(?:ул\.|улица\s|вул\.|вуліца\s|пл\.|площадь\s|пр-т\s|проспект\s|пер\.|переулок\s)/iu.test(street);
+  const waypoint = streetAddress
+    ? [street, ...premises, place?.replace(/^(?:г\.\s*|город\s+|горад\s+)/iu, ''), 'Беларусь'].filter(Boolean).join(', ')
+    : 'Беларусь, ' + cleanAddress;
   const url = new URL('https://www.google.com/maps/dir/');
   url.search = new URLSearchParams({
     api: '1',
     origin: '55.1904,30.2049',
     destination: '55.1904,30.2049',
-    waypoints: 'Беларусь, ' + objectAddress.replace(/\|/g, ' '),
+    waypoints: waypoint,
     travelmode: 'driving',
   }).toString();
   return url.href;

@@ -46,7 +46,7 @@ describe('inline customer and object context', () => {
     });
     expect(w.get('[data-testid="calculate-order-travel-route"]').isVisible()).toBe(true);
     const link = () => new URL(w.get('a[href^="https://www.google.com/maps/dir/"]').attributes('href'));
-    expect(link().searchParams.get('waypoints')).toBe('Беларусь, ' + tenderAddress);
+    expect(link().searchParams.get('waypoints')).toBe('пл. Свободы, 1, Лепель, Беларусь');
     await open(w, 'object');
     await address(w).setValue('Ушачи');
     expect(link().searchParams.get('waypoints')).toBe('Беларусь, Ушачи');
