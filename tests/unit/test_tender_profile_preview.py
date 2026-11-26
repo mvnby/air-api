@@ -1,7 +1,7 @@
 import pytest
 
 from schemas_tender_search import TenderPlace, TenderSearchProfile
-from services.tender_profile_preview import preview_tender_profile
+from services.tender_profile_preview import match_publication, preview_tender_profile
 from services.belzakupki_import_service import BelzakupkiImportService
 
 
@@ -75,3 +75,73 @@ def test_explicit_ventilation_work_and_abbreviated_region_are_not_dropped():
         row(1, title, address="Витебская обл., аг. Мазолово, ул. Мелиораторов, 7А"),
     ], TenderSearchProfile(name="Без вентиляции", excluded_directions=["ventilation"])).items
     assert excluded.result.reason == "excluded_direction"
+
+
+def test_required_ventilation_is_excluded_within_the_verified_lot():
+    title = "Техническое обслуживание кондиционеров"
+    mixed = {
+        "number": "1", "name": "Работы по техническому обслуживанию и ремонту систем вентиляции и кондиционирования воздуха",
+        "delivery_place": "Республика Беларусь, Гродненская область, г. Гродно, ул. Дубко, 19",
+    }
+    tender = {"source": "gias_by", "lot_inventory_complete": True, "lots": [mixed]}
+    profile = TenderSearchProfile(
+        name="Обслуживание и ремонт кондиционеров", mode="strict", included_directions=["air_conditioning"],
+        included_places=[TenderPlace(region="4", locality="Гродно")],
+        activity_combinations=[["maintenance", "repair"]],
+    )
+    without_ventilation = profile.model_copy(update={"excluded_directions": ["ventilation"]})
+    result, _ = match_publication(title, tender, without_ventilation)
+    assert (result.state, result.reason) == ("excluded", "excluded_direction")
+    allowed, _ = match_publication(title, tender, profile)
+    assert allowed.state == "match"
+
+    separate = {
+        "number": "2", "name": "Техническое обслуживание и ремонт кондиционеров",
+        "delivery_place": mixed["delivery_place"],
+    }
+    result, lots = match_publication(title, {**tender, "lots": [mixed, separate]}, without_ventilation)
+    assert (result.lot_key, result.state) == ("2", "match")
+    assert [(lot.lot_key, lot.reason) for lot in lots] == [("1", "excluded_direction"), ("2", "eligible")]
+
+    unverified, _ = match_publication(title, {**tender, "lot_inventory_complete": False}, without_ventilation)
+    assert unverified.state == "review"
+
+
+@pytest.mark.parametrize(
+    ("title", "reason"),
+    [
+        ("Поставка кондиционеров и монтаж вентиляции", "unconfirmed_activity"),
+        ("Поставка кондиционеров, поставка вентиляции с монтажом", "unconfirmed_activity"),
+        ("Поставка кондиционеров и систем вентиляции с монтажом", "eligible"),
+    ],
+)
+def test_installation_must_belong_to_the_selected_equipment(title, reason):
+    tender = {
+        "source": "goszakupki_by", "lot_inventory_complete": True,
+        "lots": [{"number": "1", "name": title}],
+    }
+    profile = TenderSearchProfile(
+        name="Кондиционеры с монтажом", mode="strict", included_directions=["air_conditioning"],
+        activity_combinations=[["supply", "installation"]],
+    )
+    result, _ = match_publication(title, tender, profile)
+    assert result.reason == reason
+
+
+@pytest.mark.parametrize(
+    ("title", "lot_name"),
+    [
+        ("Монтаж вентиляции и кондиционеров", "Монтаж кондиционеров"),
+        ("Поставка кондиционеров", "Поставка кондиционеров без монтажа вентиляции"),
+        ("Ремонт климатического оборудования", "Ремонт вентиляции или кондиционеров"),
+        ("Ремонт климатического оборудования", "Ремонт вентиляции/кондиционеров"),
+    ],
+)
+def test_uncertain_or_optional_ventilation_stays_on_review(title, lot_name):
+    tender = {
+        "source": "gias_by", "lot_inventory_complete": True,
+        "lots": [{"number": "1", "name": lot_name}],
+    }
+    profile = TenderSearchProfile(name="Без вентиляции", excluded_directions=["ventilation"])
+    result, _ = match_publication(title, tender, profile)
+    assert result.state == "review"
