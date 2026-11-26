@@ -122,7 +122,7 @@ def restore_current_build(dist, repository, deploy_sha, run_id, *, api=github_ap
         raise ValueError("Refusing to replace a nonempty Manager build")
     for name, content in files.items():
         path = PurePosixPath(name)
-        if name not in {"index.html", MANIFEST} and not (
+        if name not in {"index.html", "assets/manager-practice.html", MANIFEST} and not (
                 path.parts[0] == "assets" and path.suffix.lower() in {
                     ".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif", ".ico", ".woff", ".woff2", ".ttf", ".eot"}):
             continue
