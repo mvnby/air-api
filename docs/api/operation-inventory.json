@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "40": "Tender original verification: scoped platform owner, verified publication, bounded background jobs, per-file coverage and literal evidence. Reviewed 2026-11-26 for issue 1302",
     "38": "Personal equipment offers: scoped Manager drafts and replay, immutable published commercial snapshots, token expiry and revocation, exact signed storefront host and allow-listed public data. Reviewed 2026-11-22 for issue 1286",
     "35": "Scoped order sites and equipment: stable customer/branch ownership, bounded lists, durable command replay, exact order storefront and optimistic site versions. Reviewed 2026-11-20 for issue 1278",
     "36": "Diagnostic inspection revisions and native technical act drafts: verified order site/equipment scope, exact inspection versions, immutable document snapshots and explicit contract basis. Reviewed 2026-11-20 for issue 1278",
@@ -449,6 +450,8 @@
       ["GET /api/manager/orders/{order_id}/source-documents/{document_id}", "download_manager_order_source_document", false, 2],
       ["GET /api/manager/orders/{order_id}/source-equipment", "get_manager_order_source_equipment", false, 2],
       ["GET /api/manager/orders/{order_id}/source-preview", "get_manager_order_source_preview", false, 2],
+      ["GET /api/manager/orders/{order_id}/source-evidence-jobs/{job_id}", "get_manager_order_source_evidence_job", false, 40],
+      ["POST /api/manager/orders/{order_id}/source-evidence-jobs", "start_manager_order_source_evidence_job", false, 40],
       ["POST /api/manager/orders/{order_id}/source-analyze", "analyze_manager_order_source", false, 2],
       ["POST /api/manager/orders/{order_id}/source-apply", "apply_manager_order_source", false, 2],
       ["POST /api/manager/orders/{order_id}/source-equipment", "add_manager_order_source_equipment", false, 2]

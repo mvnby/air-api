@@ -9,15 +9,15 @@ from fastapi import HTTPException
 
 from core.config import settings
 from models import StaffUser
-from schemas_connector_tender_review import AnalyzedTenderFile, AnalyzeTenderResult
-from schemas_tender_qualification import TenderDocumentFragment, TenderQualificationSourceMetadata
-from services.belzakupki_source_analysis import MAX_TENDER_TEXT_CHARS
+from schemas_connector_tender_review import AnalyzeTenderResult
+from schemas_tender_qualification import TenderQualificationSourceMetadata
 from services.connector_tender_preview import _public_url, procedure_type, source_inventory, display
 from services.belzakupki_import_service import BelzakupkiImportService
 from services.legacy_owner_auth_guard import LegacyOwnerAuthGuard
 from services.legacy_owner_managed_identity_service import LegacyOwnerManagedIdentityService
 from services.tender_document_reader import load_tender_document
-from services.tender_qualification import MAX_FRAGMENTS, load_mvn_tender_profile, qualify_tender_documents
+from services.tender_original_evidence import TenderOriginalEvidence
+from services.tender_qualification import load_mvn_tender_profile, qualify_tender_documents
 
 
 async def require_analysis_access(session, actor):
@@ -71,11 +71,8 @@ async def analyze_tender_documents(session, actor, inputs):
     profile = inputs.profile
     if inputs.profile_name == "mvn_vitebsk":
         profile = await asyncio.to_thread(load_mvn_tender_profile)
-    documents = []
-    fragments = []
-    used_chars = 0
+    evidence = TenderOriginalEvidence(len(inputs.document_ids))
     unselected = len(inventory) - len(inputs.document_ids)
-    covered = complete and unselected == 0
     # The synchronous MCP response must arrive before the 60-second ingress timeout.
     extraction_deadline = started + 30
     for key in inputs.document_ids:
@@ -84,33 +81,14 @@ async def analyze_tender_documents(session, actor, inputs):
                 original = await load_tender_document(
                     session, actor.tenant_scope, order_id=order.id, document_id=key, source_reference=inputs.source_reference)
         except TimeoutError:
-            documents.append(AnalyzedTenderFile(
-                document_id=key, filename=inventory[key].filename, status="timeout",
-                diagnostics=["Истекло время чтения выбранных оригиналов. Проверьте этот файл отдельно."]))
-            covered = False
+            evidence.add_timeout(key, inventory[key].filename)
             continue
-        file = AnalyzedTenderFile(
-            document_id=key, filename=original.filename or inventory[key].filename, status=original.status,
-            sha256=original.sha256, diagnostics=original.diagnostics, origin=original.origin)
-        documents.append(file)
-        if original.status != "complete":
-            covered = False
-        if (used_chars + original.total_chars > MAX_TENDER_TEXT_CHARS
-                or len(fragments) + len(original.fragments) > MAX_FRAGMENTS):
-            file.status = "over_analysis_limit"
-            file.diagnostics.append("Файл не вошёл в лимит анализа. Выберите его отдельно или прочитайте постранично.")
-            covered = False
-            continue
-        used_chars += original.total_chars
-        for part in original.fragments:
-            location = f"стр. {part.page}, фрагмент {part.fragment}" if part.page else f"фрагмент {part.fragment}"
-            fragments.append(TenderDocumentFragment(
-                document_id=key, filename=file.filename, text=part.text, location=location,
-                document_sha256=original.sha256, partial=original.status != "complete"))
+        evidence.add(original, inventory[key].filename)
     qualification = await qualify_tender_documents(
-        fragments, profile=profile, complete=covered, provider=inputs.provider, source_metadata=_source_metadata(tender, data, card),
+        evidence.fragments, profile=profile, complete=complete and unselected == 0 and evidence.all_documents_complete,
+        provider=inputs.provider, source_metadata=_source_metadata(tender, data, card),
         provider_timeout_seconds=max(0, started + 51 - clock()))
     return AnalyzeTenderResult(
         source=card.source, external_id=card.external_id, order_id=order.id, manager_url=f"{settings.MANAGER_BASE_URL.rstrip('/')}/orders/{order.id}",
-        documents=documents, unselected_count=unselected, inventory_complete=complete,
+        documents=evidence.documents, unselected_count=unselected, inventory_complete=complete,
         warnings=warnings, qualification=qualification)
