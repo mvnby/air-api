@@ -28,3 +28,18 @@ export const buildYandexMapUrl = (
   const normalizedAddress = normalizeAddressQuery(address);
   return normalizedAddress ? `https://yandex.by/maps/?text=${encodeURIComponent(normalizedAddress)}` : '';
 };
+
+export const buildVitebskRoundTripUrl = (address: string) => {
+  const objectAddress = normalizeAddressQuery(address);
+  if (objectAddress.length < 3 || objectAddress.length > 240) return '';
+
+  const url = new URL('https://www.google.com/maps/dir/');
+  url.search = new URLSearchParams({
+    api: '1',
+    origin: '55.1904,30.2049',
+    destination: '55.1904,30.2049',
+    waypoints: 'Беларусь, ' + objectAddress.replace(/\|/g, ' '),
+    travelmode: 'driving',
+  }).toString();
+  return url.href;
+};

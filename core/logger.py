@@ -59,6 +59,8 @@ def setup_logging(session_log_file: str = None, clear_session_log: bool = False)
     # Silence noisy libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    # Upstream lookup URLs may contain credentials and customer addresses.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     return logger
 

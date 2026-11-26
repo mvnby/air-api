@@ -28,6 +28,8 @@ import type { ManagerOrderSourceEquipmentAdd } from '../models/ManagerOrderSourc
 import type { ManagerOrderSourceEquipmentPreview } from '../models/ManagerOrderSourceEquipmentPreview';
 import type { ManagerOrderSourcePreview } from '../models/ManagerOrderSourcePreview';
 import type { ManagerOrderTransferPackage_Output } from '../models/ManagerOrderTransferPackage_Output';
+import type { ManagerOrderTravelRouteRequest } from '../models/ManagerOrderTravelRouteRequest';
+import type { ManagerOrderTravelRouteResponse } from '../models/ManagerOrderTravelRouteResponse';
 import type { ManagerOrderUpdatePayload } from '../models/ManagerOrderUpdatePayload';
 import type { ManagerOrderWaitingCommand } from '../models/ManagerOrderWaitingCommand';
 import type { ManagerStaleWorkStageItem } from '../models/ManagerStaleWorkStageItem';
@@ -370,6 +372,34 @@ export class ManagerOrdersService {
             path: {
                 'order_id': orderId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Calculate Manager Order Travel Route
+     * Estimate the driving distance and time from Vitebsk to an order's draft
+     * object address and back. A Manager in the system company with access to the
+     * order can preview a typed or selected address. The estimate does not persist
+     * changes or create worker payments. The provider receives the address and route points.
+     * @param orderId
+     * @param requestBody
+     * @returns ManagerOrderTravelRouteResponse Successful Response
+     * @throws ApiError
+     */
+    public static calculateManagerOrderTravelRoute(
+        orderId: number,
+        requestBody: ManagerOrderTravelRouteRequest,
+    ): CancelablePromise<ManagerOrderTravelRouteResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/manager/orders/{order_id}/travel-route',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

@@ -43,11 +43,20 @@
 | Обращения и входящие | `/api/v1/leads/*`, `/api/manager/leads/*`, `/api/manager/incoming/*` | [api_leads.py](../../routers/api_leads.py), [manager_leads.py](../../routers/manager_leads.py), [manager_incoming.py](../../routers/manager_incoming.py), [сценарий входящих](../incoming-triage-workspace.md) |
 | Заказы | `POST /api/v1/orders`, `/api/manager/orders/*` | [api_orders.py](../../routers/api_orders.py), [manager_orders.py](../../routers/manager_orders.py), [рабочая область заказа](../order-workspace-usability.md) |
 | Физическое оборудование заказа | `/api/manager/orders/{order_id}/equipment-identities` | [маршруты](../../routers/manager_order_equipment_identity.py), [общая схема Manager/MCP](../../schemas_order_equipment_identity.py), [сохранение и повторное использование](../chatgpt-connector.md#оборудование-заказа-и-редакции-заказ-акта) |
+| Маршрут выезда из Витебска | `POST /api/manager/orders/{order_id}/travel-route` | [маршрут и условия подключения](#маршрут-выезда-из-витебска) |
 | Документы заказа и шаблоны | `/api/manager/orders/{order_id}/documents`, `/api/manager/document-system/*` | [manager_docs.py](../../routers/manager_docs.py), [модуль документов](../../modules/documents/api/router.py), [архитектура](../document-module-architecture.md) |
 | Самостоятельная почта и почтовые черновики | `/api/manager/mail/messages`, `/api/manager/mail/drafts/*`, `/api/manager/mail/sync` | [manager_mail_workspace.py](../../routers/manager_mail_workspace.py), [manager_incoming_mail.py](../../routers/manager_incoming_mail.py), [почтовый контракт](../mail-workspace.md); доступ компании/аккаунта, точная версия, отдельное подтверждение Manager и приватные файлы. MCP использует отдельные mail scopes. |
 | Поручения и календарь | `/api/manager/personal-tasks/*`, `GET /api/manager/calendar/events` | [manager_personal_tasks.py](../../routers/manager_personal_tasks.py), [manager_calendar.py](../../routers/manager_calendar.py), [контракт первого MCP-выпуска](../chatgpt-connector-handoff.md#что-выпущено-и-можно-подключать) |
 | Личные записи звонков | `/api/manager/call-recordings/*` | [manager_call_recordings.py](../../routers/manager_call_recordings.py), [записи звонков](../call-recordings.md); отдельный readonly Drive OAuth, личный staff/tenant/storefront scope, выключенный по умолчанию pipeline и явное adoption |
 | Настройки и доступ | `/api/manager/settings/*`, `/api/manager/storefront-settings/*`, `GET /api/manager/me` | [manager_settings.py](../../routers/manager_settings.py), [manager_storefront_settings.py](../../routers/manager_storefront_settings.py), [manager_auth.py](../../routers/manager_auth.py), [доступ](authentication.md#manager) |
+
+## Маршрут выезда из Витебска
+
+В заказе MVN откройте «Объект», выберите адрес и запустите расчёт. Manager запрашивает автомобильный маршрут от центра Витебска до объекта и обратно. Ответ содержит расстояние в метрах и время в секундах по каждому направлению и для всей поездки. Если провайдер нашёл улицу или населённый пункт, Manager отмечает приблизительную точку. Ссылку на маршрут можно открыть в Google Maps из этого же блока.
+
+Для расчёта в карточке настройте серверные `ORDER_ROUTE_YANDEX_GEOCODER_KEY` и `ORDER_ROUTE_YANDEX_ROUTER_KEY` на обоих API-узлах. Ключ `YANDEX_API_KEY` обслуживает существующие подсказки адреса. Для работы нужны лицензии [Геокодера](https://yandex.ru/maps-api/products/geocoder-api) и [Получения деталей маршрута](https://yandex.ru/maps-api/products/router-api), разрешающие использование в закрытом Manager.
+
+Поддерживаются адреса в Беларуси. Расчёт выполняется по явному действию сотрудника с доступом к заказу. Яндекс получает адрес и координаты маршрута. Результат отображается в карточке без изменения заказа и начислений. Ошибки адреса и маршрута возвращают `422`, отсутствие подключения или лимит провайдера — `503`, ограничение запросов Manager — `429`, при сбое провайдера — `502`.
 
 ## Где смотреть актуальный контракт
 

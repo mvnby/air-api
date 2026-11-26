@@ -20627,6 +20627,64 @@
         }
       }
     },
+    "/api/manager/orders/{order_id}/travel-route": {
+      "post": {
+        "tags": [
+          "manager-orders"
+        ],
+        "summary": "Calculate Manager Order Travel Route",
+        "description": "Estimate the driving distance and time from Vitebsk to an order's draft\nobject address and back. A Manager in the system company with access to the\norder can preview a typed or selected address. The estimate does not persist\nchanges or create worker payments. The provider receives the address and route points.",
+        "operationId": "calculate_manager_order_travel_route",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerOrderTravelRouteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerOrderTravelRouteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/manager/orders/work-stages/{stage_id}/cancel": {
       "patch": {
         "tags": [
@@ -85142,6 +85200,62 @@
         ],
         "title": "ManagerOrderTransferWorkStage"
       },
+      "ManagerOrderTravelRouteRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 3,
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "ManagerOrderTravelRouteRequest"
+      },
+      "ManagerOrderTravelRouteResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "yandex",
+            "title": "Provider"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "destination": {
+            "type": "string",
+            "title": "Destination"
+          },
+          "approximate_destination": {
+            "type": "boolean",
+            "title": "Approximate Destination"
+          },
+          "outbound": {
+            "$ref": "#/components/schemas/OrderTravelLeg"
+          },
+          "inbound": {
+            "$ref": "#/components/schemas/OrderTravelLeg"
+          },
+          "total": {
+            "$ref": "#/components/schemas/OrderTravelLeg"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "origin",
+          "destination",
+          "approximate_destination",
+          "outbound",
+          "inbound",
+          "total"
+        ],
+        "title": "ManagerOrderTravelRouteResponse"
+      },
       "ManagerOrderUpdatePayload": {
         "properties": {
           "status": {
@@ -96765,6 +96879,26 @@
           "manager_url"
         ],
         "title": "OrderTechnicalActPrepared"
+      },
+      "OrderTravelLeg": {
+        "properties": {
+          "distance_m": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Distance M"
+          },
+          "duration_s": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duration S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "distance_m",
+          "duration_s"
+        ],
+        "title": "OrderTravelLeg"
       },
       "OrderUsageAccepted": {
         "properties": {

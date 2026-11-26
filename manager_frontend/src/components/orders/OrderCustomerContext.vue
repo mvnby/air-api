@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { openManagerChild } from '../../services/manager-navigation-history';
+import { managerSession } from '../../services/manager-session';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowLeftRight, Copy, ExternalLink, MapPin, Pencil } from 'lucide-vue-next';
 import { api } from '../../api';
@@ -11,6 +12,7 @@ import { buildYandexMapUrl } from '../../utils/address';
 import AddressSuggestInput from '../ui/AddressSuggestInput.vue';
 import CustomerSearchSelect from '../customers/CustomerSearchSelect.vue';
 import OrderWorkspaceContext from './OrderWorkspaceContext.vue';
+import OrderTravelRoute from './OrderTravelRoute.vue';
 
 type ObjectDraft = { address: string; branchId: number | null; comment: string };
 const props = withDefaults(defineProps<{
@@ -254,6 +256,7 @@ defineExpose({ beforeClose });
           <button v-if="draftAddress" type="button" class="context-icon" aria-label="Скопировать адрес" title="Скопировать адрес" @click="copy(draftAddress, 'Адрес')"><Copy :size="15" /></button>
           <button v-if="customer?.id" type="button" class="btn-mini-outline text-xs" :aria-expanded="newBranchOpen" @click="newBranchOpen = !newBranchOpen">{{ newBranchOpen ? 'Закрыть новый филиал' : 'Новый филиал' }}</button>
         </div>
+        <OrderTravelRoute v-if="managerSession.auth.value?.is_system_tenant" :order-id="order.id" :address="draftAddress" />
         <div v-if="newBranchOpen" class="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
           <label class="field-label">Название филиала<input v-model="newBranchName" class="field-input mt-1 text-sm" /></label>
           <AddressSuggestInput v-model="newBranchAddress" label="Адрес филиала" />

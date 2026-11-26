@@ -645,6 +645,8 @@ export type { ManagerOrderTransferProposal_Output } from './models/ManagerOrderT
 export type { ManagerOrderTransferServiceLine } from './models/ManagerOrderTransferServiceLine';
 export type { ManagerOrderTransferServiceRef } from './models/ManagerOrderTransferServiceRef';
 export type { ManagerOrderTransferWorkStage } from './models/ManagerOrderTransferWorkStage';
+export type { ManagerOrderTravelRouteRequest } from './models/ManagerOrderTravelRouteRequest';
+export type { ManagerOrderTravelRouteResponse } from './models/ManagerOrderTravelRouteResponse';
 export type { ManagerOrderUpdatePayload } from './models/ManagerOrderUpdatePayload';
 export type { ManagerOrderWaitingCommand } from './models/ManagerOrderWaitingCommand';
 export type { ManagerOwnAvatarDelete } from './models/ManagerOwnAvatarDelete';
@@ -829,6 +831,7 @@ export type { OrderSiteNewEquipment } from './models/OrderSiteNewEquipment';
 export type { OrderSiteUpdatePayload } from './models/OrderSiteUpdatePayload';
 export type { OrderSiteUpdateRequest } from './models/OrderSiteUpdateRequest';
 export type { OrderTechnicalActPrepared } from './models/OrderTechnicalActPrepared';
+export type { OrderTravelLeg } from './models/OrderTravelLeg';
 export type { OrderUsageAccepted } from './models/OrderUsageAccepted';
 export type { OrderUsageBatch } from './models/OrderUsageBatch';
 export type { OrderUsageDailyItem } from './models/OrderUsageDailyItem';
