@@ -286,6 +286,24 @@ describe('LeadSourceReviewModal', () => {
     expect(wrapper.find('input[placeholder="Название или имя"]').exists()).toBe(true);
   });
 
+  it('explains which edits rereading will replace before starting again', async () => {
+    sourceApi.analyze.mockResolvedValueOnce(preview);
+    const wrapper = mount(LeadSourceReviewModal, { props: { open: true, orderId: 41, leadStatus: 'new_lead' } });
+    await flushPromises();
+    const work = wrapper.get<HTMLTextAreaElement>('textarea[placeholder="Состав работ"]');
+    await work.setValue('Уточнённые работы');
+    const reread = wrapper.get('[data-testid="reread-tender-documents"]');
+    await reread.trigger('click');
+    expect(reread.text()).toBe('Заменить черновик из ТЗ');
+    expect(reread.element.closest('details')?.querySelector('[role="status"]')?.textContent).toContain('заменит ваши правки');
+    expect(sourceApi.analyze).not.toHaveBeenCalled();
+    expect(work.element.value).toBe('Уточнённые работы');
+    await reread.trigger('click');
+    await flushPromises();
+    expect(sourceApi.analyze).toHaveBeenCalledExactlyOnceWith(41, ['doc-1'], true);
+    expect(work.element.value).toBe(preview.work_summary);
+  });
+
   it('explains exact prefill only for sales and forwards added lines and warnings', async () => {
     const equipmentPrefill = {
       proposal_id: 5,

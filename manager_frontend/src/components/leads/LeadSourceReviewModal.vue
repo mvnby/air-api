@@ -166,7 +166,6 @@ const analyze = async (automatic = false) => {
   if (!selectedDocumentIds.value.length || analyzing.value || applying.value) return;
   if (draftsChanged.value && !analysisOverwriteConfirmed.value) {
     analysisOverwriteConfirmed.value = true;
-    analysisError.value = 'Черновик уже редактировался. Нажмите «Заменить черновик ИИ», если хотите заменить состав работ и объекты.';
     return;
   }
   analyzing.value = true;
@@ -454,6 +453,7 @@ watch(() => [props.open, props.orderId] as const, ([open]) => {
               </span>
             </label>
             <button type="button" data-testid="reread-tender-documents" class="btn-mini-outline mt-3 text-xs" :disabled="!selectedDocumentIds.length || selectedDocumentIds.length > 8 || analyzing || applying" @click="analyze()">{{ analysisOverwriteConfirmed ? 'Заменить черновик из ТЗ' : 'Перечитать выбранные файлы' }}</button>
+            <p v-if="analysisOverwriteConfirmed" role="status" class="mt-1 text-xs text-amber-700">Повторный разбор заменит ваши правки в составе работ, оборудовании и адресах.</p>
             <p v-if="selectedDocumentIds.length > 8" class="mt-1 text-xs text-slate-500">Выберите до восьми документов для разбора.</p>
             <TenderOriginalEvidencePanel
               :order-id="orderId"
