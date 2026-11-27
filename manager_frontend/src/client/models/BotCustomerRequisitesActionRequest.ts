@@ -6,5 +6,6 @@ export type BotCustomerRequisitesActionRequest = {
     expected_context_version?: (number | null);
     telegram_id: number;
     action: 'create' | 'update' | 'use' | 'cancel';
+    expected_revision?: (string | null);
 };
 

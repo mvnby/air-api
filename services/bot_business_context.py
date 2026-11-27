@@ -45,6 +45,7 @@ async def bind_bot_business_context(
     if not context.is_staff:
         raise HTTPException(403, "Active staff membership is required")
     read_paths = (
+        "/calendar/schedule",
         "/catalog/search",
         "/catalog/selection",
         "/catalog/curated",
@@ -56,7 +57,10 @@ async def bind_bot_business_context(
         "/repair-context/comment-draft",
         "/repair-context/preset-draft",
     )
-    mutation = request.method != "GET" and not path.endswith(read_paths)
+    requisites_review = (
+        path.startswith("/api/internal/bot/v1/customers/requisites/") and path.endswith("/review")
+    )
+    mutation = request.method != "GET" and not (path.endswith(read_paths) or requisites_review)
     if context.selection is not None:
         await BotStaffSelectionService.bind_request(
             session, context.selection, expected, mutation=mutation

@@ -235,6 +235,8 @@ class CustomerRequisitesRecognition(SQLModel, table=True):
     raw_text: str = Field(default="")
     extracted_json: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
     validation_flags: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False, default=dict))
+    review_edit_count: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
+    review_revision: Optional[str] = Field(default=None, sa_column=Column(String(16)))
 
     duplicate_customer_id: Optional[int] = Field(
         default=None,

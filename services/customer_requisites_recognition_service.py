@@ -35,6 +35,7 @@ from models import Customer, CustomerRequisitesRecognition
 from models.tenancy import TenantScope
 from services.customer_party import signing_mode_for_customer_type
 from services.customer_party_classifier import infer_customer_type_from_requisites
+from services.customer_requisites_review import TELEGRAM_SOURCES, review_revision
 from services.customer_creation_service import CustomerCreationService
 from services.google_vision_error_policy import (
     OcrProviderError,
@@ -424,9 +425,12 @@ class CustomerRequisitesRecognitionService:
         return None
 
     @classmethod
-    def _normalize_extracted(cls, raw: dict[str, Any], raw_text: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    def _normalize_extracted(
+        cls, raw: dict[str, Any], raw_text: str, *, reviewed_customer_type: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         extra = raw.get("extra") if isinstance(raw.get("extra"), dict) else {}
         data = {
+            "customer_type": reviewed_customer_type,
             "name": cls._clean_text(raw.get("name") or raw.get("full_legal_name"), max_length=500),
             "full_legal_name": cls._clean_text(raw.get("full_legal_name") or raw.get("name"), max_length=500),
             "inn": cls._clean_text(raw.get("inn"), max_length=32),
@@ -484,10 +488,15 @@ class CustomerRequisitesRecognitionService:
         phone: Optional[str] = None,
         email: Optional[str] = None,
         tenant_scope: TenantScope,
+        for_update: bool = False,
     ) -> Optional[Customer]:
+        try:
+            inn = validate_optional_unp(inn)
+        except ValueError:
+            inn = None
         match = await CustomerCreationService._find_duplicate(
             session, inn=inn, phone=phone, email=email,
-            tenant_scope=tenant_scope,
+            tenant_scope=tenant_scope, for_update=for_update,
         )
         return match[0] if match else None
 
@@ -517,6 +526,7 @@ class CustomerRequisitesRecognitionService:
     def _recognition_response(cls, recognition: CustomerRequisitesRecognition, duplicate: Optional[Customer]) -> dict[str, Any]:
         return {
             "id": int(recognition.id or 0),
+            "revision": review_revision(recognition, duplicate),
             "status": recognition.status,
             "source": recognition.source,
             "raw_text": recognition.raw_text,
@@ -528,6 +538,19 @@ class CustomerRequisitesRecognitionService:
             "local_file_url": recognition.local_file_url,
             "created_at": recognition.created_at,
         }
+
+    @classmethod
+    async def _save_recognition(
+        cls, session: AsyncSession, recognition: CustomerRequisitesRecognition,
+        duplicate: Optional[Customer],
+    ) -> dict[str, Any]:
+        session.add(recognition)
+        if recognition.source in TELEGRAM_SOURCES:
+            await session.flush()
+            recognition.review_revision = review_revision(recognition, duplicate)
+        await session.commit()
+        await session.refresh(recognition)
+        return cls._recognition_response(recognition, duplicate)
 
     @classmethod
     async def recognize_bytes(
@@ -578,10 +601,7 @@ class CustomerRequisitesRecognitionService:
             validation_flags=validation_flags,
             duplicate_customer_id=duplicate.id if duplicate else None,
         )
-        session.add(recognition)
-        await session.commit()
-        await session.refresh(recognition)
-        return cls._recognition_response(recognition, duplicate)
+        return await cls._save_recognition(session, recognition, duplicate)
 
     @classmethod
     async def recognize_text(
@@ -627,10 +647,7 @@ class CustomerRequisitesRecognitionService:
             validation_flags=validation_flags,
             duplicate_customer_id=duplicate.id if duplicate else None,
         )
-        session.add(recognition)
-        await session.commit()
-        await session.refresh(recognition)
-        return cls._recognition_response(recognition, duplicate)
+        return await cls._save_recognition(session, recognition, duplicate)
 
     @classmethod
     def _customer_payload(
@@ -650,7 +667,7 @@ class CustomerRequisitesRecognitionService:
             "type": customer_type,
             "signing_mode": signing_mode_for_customer_type(customer_type),
             "inn": extracted.get("inn"),
-            "full_legal_name": extracted.get("full_legal_name") or extracted.get("name"),
+            "full_legal_name": extracted.get("full_legal_name", extracted.get("name")),
             "legal_address": extracted.get("legal_address"),
             "bank_name": extracted.get("bank_name"),
             "bic": extracted.get("bic"),
@@ -671,6 +688,8 @@ class CustomerRequisitesRecognitionService:
         extracted: Optional[dict[str, Any]] = None,
         selected_fields: Optional[list[str]] = None,
         baseline: Optional[dict[str, Optional[str]]] = None,
+        source: Optional[str] = None,
+        reviewed_revision: Optional[str] = None,
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
         from services.customer_requisites_confirmation_service import (
@@ -685,6 +704,8 @@ class CustomerRequisitesRecognitionService:
             extracted=extracted,
             selected_fields=selected_fields,
             baseline=baseline,
+            source=source,
+            reviewed_revision=reviewed_revision,
             tenant_scope=tenant_scope,
         )
 

@@ -260,7 +260,7 @@ async def confirm_customer_requisites_for_manager(
     tenant_scope: TenantScope = Depends(get_current_manager_tenant_scope),
 ):
     """
-    Confirm a saved recognition belonging to the current tenant, explicitly creating a
+    Confirm a Manager-created recognition belonging to the current tenant, explicitly creating a
     customer or updating the selected one. Selected-field updates require baseline values
     and preserve unselected fields; a changed baseline or duplicate identity returns 409.
     Missing recognition/customer returns 404, invalid confirmation 400. Repeating an already
@@ -279,6 +279,7 @@ async def confirm_customer_requisites_for_manager(
             extracted=payload.extracted.model_dump(exclude_unset=True) if payload.extracted else None,
             selected_fields=payload.selected_fields,
             baseline=payload.baseline,
+            source="manager",
             tenant_scope=tenant_scope,
         )
     except CustomerAlreadyExistsError as exc:

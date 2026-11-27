@@ -9,10 +9,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from models import CustomerRequisitesRecognition
+from api_contracts.bot import BotCustomerRequisitesEditFields
+from models import Customer, CustomerRequisitesRecognition
 from models.tenancy import TenantScope
 from services.bot_access_service import BotAccessService
+from services.customer_creation_service import CustomerAlreadyExistsError
+from services.customer_requisites_confirmation_service import CustomerRequisitesConfirmationService
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from services.customer_requisites_review import TELEGRAM_SOURCES, review_revision
 from services.customer_service import CustomerService
 from services.tenant_scope_service import tenant_scope_clause
 
@@ -38,9 +42,16 @@ class BotCustomerRequisitesActionResult:
 
 class BotCustomerRequisitesApiService:
     @staticmethod
-    async def _require_manager(session: AsyncSession, telegram_id: int) -> None:
+    async def _require_manager(
+        session: AsyncSession, telegram_id: int, tenant_scope: TenantScope,
+    ) -> None:
         context = await BotAccessService.get_context(session, telegram_id)
-        if not context.is_staff or not context.is_manager:
+        selection = context.selection
+        if (
+            not context.is_staff or not context.is_manager or selection is None
+            or selection.tenant_id != tenant_scope.tenant_id
+            or selection.storefront_id != tenant_scope.storefront_id
+        ):
             raise BotCustomerRequisitesAccessDeniedError(
                 "Manager customer requisites access is required"
             )
@@ -127,7 +138,7 @@ class BotCustomerRequisitesApiService:
         telegram_message_id: int | None,
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
-        await cls._require_manager(session, telegram_id)
+        await cls._require_manager(session, telegram_id, tenant_scope)
         source = "telegram_text"
         await cls._lock_message(
             session,
@@ -192,7 +203,7 @@ class BotCustomerRequisitesApiService:
         telegram_message_id: int | None,
         tenant_scope: TenantScope,
     ) -> dict[str, Any]:
-        await cls._require_manager(session, telegram_id)
+        await cls._require_manager(session, telegram_id, tenant_scope)
         source = "telegram"
         await cls._lock_message(
             session,
@@ -247,110 +258,162 @@ class BotCustomerRequisitesApiService:
             )
 
     @classmethod
-    async def apply_action_for_manager(
-        cls,
-        session: AsyncSession,
-        *,
-        telegram_id: int,
-        recognition_id: int,
-        action: str,
+    async def _owned_recognition(
+        cls, session: AsyncSession, *, telegram_id: int, recognition_id: int,
+        tenant_scope: TenantScope, for_update: bool = False,
+    ) -> CustomerRequisitesRecognition:
+        await cls._require_manager(session, telegram_id, tenant_scope)
+        query = select(CustomerRequisitesRecognition).where(
+            CustomerRequisitesRecognition.id == recognition_id,
+            tenant_scope_clause(CustomerRequisitesRecognition, tenant_scope),
+        ).execution_options(populate_existing=True)
+        if for_update:
+            query = query.with_for_update()
+        recognition = (await session.execute(query)).scalars().first()
+        if recognition is None:
+            raise BotCustomerRequisitesNotFoundError("Черновик реквизитов не найден")
+        if recognition.telegram_user_id != telegram_id or recognition.source not in TELEGRAM_SOURCES:
+            raise BotCustomerRequisitesAccessDeniedError("Нет доступа к этому черновику реквизитов")
+        return recognition
+
+    @classmethod
+    async def review_for_manager(
+        cls, session: AsyncSession, *, telegram_id: int, recognition_id: int,
         tenant_scope: TenantScope,
+    ) -> dict[str, Any]:
+        recognition = await cls._owned_recognition(
+            session, telegram_id=telegram_id, recognition_id=recognition_id,
+            tenant_scope=tenant_scope,
+        )
+        return await cls._existing_response(session, recognition, tenant_scope=tenant_scope)
+
+    @staticmethod
+    def _check_revision(
+        recognition: CustomerRequisitesRecognition, duplicate: Customer | None,
+        expected_revision: str | None,
+    ) -> str:
+        current = review_revision(recognition, duplicate)
+        if expected_revision == current:
+            return current
+        if expected_revision is None and recognition.review_edit_count == 0:
+            # Old chat buttons carry no revision. Preserve their original preview,
+            # including historical drafts without a duplicate or a stored snapshot.
+            if recognition.status != CustomerRequisitesRecognitionService.STATUS_RECOGNIZED:
+                return current
+            if recognition.review_revision == current:
+                return current
+            if (
+                recognition.review_revision is None
+                and recognition.duplicate_customer_id is None
+                and duplicate is None
+            ):
+                return current
+        raise BotCustomerRequisitesConflictError("Черновик или клиент изменился. Откройте актуальный предпросмотр.")
+
+    @classmethod
+    async def edit_for_manager(
+        cls, session: AsyncSession, *, telegram_id: int, recognition_id: int,
+        tenant_scope: TenantScope, fields: BotCustomerRequisitesEditFields, expected_revision: str,
+    ) -> dict[str, Any]:
+        recognition = await cls._owned_recognition(
+            session, telegram_id=telegram_id, recognition_id=recognition_id,
+            tenant_scope=tenant_scope, for_update=True,
+        )
+        if recognition.status != CustomerRequisitesRecognitionService.STATUS_RECOGNIZED:
+            raise BotCustomerRequisitesConflictError("Завершённый черновик нельзя изменить")
+        previous = recognition.extracted_json or {}
+        duplicate = await CustomerRequisitesRecognitionService._find_duplicate(
+            session, previous.get("inn"), tenant_scope=tenant_scope,
+        )
+        cls._check_revision(recognition, duplicate, expected_revision)
+        draft, flags = CustomerRequisitesConfirmationService._prepare_draft(
+            recognition, fields.model_dump(exclude_unset=True),
+        )
+        if draft.get("inn") != previous.get("inn"):
+            duplicate = await CustomerRequisitesRecognitionService._find_duplicate(
+                session, draft.get("inn"), tenant_scope=tenant_scope,
+            )
+        duplicate_id = duplicate.id if duplicate else None
+        if (
+            draft != previous or flags != recognition.validation_flags
+            or duplicate_id != recognition.duplicate_customer_id
+        ):
+            recognition.extracted_json = draft
+            recognition.validation_flags = flags
+            recognition.duplicate_customer_id = duplicate_id
+            recognition.review_edit_count += 1
+            recognition.review_revision = review_revision(recognition, duplicate)
+            await session.commit()
+        return CustomerRequisitesRecognitionService._recognition_response(recognition, duplicate)
+
+    @classmethod
+    async def apply_action_for_manager(
+        cls, session: AsyncSession, *, telegram_id: int, recognition_id: int, action: str,
+        tenant_scope: TenantScope, expected_revision: str | None = None,
     ) -> BotCustomerRequisitesActionResult:
-        await cls._require_manager(session, telegram_id)
-        recognition = (
-            await session.execute(
-                select(CustomerRequisitesRecognition)
-                .where(
-                    CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_scope_clause(
-                        CustomerRequisitesRecognition,
-                        tenant_scope,
-                    ),
-                )
-                .with_for_update()
-            )
-        ).scalars().first()
-        if not recognition:
-            raise BotCustomerRequisitesNotFoundError("Recognition not found")
-        if recognition.telegram_user_id not in {None, telegram_id}:
-            raise BotCustomerRequisitesAccessDeniedError(
-                "Recognition belongs to another Telegram user"
-            )
-
-        if recognition.status == CustomerRequisitesRecognitionService.STATUS_CONFIRMED:
-            if action != recognition.confirmed_action:
-                raise BotCustomerRequisitesConflictError(
-                    "Recognition was already confirmed with another action"
-                )
-            customer = await CustomerService.get_for_manager(
-                session=session,
-                customer_id=int(recognition.confirmed_customer_id or 0),
-                tenant_scope=tenant_scope,
-            )
-            return BotCustomerRequisitesActionResult(
-                recognition=await cls._existing_response(
-                    session,
-                    recognition,
+        recognition = await cls._owned_recognition(
+            session, telegram_id=telegram_id, recognition_id=recognition_id,
+            tenant_scope=tenant_scope, for_update=True,
+        )
+        pending = recognition.status == CustomerRequisitesRecognitionService.STATUS_RECOGNIZED
+        duplicate = await CustomerRequisitesRecognitionService._find_duplicate(
+            session, (recognition.extracted_json or {}).get("inn"),
+            tenant_scope=tenant_scope, for_update=pending,
+        )
+        revision = cls._check_revision(recognition, duplicate, expected_revision)
+        if not pending:
+            previous_action = recognition.confirmed_action if recognition.status == "confirmed" else "cancel"
+            if action != previous_action:
+                raise BotCustomerRequisitesConflictError("Черновик уже завершён другим действием")
+            customer = None
+            if recognition.confirmed_customer_id is not None:
+                customer = await CustomerService.get_for_manager(
+                    session=session, customer_id=recognition.confirmed_customer_id,
                     tenant_scope=tenant_scope,
-                ),
-                customer=customer,
-                changed=False,
-            )
-
-        if recognition.status == CustomerRequisitesRecognitionService.STATUS_CANCELLED:
-            if action != "cancel":
-                raise BotCustomerRequisitesConflictError("Recognition was already cancelled")
+                )
             return BotCustomerRequisitesActionResult(
-                recognition=await cls._existing_response(
-                    session,
-                    recognition,
-                    tenant_scope=tenant_scope,
-                ),
-                customer=None,
-                changed=False,
+                recognition=CustomerRequisitesRecognitionService._recognition_response(recognition, duplicate),
+                customer=customer, changed=False,
             )
 
         if action == "cancel":
+            recognition.review_revision = revision
             cancelled = await CustomerRequisitesRecognitionService.cancel(
-                session,
-                recognition_id=recognition_id,
-                tenant_scope=tenant_scope,
+                session, recognition_id=recognition_id, tenant_scope=tenant_scope,
             )
-            return BotCustomerRequisitesActionResult(
-                recognition=cancelled,
-                customer=None,
-                changed=True,
-            )
+            return BotCustomerRequisitesActionResult(recognition=cancelled, customer=None, changed=True)
+
+        target_id = duplicate.id if duplicate else None
+        if action in {"update", "use"} and target_id is None:
+            raise BotCustomerRequisitesConflictError("В этом черновике нет клиента с совпадающим УНП")
+        if action == "create" and duplicate is not None:
+            raise BotCustomerRequisitesConflictError("Клиент с таким УНП уже существует")
 
         if action == "use":
-            customer_id = int(recognition.duplicate_customer_id or 0)
             customer = await CustomerService.get_for_manager(
-                session=session, customer_id=customer_id, tenant_scope=tenant_scope
-            ) if customer_id else None
+                session=session, customer_id=target_id, tenant_scope=tenant_scope,
+            )
             if customer is None:
                 raise BotCustomerRequisitesNotFoundError("Найденный клиент больше не доступен")
+            recognition.review_revision = revision
+            recognition.duplicate_customer_id = target_id
             recognition.status = CustomerRequisitesRecognitionService.STATUS_CONFIRMED
-            recognition.confirmed_action = "use"
-            recognition.confirmed_customer_id = customer_id
+            recognition.confirmed_action = action
+            recognition.confirmed_customer_id = target_id
             recognition.confirmed_at = datetime.now()
-            session.add(recognition)
             await session.commit()
             return BotCustomerRequisitesActionResult(
-                recognition=await cls._existing_response(
-                    session, recognition, tenant_scope=tenant_scope
-                ),
-                customer=customer,
-                changed=True,
+                recognition=CustomerRequisitesRecognitionService._recognition_response(recognition, duplicate),
+                customer=customer, changed=True,
             )
 
-        confirmed = await CustomerRequisitesRecognitionService.confirm(
-            session,
-            recognition_id=recognition_id,
-            action=action,
-            tenant_scope=tenant_scope,
-        )
+        try:
+            confirmed = await CustomerRequisitesRecognitionService.confirm(
+                session, recognition_id=recognition_id, action=action, customer_id=target_id,
+                source=recognition.source, reviewed_revision=revision, tenant_scope=tenant_scope,
+            )
+        except CustomerAlreadyExistsError as exc:
+            raise BotCustomerRequisitesConflictError(str(exc)) from exc
         return BotCustomerRequisitesActionResult(
-            recognition=confirmed["recognition"],
-            customer=confirmed["customer"],
-            changed=True,
+            recognition=confirmed["recognition"], customer=confirmed["customer"], changed=True,
         )
