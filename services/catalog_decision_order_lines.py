@@ -47,6 +47,7 @@ class CatalogDecisionOrderLineService:
         proposal_id: int,
         product_ids: list[int],
         snapshots: dict[int, CatalogDecisionProductSnapshot],
+        quantities: dict[int, int] | None = None,
     ) -> None:
         await OrderProductLineService.reconcile(
             session,
@@ -55,7 +56,7 @@ class CatalogDecisionOrderLineService:
             lines=[
                 {
                     "product_id": product_id,
-                    "quantity": 1,
+                    "quantity": (quantities or {}).get(product_id, 1),
                     "price": snapshots[product_id].retail_price_byn,
                     "cost": snapshots[product_id].purchase_cost_byn,
                     "logistics_components": None,

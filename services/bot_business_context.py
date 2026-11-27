@@ -49,6 +49,9 @@ async def bind_bot_business_context(
         "/catalog/search",
         "/catalog/selection",
         "/catalog/curated",
+        "/shop/browse",
+        "/shop/facets",
+        "/shop/products/resolve",
         "/tasks/my",
         "/orders/recent",
         "/repair-nameplates/orders",
@@ -60,7 +63,11 @@ async def bind_bot_business_context(
     requisites_review = (
         path.startswith("/api/internal/bot/v1/customers/requisites/") and path.endswith("/review")
     )
-    mutation = request.method != "GET" and not (path.endswith(read_paths) or requisites_review)
+    shop_product_read = (
+        path.rpartition("/")[0] == "/api/internal/bot/v1/shop/products"
+        and path.rpartition("/")[2].isdecimal()
+    )
+    mutation = request.method != "GET" and not (path.endswith(read_paths) or requisites_review or shop_product_read)
     if context.selection is not None:
         await BotStaffSelectionService.bind_request(
             session, context.selection, expected, mutation=mutation

@@ -118,6 +118,17 @@ class PersonalOfferService:
         offer = await cls._get(session, offer_id, scope)
         return _draft_response(offer, await PersonalOfferDAO.current(session, offer_id))
 
+    @classmethod
+    async def published_for_request(
+        cls, session: AsyncSession, offer_id: int, scope: TenantScope, request_id: str,
+    ) -> ManagerPersonalOfferPublished | None:
+        """Return only the original live publication, including after a command replay."""
+        offer = await cls._get(session, offer_id, scope, lock=True)
+        publication = await PersonalOfferDAO.current(session, offer_id)
+        if publication is None or publication.request_id != request_id:
+            return None
+        return _draft_response(offer, publication).published
+
     @staticmethod
     async def list(
         session: AsyncSession, scope: TenantScope, *, order_id: int | None, limit: int, before_id: int | None,
