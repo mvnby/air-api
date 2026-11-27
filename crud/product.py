@@ -187,10 +187,7 @@ class ProductDAO:
 
     @staticmethod
     def _json_text_expr(session: AsyncSession, key: str):
-        dialect = session.bind.dialect.name if session.bind is not None else ""
-        if dialect == "sqlite":
-            return func.lower(cast(func.json_extract(Product.specs, f"$.{key}"), String))
-        return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), key))
+        return ProductDAO._json_path_text_expr(session, key)
 
     @staticmethod
     def _json_path_int_expr(session: AsyncSession, *path: str):
@@ -201,20 +198,21 @@ class ProductDAO:
         return cast(func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path), Integer)
 
     @staticmethod
-    def _json_path_text_expr(session: AsyncSession, *path: str):
+    def _json_path_text_expr(session: AsyncSession, *path: str, specs=None):
+        specs = Product.specs if specs is None else specs
         dialect = session.bind.dialect.name if session.bind is not None else ""
         if dialect == "sqlite":
             json_path = "$." + ".".join(path)
-            return func.lower(cast(func.json_extract(Product.specs, json_path), String))
-        return func.lower(func.jsonb_extract_path_text(cast(Product.specs, JSONB), *path))
+            return func.lower(cast(func.json_extract(specs, json_path), String))
+        return func.lower(func.jsonb_extract_path_text(cast(specs, JSONB), *path))
 
     @staticmethod
-    def wifi_state_expr(session: AsyncSession):
+    def wifi_state_expr(session: AsyncSession, *, specs=None):
         """Resolve Wi-Fi from specs; legacy tags are never authoritative."""
-        ready = ProductDAO._json_text_expr(session, "wifi_ready")
+        ready = ProductDAO._json_path_text_expr(session, "wifi_ready", specs=specs)
         return func.coalesce(
-            ProductDAO._json_path_text_expr(session, "__typed_specs", "wifi_state", "value"),
-            ProductDAO._json_text_expr(session, "wifi_state"),
+            ProductDAO._json_path_text_expr(session, "__typed_specs", "wifi_state", "value", specs=specs),
+            ProductDAO._json_path_text_expr(session, "wifi_state", specs=specs),
             case(
                 (ready.in_(("true", "1")), "builtin"),
                 (ready == "ready", "ready"),

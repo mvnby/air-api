@@ -13,6 +13,7 @@ from routers import internal_bot_notifications as internal_bot_notifications_rou
 from routers import internal_bot_operations as internal_bot_operations_router
 from routers import internal_bot_runtime as internal_bot_runtime_router
 from routers import internal_bot_schedule
+from routers import internal_bot_shop, internal_bot_shop_actions, internal_bot_workspace
 from routers import internal_bot_voice as internal_bot_voice_router
 from routers import legacy_admin_redirects
 from routers import manager as manager_router
@@ -33,6 +34,9 @@ APP_ROUTERS: tuple[APIRouter, ...] = (
     internal_bot_operations_router.router,
     internal_bot_runtime_router.router,
     internal_bot_schedule.router,
+    internal_bot_shop.router,
+    internal_bot_shop_actions.router,
+    internal_bot_workspace.router,
     internal_bot_voice_router.router,
     api_router.router,
     manager_router.router,

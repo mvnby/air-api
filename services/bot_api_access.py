@@ -1,7 +1,12 @@
 """Shared authorization helpers for versioned Telegram bot use-case APIs."""
 
+from dataclasses import replace
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.command_actor import CommandActor
+from services.bot_worker_access import BotWorkerAccessDeniedError, bot_worker_context
+from services.staff_user_service import StaffUserService
 from services.bot_access_service import BotAccessContext, BotAccessService
 
 
@@ -42,3 +47,19 @@ async def require_bot_crm_staff(session: AsyncSession, telegram_id: int) -> BotA
     if not (context.is_manager or context.is_executor):
         raise BotUseCaseAccessDeniedError('CRM staff access is required')
     return context
+
+
+async def require_bot_manager_actor(session, telegram_id):
+    selection = session.info.get("bot_selection")
+    if selection is None:
+        raise BotUseCaseAccessDeniedError("Выберите компанию и витрину")
+    try:
+        auth, selection = await bot_worker_context(session, telegram_id, selection.scope)
+    except BotWorkerAccessDeniedError as exc:
+        raise BotUseCaseAccessDeniedError("Нужна учётная запись менеджера") from exc
+    staff = await StaffUserService.get_by_id(session, selection.staff_user_id)
+    if staff is None or staff.telegram_id != telegram_id or staff.auth_version != selection.auth_version:
+        raise BotUseCaseAccessDeniedError("Учётная запись менеджера недоступна")
+    # Personal read flags are shared with Manager login; task visibility is keyed by staff ID.
+    auth = replace(auth, username=staff.username or str(telegram_id), must_change_password=staff.must_change_password)
+    return CommandActor.from_auth(auth, channel="telegram"), selection

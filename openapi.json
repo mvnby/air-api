@@ -2779,6 +2779,771 @@
         ]
       }
     },
+    "/api/internal/bot/v1/shop/browse": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Browse Internal Bot Shop",
+        "description": "Browse eligible complete split systems at the selected storefront's retail prices.\nThe service bearer, an active Telegram Manager and the current context version are\nrequired (401, 403 or 409). Filters apply before counts, sorting and pagination.\nStock defaults to in_stock; availability=all includes orderable equipment. Feature\nIDs must all match. The page limit is 100; invalid filters return 422.",
+        "operationId": "browse_internal_bot_shop_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopBrowseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopBrowseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/shop/facets": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "List Internal Bot Shop Facets",
+        "description": "Find eligible brands, series, nominal cooling classes and effective equipment features.\nCounts and total use the same Manager catalog and retail/availability filters as browse.\nBrand, series and BTU options include alternatives in their own dimension. Cumulative\nfeature counts describe the current result. Requires the service bearer, active Manager\nand current company/site version. Invalid filters return 422 and stale context 409.",
+        "operationId": "list_internal_bot_shop_facets_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopFacetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopFacetsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/shop/products/resolve": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Resolve Internal Bot Shop Products",
+        "description": "Resolve 1\u2013100 distinct product IDs to current visible retail prices, photos and stock.\nIncludes orderable products and preserves request order. Missing and ineligible models\nare omitted. This read requires a service bearer, active Manager and the current\ncompany/site version; duplicate IDs return 422 and stale context returns 409.",
+        "operationId": "resolve_internal_bot_shop_products_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/shop/products/{product_id}": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Shop Product",
+        "description": "Read the eligible model's current retail price, approved gallery, registered technical\nspecifications and effective catalog features. Includes orderable equipment. Missing\nmodels and those outside the selected storefront catalog return 404. Requires the service\nbearer, active Manager and current company/site version (401, 403, 409 respectively).",
+        "operationId": "get_internal_bot_shop_product_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopProductRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopProductResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/shop/orders": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Shop Order",
+        "description": "Create a negotiation order with current storefront prices, quantities and either one proposal or alternatives.\nRequires the Bot service bearer, a live manager and the issued writable company/site version. Replaying the\nsame intent for this manager and site returns the original order ID. Unavailable equipment returns 422;\nunauthorized membership and stale context return 403 and 409.",
+        "operationId": "create_internal_bot_shop_order_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopOrderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/shop/offers": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Shop Offer",
+        "description": "Publish a seven-day personal equipment offer only on the selected storefront's verified primary domain.\nRequires the Bot bearer, a live manager and the current writable company/site version. Resolve current prices\nand publication eligibility before creating the immutable public snapshot. A retry returns the original active\nlink; withdrawn, expired, unavailable or unpriced selections cannot be republished with that key.",
+        "operationId": "publish_internal_bot_shop_offer_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotShopOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotShopOfferResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/workspace/{section}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "List Section",
+        "description": "Search and page Manager inbox, orders, customers or personal tasks. The selected\ntenant/site and real staff actor fence rows and counts. Customers belong to the\ntenant, orders and inbox to the site, tasks to their author or assignee. Requires\nthe bot service token, active manager (403) and current context version (409).\nInvalid section/filter returns 422. Reading the inbox does not mark it read.",
+        "operationId": "list_internal_bot_workspace_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "incoming",
+                "orders",
+                "customers",
+                "tasks"
+              ],
+              "type": "string",
+              "title": "Section"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 40,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotWorkspaceList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/workspace/{section}/{item_id}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Item",
+        "description": "Read one CRM card and its scoped Manager link. Inbox IDs require kind=lead|order.\nRequires the bot service token, active manager and current context revision.\nInaccessible objects return 404, unauthorized actors 403 and stale company context 409.",
+        "operationId": "get_internal_bot_workspace_item_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "incoming",
+                "orders",
+                "customers",
+                "tasks"
+              ],
+              "type": "string",
+              "title": "Section"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "lead",
+                    "order"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotWorkspaceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/workspace/tasks/{item_id}/status": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Task Status",
+        "description": "Complete or reopen a visible personal task with its issued version and idempotency key.\nRequires service authentication and a writable current manager membership. Stale versions\nand conflicting keys return 409; inaccessible tasks return 404. A retry uses the same key.",
+        "operationId": "set_internal_bot_workspace_task_status_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotWorkspaceTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotWorkspaceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/workspace/incoming/{item_id}/read": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Incoming Read",
+        "description": "Set the current manager's personal read flag for one scoped Lead/Order inbox card.\nRepeating the same value preserves its read state. Service token and writable company\nversion are required. Missing items return 404 and stale context returns 409.",
+        "operationId": "set_internal_bot_workspace_incoming_read_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotWorkspaceReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotWorkspaceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/workspace/customers/{item_id}/draft": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Start Customer Draft",
+        "description": "Open a new quick-order draft prefilled from the active tenant customer. The draft\nbelongs to this Telegram actor and company/site revision. Each call starts a draft.\nRequires the service token and a writable manager membership; inaccessible clients return 404.",
+        "operationId": "start_internal_bot_workspace_customer_draft_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotWorkspaceActor"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotQuickOrderDraftSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/workspace/incoming/{item_id}/service-order": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Qualify Incoming",
+        "description": "Create a negotiation-stage service order from the selected incoming and active\ncustomer, retaining the source link or promoting an Order intake in place. Requires\na service token, writable manager, current company and source version, and a stable\nidempotency key on retry. Missing inputs return 404 and stale revisions return 409.",
+        "operationId": "qualify_internal_bot_workspace_incoming_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotWorkspaceServiceOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotWorkspaceOrderResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/quick-orders/parse-voice": {
       "post": {
         "tags": [
@@ -49037,6 +49802,1142 @@
         ],
         "title": "BotScheduleResponse"
       },
+      "BotShopBrandFacet": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "count"
+        ],
+        "title": "BotShopBrandFacet"
+      },
+      "BotShopBrowseRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/BotShopFilters"
+          },
+          "page": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 20
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "retail_price",
+              "title",
+              "cooling_power",
+              "availability"
+            ],
+            "title": "Sort",
+            "default": "recommended"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Direction",
+            "default": "asc"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotShopBrowseRequest"
+      },
+      "BotShopBrowseResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/BotShopPage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "BotShopBrowseResponse"
+      },
+      "BotShopCoolingFacet": {
+        "properties": {
+          "value": {
+            "type": "integer",
+            "enum": [
+              7,
+              9,
+              12,
+              18,
+              24,
+              30,
+              36,
+              42,
+              60
+            ],
+            "title": "Value"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "title": "BotShopCoolingFacet"
+      },
+      "BotShopFacetsRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/BotShopFilters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotShopFacetsRequest"
+      },
+      "BotShopFacetsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "brands": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopBrandFacet"
+            },
+            "type": "array",
+            "title": "Brands"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopSeriesFacet"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "cooling_btu_classes": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopCoolingFacet"
+            },
+            "type": "array",
+            "title": "Cooling Btu Classes"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopFeatureFacet"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "brands",
+          "series",
+          "cooling_btu_classes",
+          "features"
+        ],
+        "title": "BotShopFacetsResponse"
+      },
+      "BotShopFeature": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "category"
+        ],
+        "title": "BotShopFeature"
+      },
+      "BotShopFeatureFacet": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "category",
+          "count"
+        ],
+        "title": "BotShopFeatureFacet"
+      },
+      "BotShopFilters": {
+        "properties": {
+          "search": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          },
+          "brand_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Brand Ids"
+          },
+          "series_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Series Ids"
+          },
+          "feature_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Feature Ids"
+          },
+          "cooling_btu_classes": {
+            "items": {
+              "type": "integer",
+              "enum": [
+                7,
+                9,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42,
+                60
+              ]
+            },
+            "type": "array",
+            "maxItems": 9,
+            "title": "Cooling Btu Classes"
+          },
+          "cooling_min_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Min Kw"
+          },
+          "cooling_max_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Max Kw"
+          },
+          "area_min": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Min"
+          },
+          "area_max": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Max"
+          },
+          "retail_min_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Min Byn"
+          },
+          "retail_max_byn": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retail Max Byn"
+          },
+          "is_inverter": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "ready",
+                  "none"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "out_of_stock",
+              "all"
+            ],
+            "title": "Availability",
+            "default": "in_stock"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "household",
+                  "semi_industrial"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "indoor_form_factor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wall",
+                  "cassette",
+                  "duct",
+                  "floor_ceiling",
+                  "column",
+                  "console"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indoor Form Factor"
+          },
+          "heating_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  -20,
+                  -25,
+                  -30
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heating Min"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BotShopFilters"
+      },
+      "BotShopImage": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "thumbnail_url": {
+            "type": "string",
+            "title": "Thumbnail Url"
+          },
+          "alt": {
+            "type": "string",
+            "title": "Alt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "thumbnail_url",
+          "alt"
+        ],
+        "title": "BotShopImage"
+      },
+      "BotShopItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "retail_price_byn": {
+            "type": "number",
+            "title": "Retail Price Byn"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "out_of_stock"
+            ],
+            "title": "Availability"
+          },
+          "cooling_power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Power Kw"
+          },
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "ready",
+              "none"
+            ],
+            "title": "Wifi"
+          },
+          "public_site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Site Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "brand_title",
+          "series_title",
+          "thumbnail_url",
+          "retail_price_byn",
+          "availability",
+          "cooling_power_kw",
+          "area_m2",
+          "is_inverter",
+          "wifi",
+          "public_site_url"
+        ],
+        "title": "BotShopItem"
+      },
+      "BotShopLine": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "quantity"
+        ],
+        "title": "BotShopLine"
+      },
+      "BotShopOfferRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopLine"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "telegram_id",
+          "expected_context_version",
+          "request_id",
+          "title"
+        ],
+        "title": "BotShopOfferRequest"
+      },
+      "BotShopOfferResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "BotShopOfferResponse"
+      },
+      "BotShopOrderRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopLine"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "prospect_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "company"
+            ],
+            "title": "Prospect Type"
+          },
+          "proposal_mode": {
+            "type": "string",
+            "enum": [
+              "bundle",
+              "alternatives"
+            ],
+            "title": "Proposal Mode"
+          },
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "idempotency_key",
+          "prospect_type",
+          "proposal_mode",
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotShopOrderRequest"
+      },
+      "BotShopOrderResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "BotShopOrderResponse"
+      },
+      "BotShopPage": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "pages"
+        ],
+        "title": "BotShopPage"
+      },
+      "BotShopProductRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotShopProductRequest"
+      },
+      "BotShopProductResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "brand_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Title"
+          },
+          "series_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Title"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "retail_price_byn": {
+            "type": "number",
+            "title": "Retail Price Byn"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "out_of_stock"
+            ],
+            "title": "Availability"
+          },
+          "cooling_power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooling Power Kw"
+          },
+          "area_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "is_inverter": {
+            "type": "boolean",
+            "title": "Is Inverter"
+          },
+          "wifi": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "ready",
+              "none"
+            ],
+            "title": "Wifi"
+          },
+          "public_site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Site Url"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopImage"
+            },
+            "type": "array",
+            "title": "Images"
+          },
+          "summary_fields": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopSpecification"
+            },
+            "type": "array",
+            "title": "Summary Fields"
+          },
+          "specification_groups": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopSpecificationGroup"
+            },
+            "type": "array",
+            "title": "Specification Groups"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopFeature"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "brand_title",
+          "series_title",
+          "thumbnail_url",
+          "retail_price_byn",
+          "availability",
+          "cooling_power_kw",
+          "area_m2",
+          "is_inverter",
+          "wifi",
+          "public_site_url",
+          "description",
+          "images",
+          "summary_fields",
+          "specification_groups",
+          "features"
+        ],
+        "title": "BotShopProductResponse"
+      },
+      "BotShopResolveRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "product_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Product Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version",
+          "product_ids"
+        ],
+        "title": "BotShopResolveRequest"
+      },
+      "BotShopResolveResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BotShopResolveResponse"
+      },
+      "BotShopSeriesFacet": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "count",
+          "brand_id"
+        ],
+        "title": "BotShopSeriesFacet"
+      },
+      "BotShopSpecification": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value",
+          "unit"
+        ],
+        "title": "BotShopSpecification"
+      },
+      "BotShopSpecificationGroup": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotShopSpecification"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "items"
+        ],
+        "title": "BotShopSpecificationGroup"
+      },
       "BotStaffCompanyChoice": {
         "properties": {
           "tenant_id": {
@@ -50193,6 +52094,438 @@
           "draft"
         ],
         "title": "BotVoiceQuickOrderParseResponse"
+      },
+      "BotWorkspaceActor": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotWorkspaceActor"
+      },
+      "BotWorkspaceDetail": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/BotWorkspaceRow"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/BotWorkspaceFact"
+            },
+            "type": "array",
+            "title": "Facts"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "manager_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Manager Url"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/BotWorkspaceProposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "actions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "mark_read",
+                "mark_unread",
+                "complete",
+                "reopen",
+                "customer_draft",
+                "service_order"
+              ]
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item",
+          "facts",
+          "manager_url",
+          "actions"
+        ],
+        "title": "BotWorkspaceDetail"
+      },
+      "BotWorkspaceEquipmentLine": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "integer",
+            "title": "Unit Price"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit_price",
+          "currency"
+        ],
+        "title": "BotWorkspaceEquipmentLine"
+      },
+      "BotWorkspaceFact": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "phone",
+              "email"
+            ],
+            "title": "Kind",
+            "default": "text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "BotWorkspaceFact"
+      },
+      "BotWorkspaceList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotWorkspaceRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "title": "BotWorkspaceList"
+      },
+      "BotWorkspaceOrderResult": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id"
+        ],
+        "title": "BotWorkspaceOrderResult"
+      },
+      "BotWorkspaceProposal": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          },
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/BotWorkspaceEquipmentLine"
+            },
+            "type": "array",
+            "title": "Equipment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "selected",
+          "equipment"
+        ],
+        "title": "BotWorkspaceProposal"
+      },
+      "BotWorkspaceReadRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "order"
+            ],
+            "title": "Kind"
+          },
+          "is_read": {
+            "type": "boolean",
+            "title": "Is Read"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version",
+          "kind",
+          "is_read"
+        ],
+        "title": "BotWorkspaceReadRequest"
+      },
+      "BotWorkspaceRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "order",
+              "customer",
+              "task"
+            ],
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Read"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title"
+        ],
+        "title": "BotWorkspaceRow"
+      },
+      "BotWorkspaceServiceOrderRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "order"
+            ],
+            "title": "Kind"
+          },
+          "customer_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Customer Id"
+          },
+          "workflow_type": {
+            "type": "string",
+            "enum": [
+              "repair",
+              "service_work",
+              "maintenance"
+            ],
+            "title": "Workflow Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version",
+          "expected_version",
+          "idempotency_key",
+          "kind",
+          "customer_id",
+          "workflow_type"
+        ],
+        "title": "BotWorkspaceServiceOrderRequest"
+      },
+      "BotWorkspaceTaskRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Idempotency Key"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "reopen"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version",
+          "expected_version",
+          "idempotency_key",
+          "action"
+        ],
+        "title": "BotWorkspaceTaskRequest"
       },
       "BrandShortDescriptionDraft": {
         "properties": {

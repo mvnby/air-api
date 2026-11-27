@@ -28,6 +28,18 @@ import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequ
 import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
 import type { BotScheduleRequest } from '../models/BotScheduleRequest';
 import type { BotScheduleResponse } from '../models/BotScheduleResponse';
+import type { BotShopBrowseRequest } from '../models/BotShopBrowseRequest';
+import type { BotShopBrowseResponse } from '../models/BotShopBrowseResponse';
+import type { BotShopFacetsRequest } from '../models/BotShopFacetsRequest';
+import type { BotShopFacetsResponse } from '../models/BotShopFacetsResponse';
+import type { BotShopOfferRequest } from '../models/BotShopOfferRequest';
+import type { BotShopOfferResponse } from '../models/BotShopOfferResponse';
+import type { BotShopOrderRequest } from '../models/BotShopOrderRequest';
+import type { BotShopOrderResponse } from '../models/BotShopOrderResponse';
+import type { BotShopProductRequest } from '../models/BotShopProductRequest';
+import type { BotShopProductResponse } from '../models/BotShopProductResponse';
+import type { BotShopResolveRequest } from '../models/BotShopResolveRequest';
+import type { BotShopResolveResponse } from '../models/BotShopResolveResponse';
 import type { BotStaffContextChoicesResponse } from '../models/BotStaffContextChoicesResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
 import type { BotStaffContextSelectRequest } from '../models/BotStaffContextSelectRequest';
@@ -40,6 +52,13 @@ import type { BotTaskStatusUpdateRequest } from '../models/BotTaskStatusUpdateRe
 import type { BotTaskStatusUpdateResponse } from '../models/BotTaskStatusUpdateResponse';
 import type { BotTelegramLoginDecisionRequest } from '../models/BotTelegramLoginDecisionRequest';
 import type { BotTelegramLoginDecisionResponse } from '../models/BotTelegramLoginDecisionResponse';
+import type { BotWorkspaceActor } from '../models/BotWorkspaceActor';
+import type { BotWorkspaceDetail } from '../models/BotWorkspaceDetail';
+import type { BotWorkspaceList } from '../models/BotWorkspaceList';
+import type { BotWorkspaceOrderResult } from '../models/BotWorkspaceOrderResult';
+import type { BotWorkspaceReadRequest } from '../models/BotWorkspaceReadRequest';
+import type { BotWorkspaceServiceOrderRequest } from '../models/BotWorkspaceServiceOrderRequest';
+import type { BotWorkspaceTaskRequest } from '../models/BotWorkspaceTaskRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -765,6 +784,342 @@ export class InternalBotV1Service {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/internal/bot/v1/calendar/schedule',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Browse Internal Bot Shop
+     * Browse eligible complete split systems at the selected storefront's retail prices.
+     * The service bearer, an active Telegram Manager and the current context version are
+     * required (401, 403 or 409). Filters apply before counts, sorting and pagination.
+     * Stock defaults to in_stock; availability=all includes orderable equipment. Feature
+     * IDs must all match. The page limit is 100; invalid filters return 422.
+     * @param requestBody
+     * @returns BotShopBrowseResponse Successful Response
+     * @throws ApiError
+     */
+    public static browseInternalBotShopV1(
+        requestBody: BotShopBrowseRequest,
+    ): CancelablePromise<BotShopBrowseResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/browse',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Internal Bot Shop Facets
+     * Find eligible brands, series, nominal cooling classes and effective equipment features.
+     * Counts and total use the same Manager catalog and retail/availability filters as browse.
+     * Brand, series and BTU options include alternatives in their own dimension. Cumulative
+     * feature counts describe the current result. Requires the service bearer, active Manager
+     * and current company/site version. Invalid filters return 422 and stale context 409.
+     * @param requestBody
+     * @returns BotShopFacetsResponse Successful Response
+     * @throws ApiError
+     */
+    public static listInternalBotShopFacetsV1(
+        requestBody: BotShopFacetsRequest,
+    ): CancelablePromise<BotShopFacetsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/facets',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Resolve Internal Bot Shop Products
+     * Resolve 1–100 distinct product IDs to current visible retail prices, photos and stock.
+     * Includes orderable products and preserves request order. Missing and ineligible models
+     * are omitted. This read requires a service bearer, active Manager and the current
+     * company/site version; duplicate IDs return 422 and stale context returns 409.
+     * @param requestBody
+     * @returns BotShopResolveResponse Successful Response
+     * @throws ApiError
+     */
+    public static resolveInternalBotShopProductsV1(
+        requestBody: BotShopResolveRequest,
+    ): CancelablePromise<BotShopResolveResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/products/resolve',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Internal Bot Shop Product
+     * Read the eligible model's current retail price, approved gallery, registered technical
+     * specifications and effective catalog features. Includes orderable equipment. Missing
+     * models and those outside the selected storefront catalog return 404. Requires the service
+     * bearer, active Manager and current company/site version (401, 403, 409 respectively).
+     * @param productId
+     * @param requestBody
+     * @returns BotShopProductResponse Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotShopProductV1(
+        productId: number,
+        requestBody: BotShopProductRequest,
+    ): CancelablePromise<BotShopProductResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Shop Order
+     * Create a negotiation order with current storefront prices, quantities and either one proposal or alternatives.
+     * Requires the Bot service bearer, a live manager and the issued writable company/site version. Replaying the
+     * same intent for this manager and site returns the original order ID. Unavailable equipment returns 422;
+     * unauthorized membership and stale context return 403 and 409.
+     * @param requestBody
+     * @returns BotShopOrderResponse Successful Response
+     * @throws ApiError
+     */
+    public static createInternalBotShopOrderV1(
+        requestBody: BotShopOrderRequest,
+    ): CancelablePromise<BotShopOrderResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/orders',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Shop Offer
+     * Publish a seven-day personal equipment offer only on the selected storefront's verified primary domain.
+     * Requires the Bot bearer, a live manager and the current writable company/site version. Resolve current prices
+     * and publication eligibility before creating the immutable public snapshot. A retry returns the original active
+     * link; withdrawn, expired, unavailable or unpriced selections cannot be republished with that key.
+     * @param requestBody
+     * @returns BotShopOfferResponse Successful Response
+     * @throws ApiError
+     */
+    public static publishInternalBotShopOfferV1(
+        requestBody: BotShopOfferRequest,
+    ): CancelablePromise<BotShopOfferResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/shop/offers',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Section
+     * Search and page Manager inbox, orders, customers or personal tasks. The selected
+     * tenant/site and real staff actor fence rows and counts. Customers belong to the
+     * tenant, orders and inbox to the site, tasks to their author or assignee. Requires
+     * the bot service token, active manager (403) and current context version (409).
+     * Invalid section/filter returns 422. Reading the inbox does not mark it read.
+     * @param section
+     * @param telegramId
+     * @param expectedContextVersion
+     * @param q
+     * @param filter
+     * @param page
+     * @param limit
+     * @returns BotWorkspaceList Successful Response
+     * @throws ApiError
+     */
+    public static listInternalBotWorkspaceV1(
+        section: 'incoming' | 'orders' | 'customers' | 'tasks',
+        telegramId: number,
+        expectedContextVersion: number,
+        q: string = '',
+        filter?: (string | null),
+        page: number = 1,
+        limit: number = 20,
+    ): CancelablePromise<BotWorkspaceList> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/workspace/{section}',
+            path: {
+                'section': section,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+                'q': q,
+                'filter': filter,
+                'page': page,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Item
+     * Read one CRM card and its scoped Manager link. Inbox IDs require kind=lead|order.
+     * Requires the bot service token, active manager and current context revision.
+     * Inaccessible objects return 404, unauthorized actors 403 and stale company context 409.
+     * @param section
+     * @param itemId
+     * @param telegramId
+     * @param expectedContextVersion
+     * @param kind
+     * @returns BotWorkspaceDetail Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotWorkspaceItemV1(
+        section: 'incoming' | 'orders' | 'customers' | 'tasks',
+        itemId: number,
+        telegramId: number,
+        expectedContextVersion: number,
+        kind?: ('lead' | 'order' | null),
+    ): CancelablePromise<BotWorkspaceDetail> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/workspace/{section}/{item_id}',
+            path: {
+                'section': section,
+                'item_id': itemId,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+                'kind': kind,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Task Status
+     * Complete or reopen a visible personal task with its issued version and idempotency key.
+     * Requires service authentication and a writable current manager membership. Stale versions
+     * and conflicting keys return 409; inaccessible tasks return 404. A retry uses the same key.
+     * @param itemId
+     * @param requestBody
+     * @returns BotWorkspaceDetail Successful Response
+     * @throws ApiError
+     */
+    public static setInternalBotWorkspaceTaskStatusV1(
+        itemId: number,
+        requestBody: BotWorkspaceTaskRequest,
+    ): CancelablePromise<BotWorkspaceDetail> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/workspace/tasks/{item_id}/status',
+            path: {
+                'item_id': itemId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Incoming Read
+     * Set the current manager's personal read flag for one scoped Lead/Order inbox card.
+     * Repeating the same value preserves its read state. Service token and writable company
+     * version are required. Missing items return 404 and stale context returns 409.
+     * @param itemId
+     * @param requestBody
+     * @returns BotWorkspaceDetail Successful Response
+     * @throws ApiError
+     */
+    public static setInternalBotWorkspaceIncomingReadV1(
+        itemId: number,
+        requestBody: BotWorkspaceReadRequest,
+    ): CancelablePromise<BotWorkspaceDetail> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/workspace/incoming/{item_id}/read',
+            path: {
+                'item_id': itemId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Start Customer Draft
+     * Open a new quick-order draft prefilled from the active tenant customer. The draft
+     * belongs to this Telegram actor and company/site revision. Each call starts a draft.
+     * Requires the service token and a writable manager membership; inaccessible clients return 404.
+     * @param itemId
+     * @param requestBody
+     * @returns BotQuickOrderDraftSessionResponse Successful Response
+     * @throws ApiError
+     */
+    public static startInternalBotWorkspaceCustomerDraftV1(
+        itemId: number,
+        requestBody: BotWorkspaceActor,
+    ): CancelablePromise<BotQuickOrderDraftSessionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/workspace/customers/{item_id}/draft',
+            path: {
+                'item_id': itemId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Qualify Incoming
+     * Create a negotiation-stage service order from the selected incoming and active
+     * customer, retaining the source link or promoting an Order intake in place. Requires
+     * a service token, writable manager, current company and source version, and a stable
+     * idempotency key on retry. Missing inputs return 404 and stale revisions return 409.
+     * @param itemId
+     * @param requestBody
+     * @returns BotWorkspaceOrderResult Successful Response
+     * @throws ApiError
+     */
+    public static qualifyInternalBotWorkspaceIncomingV1(
+        itemId: number,
+        requestBody: BotWorkspaceServiceOrderRequest,
+    ): CancelablePromise<BotWorkspaceOrderResult> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/workspace/incoming/{item_id}/service-order',
+            path: {
+                'item_id': itemId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

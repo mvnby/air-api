@@ -11,6 +11,7 @@ from sqlalchemy import Float, Numeric, String, and_, case, cast, exists, func, n
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from crud.product import ProductDAO
 from crud.public_catalog import PublicCatalogDAO
 from crud.tenancy import TenancyDAO
 from models import Brand, Product, ProductSeries, ProductTagLink, Tag, Tenant, TenantOffer
@@ -243,29 +244,31 @@ class CatalogDecisionQueryService:
         )).scalars().all())
 
     @classmethod
-    def _metrics_cte(cls, *, usd_byn_rate: Decimal | None):
-        cost = case(
-            (SupplierOffer.wholesale_currency == "BYN", SupplierOffer.wholesale_value),
-            (and_(SupplierOffer.wholesale_currency == "USD", usd_byn_rate is not None), SupplierOffer.wholesale_value * usd_byn_rate),
-            else_=None,
-        )
+    def _metrics_cte(cls, *, usd_byn_rate: Decimal | None, include_supplier_details: bool = True):
         active = (
             ProductSupplierMapping.is_active.is_(True),
             SupplierOffer.is_active.is_(True),
             Supplier.is_active.is_(True),
         )
-        # Cost follows the existing manager semantics: prefer an in-stock offer,
-        # otherwise use the cheapest currently known active offer.
-        in_stock_cost = func.min(case((SupplierOffer.qty > 0, cost), else_=None))
-        any_cost = func.min(cost)
-        return (
-            select(
-                ProductSupplierMapping.product_id.label("product_id"),
-                func.coalesce(in_stock_cost, any_cost).label("purchase_cost_byn"),
+        columns = [
+            ProductSupplierMapping.product_id.label("product_id"),
+            func.coalesce(func.sum(SupplierOffer.qty), 0).label("supplier_qty"),
+        ]
+        if include_supplier_details:
+            cost = case(
+                (SupplierOffer.wholesale_currency == "BYN", SupplierOffer.wholesale_value),
+                (and_(SupplierOffer.wholesale_currency == "USD", usd_byn_rate is not None), SupplierOffer.wholesale_value * usd_byn_rate),
+                else_=None,
+            )
+            # Prefer the cheapest active offer with stock, then any active offer.
+            in_stock_cost = func.min(case((SupplierOffer.qty > 0, cost), else_=None))
+            columns.extend([
+                func.coalesce(in_stock_cost, func.min(cost)).label("purchase_cost_byn"),
                 func.min(SupplierOffer.rrc_byn).label("recommended_price_byn"),
                 func.min(Supplier.name).label("supplier_name"),
-                func.coalesce(func.sum(SupplierOffer.qty), 0).label("supplier_qty"),
-            )
+            ])
+        return (
+            select(*columns)
             .select_from(ProductSupplierMapping)
             .join(
                 SupplierOffer,
@@ -365,17 +368,12 @@ class CatalogDecisionQueryService:
             conditions.append(Product.series_id.in_(filters.series_ids))
         if filters.is_inverter is not None:
             conditions.append(Product.is_inverter.is_(filters.is_inverter))
-        if filters.has_wifi:
-            wifi = cls._json_text(session, "wifi_ready", specs=specs)
-            conditions.append(wifi.in_((True, "true", "True", "1", "ready")))
-        if filters.wifi:
-            wifi = cls._json_text(session, "wifi_ready", specs=specs)
-            if filters.wifi == "builtin":
-                conditions.append(wifi.in_((True, "true", "True", "1")))
-            elif filters.wifi == "ready":
-                conditions.append(wifi == "ready")
-            else:
-                conditions.append(or_(wifi.is_(None), wifi.in_((False, "false", "False", "0"))))
+        if filters.has_wifi or filters.wifi:
+            wifi = func.coalesce(ProductDAO.wifi_state_expr(session, specs=specs), "none")
+            if filters.has_wifi:
+                conditions.append(wifi.in_(("builtin", "ready")))
+            if filters.wifi:
+                conditions.append(wifi == filters.wifi)
         if filters.availability:
             conditions.append(availability == filters.availability)
         if filters.is_published is not None:
@@ -385,10 +383,11 @@ class CatalogDecisionQueryService:
         return conditions
 
     @classmethod
-    async def list_products(
+    async def filtered_products_query(
         cls, session: AsyncSession, *, tenant_scope: TenantScope, filters: CatalogDecisionFilters,
-        page: int, limit: int, sort: str, direction: Literal["asc", "desc"],
-    ) -> dict:
+        include_supplier_details: bool = True,
+    ):
+        """Eligible products with authoritative technical, stock and retail values before pagination."""
         cls._validate_filters(filters)
         tokens, _ = split_catalog_decision_search(filters.search or "")
         # Restrict plain-text matches before converting the often large specs documents.
@@ -396,15 +395,10 @@ class CatalogDecisionQueryService:
             session, product_ids=filters.product_ids, text_conditions=cls._text_search_conditions(tokens),
         )
         specs = specs_cte.c.specs
-        usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session)
-        metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate)
+        usd_byn_rate = await FxRateService.get_supplier_usd_byn_rate(session) if include_supplier_details else None
+        metrics = cls._metrics_cte(usd_byn_rate=usd_byn_rate, include_supplier_details=include_supplier_details)
         local_stock = cls._local_stock_cte()
         retail = cls._retail_price(tenant_scope)
-        purchase = cls._purchase_cost(
-            await cls._uses_demo_cost(session, tenant_scope), metrics, retail,
-        ).label("purchase_cost_byn")
-        margin_abs = case((purchase.is_not(None), retail - purchase), else_=None).label("margin_abs_byn")
-        margin_pct = case((and_(purchase.is_not(None), retail > 0), (retail - purchase) / retail), else_=None).label("margin_pct")
         total_qty = func.coalesce(metrics.c.supplier_qty, 0) + func.coalesce(local_stock.c.local_qty, 0)
         availability = case((total_qty > 0, "in_stock"), else_="out_of_stock").label("availability")
         area = cls._json_float(session, "area_m2", specs=specs)
@@ -432,12 +426,10 @@ class CatalogDecisionQueryService:
             select(
                 Product.id, Product.title, Product.slug, Product.main_image, Product.is_inverter, Product.is_published,
                 Brand.title.label("brand_title"), ProductSeries.title.label("series_title"),
-                retail.label("retail_price_byn"), purchase, metrics.c.recommended_price_byn,
-                metrics.c.supplier_name, metrics.c.supplier_qty,
-                margin_abs, margin_pct, availability, cooling_nominal, cooling_min, cooling_max, heating_min,
+                retail.label("retail_price_byn"), availability, cooling_nominal, cooling_min, cooling_max, heating_min,
                 area.label("area_m2"),
                 indoor_form.label("indoor_form_factor"),
-                cls._json_text(session, "wifi_ready", specs=specs).label("wifi_raw"),
+                ProductDAO.wifi_state_expr(session, specs=specs).label("wifi_state"),
             )
             .select_from(Product)
             .join(specs_cte, specs_cte.c.id == Product.id)
@@ -447,26 +439,50 @@ class CatalogDecisionQueryService:
             .outerjoin(local_stock, local_stock.c.product_id == Product.id)
             .where(*conditions)
         )
+        if include_supplier_details:
+            purchase = cls._purchase_cost(await cls._uses_demo_cost(session, tenant_scope), metrics, retail)
+            base = base.add_columns(
+                purchase.label("purchase_cost_byn"), metrics.c.recommended_price_byn,
+                metrics.c.supplier_name, metrics.c.supplier_qty,
+                case((purchase.is_not(None), retail - purchase), else_=None).label("margin_abs_byn"),
+                case((and_(purchase.is_not(None), retail > 0), (retail - purchase) / retail), else_=None).label("margin_pct"),
+            )
         if not tenant_scope.is_system:
             base = base.join(TenantOffer, TenantOffer.product_id == Product.id).where(
                 *cls._visible_offer_conditions(tenant_scope),
             )
+        return base
+
+    @staticmethod
+    def product_order(base, filters: CatalogDecisionFilters, sort: str, direction: str):
+        columns = base.selected_columns
         sort_columns = {
-            "retail_price": retail, "purchase_cost": purchase, "rrc": metrics.c.recommended_price_byn,
-            "margin_abs": margin_abs, "margin_pct": margin_pct, "availability": availability,
-            "cooling_power": cooling_nominal, "title": Product.title,
+            "retail_price": "retail_price_byn", "purchase_cost": "purchase_cost_byn",
+            "rrc": "recommended_price_byn", "margin_abs": "margin_abs_byn",
+            "margin_pct": "margin_pct", "availability": "availability",
+            "cooling_power": "cooling_power_kw", "title": "title", "recommended": "title",
         }
-        sort_column = sort_columns["title" if sort == "recommended" else sort]
+        sort_column = columns[sort_columns[sort]]
         order_value = sort_column.asc() if direction == "asc" else sort_column.desc()
         preferred_form = (
-            [case((indoor_form == "wall", 0), else_=1).asc()]
+            [case((columns.indoor_form_factor == "wall", 0), else_=1).asc()]
             if sort == "recommended" and filters.indoor_form_factor is None
             else []
         )
         # Nulls are always last, and product id makes every page boundary stable.
+        return (*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc())
+
+    @classmethod
+    async def list_products(
+        cls, session: AsyncSession, *, tenant_scope: TenantScope, filters: CatalogDecisionFilters,
+        page: int, limit: int, sort: str, direction: Literal["asc", "desc"], include_supplier_details: bool = True,
+    ) -> dict:
+        base = await cls.filtered_products_query(
+            session, tenant_scope=tenant_scope, filters=filters, include_supplier_details=include_supplier_details,
+        )
         page_query = (
             base.add_columns(func.count().over().label("total_count"))
-            .order_by(*preferred_form, sort_column.is_(None).asc(), order_value, Product.id.asc())
+            .order_by(*cls.product_order(base, filters, sort, direction))
             .offset((page - 1) * limit)
             .limit(limit)
         )
@@ -484,19 +500,14 @@ class CatalogDecisionQueryService:
         })
         items = []
         for row in rows:
-            wifi_raw = row.wifi_raw
-            wifi = "builtin" if wifi_raw in (True, "true", "True", "1") else "ready" if wifi_raw == "ready" else "none"
+            wifi = row.wifi_state if row.wifi_state in ("builtin", "ready") else "none"
             category = None
             # Category is a display hint only; filtering remains the canonical tag EXISTS above.
-            items.append({
+            item = {
                 "id": row.id, "title": row.title, "slug": row.slug, "main_image": row.main_image,
                 "brand_title": row.brand_title, "series_title": row.series_title,
                 "retail_price_byn": float(row.retail_price_byn),
-                "purchase_cost_byn": round(float(row.purchase_cost_byn), 2) if row.purchase_cost_byn is not None else None,
-                "recommended_price_byn": float(row.recommended_price_byn) if row.recommended_price_byn is not None else None,
-                "margin_abs_byn": round(float(row.margin_abs_byn), 2) if row.margin_abs_byn is not None else None,
-                "margin_pct": round(float(row.margin_pct), 4) if row.margin_pct is not None else None,
-                "supplier_name": row.supplier_name, "supplier_qty": int(row.supplier_qty or 0), "availability": row.availability,
+                "availability": row.availability,
                 "cooling_power_kw": float(row.cooling_power_kw) if row.cooling_power_kw is not None else None,
                 "cooling_min_kw": float(row.cooling_min_kw) if row.cooling_min_kw is not None else None,
                 "cooling_max_kw": float(row.cooling_max_kw) if row.cooling_max_kw is not None else None,
@@ -505,7 +516,16 @@ class CatalogDecisionQueryService:
                 "indoor_form_factor": row.indoor_form_factor, "is_inverter": bool(row.is_inverter), "wifi": wifi,
                 "is_published": bool(row.is_published),
                 "public_site_url": public_urls.get(row.id),
-            })
+            }
+            if include_supplier_details:
+                item.update({
+                    "purchase_cost_byn": round(float(row.purchase_cost_byn), 2) if row.purchase_cost_byn is not None else None,
+                    "recommended_price_byn": float(row.recommended_price_byn) if row.recommended_price_byn is not None else None,
+                    "margin_abs_byn": round(float(row.margin_abs_byn), 2) if row.margin_abs_byn is not None else None,
+                    "margin_pct": round(float(row.margin_pct), 4) if row.margin_pct is not None else None,
+                    "supplier_name": row.supplier_name, "supplier_qty": int(row.supplier_qty or 0),
+                })
+            items.append(item)
         return {"items": items, "meta": {"page": page, "limit": limit, "total": total, "pages": max(1, (total + limit - 1) // limit)}}
 
     @staticmethod

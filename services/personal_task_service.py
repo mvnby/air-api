@@ -581,6 +581,7 @@ class PersonalTaskService:
         limit: int = 50,
         offset: int = 0,
         reference_time: datetime | None = None,
+        search: str | None = None,
     ) -> PersonalTaskListResponse:
         if not 1 <= limit <= 100:
             raise ValueError("limit должен быть от 1 до 100")
@@ -591,6 +592,12 @@ class PersonalTaskService:
         now = cls._normalize_datetime(reference_time) or datetime.now(timezone.utc)
         visible = cls._visible_clause(actor)
         filters = list(visible)
+        if search and search.strip():
+            term = search.strip()
+            filters.append(or_(
+                PersonalTask.text.icontains(term, autoescape=True),
+                PersonalTask.description.icontains(term, autoescape=True),
+            ))
         if task_filter == "active":
             filters.append(PersonalTask.status == "active")
         elif task_filter == "reminders":

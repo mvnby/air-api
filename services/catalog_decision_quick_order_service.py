@@ -56,10 +56,15 @@ class CatalogDecisionQuickOrderService:
         proposal_mode: Literal["bundle", "alternatives"] = "bundle",
         tenant_scope: TenantScope,
         creator_staff_user_id: int | None = None,
+        quantities: dict[int, int] | None = None,
     ) -> dict[str, Any]:
         ids = [int(product_id) for product_id in product_ids]
         if len(ids) != len(set(ids)):
             raise ValueError("Один товар нельзя добавить дважды")
+        if quantities is not None and (
+            set(quantities) != set(ids) or any(not 1 <= quantity <= 99 for quantity in quantities.values())
+        ):
+            raise ValueError("Проверьте количество выбранного оборудования")
         if not idempotency_key.strip():
             raise ValueError("Не указан ключ создания заказа")
         if proposal_mode not in {"bundle", "alternatives"}:
@@ -140,6 +145,7 @@ class CatalogDecisionQuickOrderService:
                         proposal_id=int(proposal.id),
                         product_ids=proposal_product_ids,
                         snapshots=snapshots,
+                        quantities=quantities,
                     )
                 await OrderService._refresh_order_financials(session, order)
                 session.add(order)
