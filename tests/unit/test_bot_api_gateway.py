@@ -402,6 +402,7 @@ async def test_bot_api_gateway_sends_requisites_file_as_multipart():
             json={
                 "id": 12,
                 "status": "recognized",
+                "revision": "initial_revision",
                 "source": "telegram",
                 "extracted": {"name": "ООО Тест"},
                 "validation_flags": {},
@@ -439,6 +440,7 @@ async def test_bot_api_gateway_applies_customer_requisites_action():
                     "id": 12,
                     "status": "confirmed",
                     "source": "telegram_text",
+                    "revision": "another_revision",
                     "extracted": {"name": "ООО Тест"},
                     "validation_flags": {},
                     "confirmed_customer_id": 7,

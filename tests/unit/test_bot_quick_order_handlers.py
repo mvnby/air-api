@@ -115,6 +115,7 @@ async def test_quick_order_create_uses_api_and_reports_idempotent_replay(monkeyp
 async def test_customer_requisites_confirmation_uses_api_without_db(monkeypatch):
     recognition = BotCustomerRequisitesRecognitionResponse(
         id=12,
+        revision="another_revision",
         status="confirmed",
         source="telegram_text",
         extracted={"name": "ООО Тест"},
