@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ExternalLink, Route } from 'lucide-vue-next';
 import { ApiError, ManagerOrdersService } from '../../client';
 import type { CancelablePromise, ManagerOrderTravelRouteResponse } from '../../client';
@@ -11,12 +11,16 @@ const mapUrl = computed(() => buildVitebskRoundTripUrl(address.value));
 const result = ref<ManagerOrderTravelRouteResponse | null>(null);
 const loading = ref(false);
 const error = ref('');
+const settlement = ref<string | null>(null);
+const settlementInput = ref<HTMLInputElement | null>(null);
+const routeAddress = computed(() => normalizeAddressQuery(settlement.value ?? address.value));
+const canCalculate = computed(() => Boolean(mapUrl.value) && !loading.value && routeAddress.value.length >= 3);
 let pending: CancelablePromise<ManagerOrderTravelRouteResponse> | null = null;
 
 const messages: Record<string, string> = {
   order_route_not_configured: 'Расчёт маршрута в Manager пока не подключён.',
-  order_route_settlement_required: 'Укажите населённый пункт в адресе объекта. Например, «Ушачи, ул. Советская, 1».',
-  order_route_address_not_found: 'Не удалось найти населённый пункт. Проверьте адрес или откройте маршрут в Google Maps.',
+  order_route_settlement_required: 'Укажите населённый пункт для расчёта.',
+  order_route_address_not_found: 'Не удалось найти населённый пункт. Уточните название или добавьте район.',
   order_route_not_found: 'Провайдер не нашёл автомобильный маршрут.',
   order_route_rate_limit: 'Подождите немного и повторите расчёт.',
   order_route_provider_limit: 'Сервис маршрутов достиг лимита запросов.',
@@ -29,15 +33,18 @@ const reset = () => {
   result.value = null;
   error.value = '';
 };
-watch([() => props.orderId, address], reset, { flush: 'sync' });
+watch([() => props.orderId, address], () => {
+  reset();
+  settlement.value = null;
+}, { flush: 'sync' });
 onBeforeUnmount(reset);
 
 async function calculate() {
-  if (!mapUrl.value || loading.value) return;
+  if (!canCalculate.value) return;
   loading.value = true;
   error.value = '';
   const request = ManagerOrdersService.calculateManagerOrderTravelRoute(
-    props.orderId, { address: address.value },
+    props.orderId, { address: routeAddress.value },
   );
   pending = request;
   try {
@@ -48,6 +55,11 @@ async function calculate() {
     result.value = null;
     const code = cause instanceof ApiError ? cause.body?.detail?.code : undefined;
     error.value = messages[code] ?? 'Маршрут сейчас недоступен. Его можно открыть на карте.';
+    if (settlement.value === null && (code === 'order_route_settlement_required' || code === 'order_route_address_not_found')) {
+      settlement.value = '';
+      await nextTick();
+      if (pending === request) settlementInput.value?.focus();
+    }
   } finally {
     if (pending === request) {
       loading.value = false;
@@ -72,7 +84,7 @@ const legs = computed(() => result.value ? [
 <template>
   <section v-if="mapUrl" aria-label="Маршрут из Витебска" class="mt-1.5 space-y-2 px-1">
     <div class="flex flex-wrap items-center gap-2">
-      <button type="button" class="btn-mini-outline gap-1 text-xs" :disabled="loading"
+      <button type="button" class="btn-mini-outline gap-1 text-xs" :disabled="!canCalculate"
         data-testid="calculate-order-travel-route" @click="calculate">
         <Route :size="15" aria-hidden="true" /> {{ loading ? 'Считаем маршрут…' : 'Рассчитать маршрут из Витебска' }}
       </button>
@@ -80,6 +92,11 @@ const legs = computed(() => result.value ? [
         <ExternalLink :size="14" aria-hidden="true" /> Открыть в Google Maps
       </a>
     </div>
+    <label v-if="settlement !== null" class="field-label">
+      Населённый пункт
+      <input ref="settlementInput" v-model="settlement" class="field-input mt-1 w-full text-sm"
+        placeholder="Ушачи" autocomplete="off" maxlength="240" @input="reset" @keydown.enter.prevent="calculate" />
+    </label>
     <div aria-live="polite" :aria-busy="loading">
       <p v-if="error" class="text-xs text-slate-600 dark:text-slate-300">{{ error }}</p>
       <div v-else-if="result" class="space-y-1 text-xs">

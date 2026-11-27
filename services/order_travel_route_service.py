@@ -15,11 +15,16 @@ from services.postal_address_service import normalize_postal_address
 
 
 _SETTLEMENT_PREFIX = re.compile(
-    r"^(?:г\.?\s*п\.|р\.?\s*п\.|город\s+|горад\s+|г\.|деревня\s+|в[её]ска\s+|д\.|в\.|"
-    r"агрогородок\s+|аграгарадок\s+|а/г\.?|аг\.|пос[её]лок\s+|п\.|м\.)\s*",
+    r"^(?:(?:(?:городской|рабочий|курортный)\s+)?пос[её]лок\s+|гарадскі\s+пасёлак\s+|"
+    r"г\.?\s*п\.|р\.?\s*п\.|город\s+|горад\s+|г\.|деревня\s+|в[её]ска\s+|д\.|в\.|"
+    r"агрогородок\s+|аграгарадок\s+|а/г\.?|аг\.|п\.|м\.)\s*",
     re.IGNORECASE,
 )
 _PLACE_NAME = re.compile(r"[А-ЯЁІЎа-яёіў]+(?:[ \-’'][А-ЯЁІЎа-яёіў]+){0,4}")
+_COUNTRY_OR_COUNCIL = re.compile(
+    r"^(?:(?:республика|рэспубліка)\s+)?(?:беларусь|белоруссия|belarus)$|\b(?:сельсовет|сельсавет)\b",
+    re.IGNORECASE,
+)
 
 
 class OrderTravelRouteError(RuntimeError):
@@ -78,14 +83,37 @@ class OrderTravelRouteService:
         # The hosted HeiGIT terms exclude transmitting personal data.
         # Resolve the locality separately so street, house and contact details stay in Manager.
         normalized = normalize_postal_address(address, "")
-        locality = normalized.postal_line
-        if not locality and not normalized.area_lines and not re.search(r"[,;\r\n]", address):
-            locality = " ".join(address.split())
-        settlement = _SETTLEMENT_PREFIX.sub("", locality)
+        parts = [" ".join(part.split()) for part in re.split(r"[,;\r\n]+", address) if part.strip()]
+        explicit_names = {
+            _SETTLEMENT_PREFIX.sub("", part)
+            for part in parts
+            if _SETTLEMENT_PREFIX.match(part) and part not in normalized.area_lines
+        }
+        explicit_names = {name for name in explicit_names if _PLACE_NAME.fullmatch(name)}
+        if len(explicit_names) > 1:
+            raise OrderTravelRouteError("order_route_settlement_required", 422)
+        settlement = next(iter(explicit_names), "") or _SETTLEMENT_PREFIX.sub("", normalized.postal_line)
+        if not settlement:
+            settlement = OrderTravelRouteService._settlement_from_parts(parts, normalized.area_lines)
         if not _PLACE_NAME.fullmatch(settlement) or len(settlement) > 80:
             raise OrderTravelRouteError("order_route_settlement_required", 422)
         areas = [area for area in normalized.area_lines if len(area) <= 80 and _PLACE_NAME.fullmatch(area)]
         return settlement, ", ".join([settlement, *areas])
+
+    @staticmethod
+    def _settlement_from_parts(parts: list[str], areas: list[str]) -> str:
+        # Suggestions place the locality immediately before the street. A label for
+        # a named building, district or village council can precede the locality.
+        street = AddressSuggestService.find_street_part(parts[::-1])
+        if street:
+            index = parts.index(street)
+            locality = parts[index - 1] if index else ""
+            if locality not in areas and not _COUNTRY_OR_COUNCIL.search(locality):
+                return locality
+            return ""
+
+        locality_parts = [part for part in parts if part not in areas and not _COUNTRY_OR_COUNCIL.search(part)]
+        return locality_parts[0] if len(locality_parts) == 1 else ""
 
     @classmethod
     async def _find_settlement(

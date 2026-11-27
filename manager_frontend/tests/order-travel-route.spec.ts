@@ -19,6 +19,11 @@ const route: ManagerOrderTravelRouteResponse = {
   inbound: { distance_m: 118300, duration_s: 6000 },
   total: { distance_m: 235300, duration_s: 11400 },
 };
+const rejectedRoute = (status: number, code: string) => new CancelablePromise<ManagerOrderTravelRouteResponse>((_, reject) => reject(new ApiError(
+  { method: 'POST', url: '/api/manager/orders/699/travel-route' },
+  { url: '', ok: false, status, statusText: '', body: { detail: { code } } },
+  'Route calculation failed',
+)));
 afterEach(() => calculate.mockReset());
 
 describe('OrderTravelRoute', () => {
@@ -57,17 +62,46 @@ describe('OrderTravelRoute', () => {
   });
 
   it('keeps the navigator available when the provider is unconfigured', async () => {
-    calculate.mockReturnValue(new CancelablePromise((_, reject) => reject(new ApiError(
-      { method: 'POST', url: '/api/manager/orders/699/travel-route' },
-      { url: '', ok: false, status: 503, statusText: '', body: { detail: { code: 'order_route_not_configured' } } },
-      'Service unavailable',
-    ))));
+    calculate.mockReturnValue(rejectedRoute(503, 'order_route_not_configured'));
     const wrapper = mount(OrderTravelRoute, { props: { orderId: 699, address: 'Ушачи' } });
     try {
       await wrapper.get('button').trigger('click');
       await flushPromises();
       expect(wrapper.text()).toContain('Расчёт маршрута в Manager пока не подключён');
+      expect(wrapper.find('input').exists()).toBe(false);
       expect(wrapper.get('a').attributes('target')).toBe('_blank');
     } finally { wrapper.unmount(); }
   });
+
+  it.each(['order_route_settlement_required', 'order_route_address_not_found'])(
+    'allows correcting the settlement inside the preview after %s',
+    async code => {
+      calculate.mockReturnValueOnce(rejectedRoute(422, code))
+        .mockReturnValueOnce(new CancelablePromise(resolve => resolve(route)));
+      const address = 'ул. Советская, д. 1';
+      const wrapper = mount(OrderTravelRoute, { props: { orderId: 699, address }, attachTo: document.body });
+      try {
+        const originalMapLink = wrapper.get('a').attributes('href');
+        expect(wrapper.find('input').exists()).toBe(false);
+        await wrapper.get('button').trigger('click');
+        await flushPromises();
+        expect(calculate).toHaveBeenNthCalledWith(1, 699, { address });
+        const field = wrapper.get('input');
+        expect(wrapper.get('label').text()).toBe('Населённый пункт');
+        expect(document.activeElement).toBe(field.element);
+        expect(wrapper.get('button').attributes('disabled')).toBeDefined();
+
+        await field.setValue('Ушачи, Витебская область');
+        await field.trigger('keydown', { key: 'Enter' });
+        await flushPromises();
+        expect(calculate).toHaveBeenNthCalledWith(2, 699, { address: 'Ушачи, Витебская область' });
+        expect(wrapper.text()).toContain('235,3 км');
+        expect(wrapper.get('a').attributes('href')).toBe(originalMapLink);
+
+        await wrapper.setProps({ address: 'Лепель' });
+        expect(wrapper.find('input').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('235,3 км');
+      } finally { wrapper.unmount(); }
+    },
+  );
 });
