@@ -142,7 +142,7 @@ class EquipmentMaintenancePlanService:
                     "customer_phone": customer.phone if customer else None,
                     "address": (
                         branch.delivery_address
-                        if branch
+                        if branch and branch.customer_id == equipment.customer_id
                         else equipment.location_hint
                         or (customer.actual_address if customer else None)
                         or (customer.legal_address if customer else None)

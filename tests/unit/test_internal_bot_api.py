@@ -815,10 +815,11 @@ async def test_internal_bot_quick_order_parse_and_create_use_stable_contract(mon
     assert created.json() == {"order_id": 42, "customer_id": 7, "created": True}
 
 
-async def test_internal_bot_requisites_text_and_action_do_not_leak_private_fields(monkeypatch):
+async def test_internal_bot_requisites_returns_original_text_without_storage_path(monkeypatch):
     monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
     recognition = {
         "id": 12,
+        "revision": "0123456789abcdef",
         "status": "recognized",
         "source": "telegram_text",
         "raw_text": "private raw OCR text",
@@ -875,7 +876,7 @@ async def test_internal_bot_requisites_text_and_action_do_not_leak_private_field
         app.dependency_overrides.pop(get_system_tenant_scope, None)
 
     assert recognized.status_code == 200
-    assert "raw_text" not in recognized.json()
+    assert recognized.json()["raw_text"] == "private raw OCR text"
     assert "local_file_url" not in recognized.json()
     assert action.status_code == 200
     assert action.json()["customer"]["id"] == 7
@@ -885,7 +886,7 @@ async def test_internal_bot_requisites_text_and_action_do_not_leak_private_field
 async def test_internal_bot_requisites_file_enforces_size_before_service(monkeypatch):
     monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
     monkeypatch.setattr(
-        "routers.internal_bot.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES",
+        "routers.internal_bot_requisites.CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES",
         4,
     )
     recognize = AsyncMock()
@@ -916,6 +917,7 @@ async def test_internal_bot_requisites_file_forwards_docx_to_service(monkeypatch
     monkeypatch.setattr(settings, "BOT_API_TOKEN", "expected-token")
     recognition = {
         "id": 12,
+        "revision": "0123456789abcdef",
         "status": "recognized",
         "source": "telegram",
         "extracted": {"name": "ООО Тест", "inn": "123456789"},

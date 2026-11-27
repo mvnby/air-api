@@ -340,7 +340,7 @@ export class ManagerService {
     }
     /**
      * Confirm Customer Requisites For Manager
-     * Confirm a saved recognition belonging to the current tenant, explicitly creating a
+     * Confirm a Manager-created recognition belonging to the current tenant, explicitly creating a
      * customer or updating the selected one. Selected-field updates require baseline values
      * and preserve unselected fields; a changed baseline or duplicate identity returns 409.
      * Missing recognition/customer returns 404, invalid confirmation 400. Repeating an already

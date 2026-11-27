@@ -5,8 +5,10 @@
 import type { BotCustomerBriefResponse } from './BotCustomerBriefResponse';
 export type BotCustomerRequisitesRecognitionResponse = {
     id: number;
+    revision: string;
     status: 'recognized' | 'confirmed' | 'cancelled';
     source: string;
+    raw_text?: (string | null);
     extracted?: Record<string, any>;
     validation_flags?: Record<string, any>;
     duplicate_customer?: (BotCustomerBriefResponse | null);

@@ -170,6 +170,7 @@ class CustomerCreationService:
         email: Optional[str],
         inn: Optional[str],
         tenant_scope: TenantScope,
+        for_update: bool = False,
     ) -> Optional[tuple[Customer, tuple[str, ...]]]:
         normalized_phone = normalize_phone_digits(phone or "")
         normalized_email = str(email or "").strip().lower()
@@ -196,7 +197,9 @@ class CustomerCreationService:
                 candidates.append(stripped_key(Customer.inn) == normalized_inn)
             statement = statement.where(or_(*candidates))
         # Duplicate selection needs only the customer, never contracts or branches.
-        statement = statement.options(lazyload("*"))
+        statement = statement.options(lazyload("*")).execution_options(populate_existing=True)
+        if for_update:
+            statement = statement.with_for_update()
         customers = (await session.execute(statement)).scalars().all()
         matches: list[tuple[int, Customer, tuple[str, ...]]] = []
         for customer in customers:

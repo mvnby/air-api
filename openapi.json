@@ -1270,7 +1270,7 @@
           "internal bot v1"
         ],
         "summary": "Recognize Internal Bot Customer Requisites Text",
-        "description": "Recognize customer requisites from text for an active Manager Telegram actor in the\nsystem tenant. Returns a recognition for explicit follow-up action; OCR alone does not\nconfirm customer creation. Access denial returns 403 and invalid content 422.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Recognize customer requisites from text for an active Manager Telegram actor in the\nselected tenant. Returns a recognition for explicit follow-up action; OCR alone does not\nconfirm customer creation. Access denial returns 403 and invalid content 422.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_customer_requisites_text_v1",
         "requestBody": {
           "content": {
@@ -1317,7 +1317,7 @@
           "internal bot v1"
         ],
         "summary": "Recognize Internal Bot Customer Requisites File",
-        "description": "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for\nan active Manager Telegram actor in the system tenant. Oversize returns 413,\ninvalid/unsupported content 422, denied access 403. Returns a recognition for a later\nexplicit action.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for\nan active Manager Telegram actor in the selected tenant. Oversize returns 413,\ninvalid/unsupported content 422, denied access 403. Returns a recognition for a later\nexplicit action.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "recognize_internal_bot_customer_requisites_file_v1",
         "requestBody": {
           "content": {
@@ -1358,13 +1358,131 @@
         ]
       }
     },
+    "/api/internal/bot/v1/customers/requisites/{recognition_id}/review": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Review Internal Bot Customer Requisites",
+        "description": "Read a Telegram requisites draft, field validation, current same-tenant INN match\nand opaque revision. Requires the service bearer and the originating active Manager\nin the selected company. Safe to repeat. Unauthorized actors get 403, missing drafts\nreturn 404 and a stale expected company context returns 409.",
+        "operationId": "review_internal_bot_customer_requisites_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recognition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Recognition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCustomerRequisitesReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCustomerRequisitesRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/customers/requisites/{recognition_id}/edit": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Edit Internal Bot Customer Requisites",
+        "description": "Correct supplied fields on an open Telegram draft using its expected revision.\nReturns validation feedback and a fresh duplicate preview. Changes apply only to\nthe draft. Requires the service bearer and originating Manager in the selected company.\nAccess denial returns 403, missing drafts 404, completed or stale drafts 409 and\nmalformed patches 422. After a conflict, read the draft again before retrying.",
+        "operationId": "edit_internal_bot_customer_requisites_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recognition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Recognition Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCustomerRequisitesEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotCustomerRequisitesRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/customers/requisites/{recognition_id}/action": {
       "post": {
         "tags": [
           "internal bot v1"
         ],
         "summary": "Apply Internal Bot Customer Requisites Action",
-        "description": "Apply the selected action to an existing requisites recognition in the system tenant for\nits authorized Manager actor. Access denial returns 403, missing recognition 404,\nconflicting action/state 409 and invalid input 422. Returns recognition, customer and\nchanged so clients can reconcile the action.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "description": "Apply create, update, use or cancel to the originating Manager's draft in the selected\ntenant. Send the revision shown in the preview. Edited drafts require a revision.\nRepeating the accepted action and revision returns changed=false. Foreign actors get\n403, missing drafts 404, stale revisions or incompatible actions 409, invalid fields\n422. Only create and update write a customer.\n\nAccess: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor\nchecks are separate. See [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
         "operationId": "apply_internal_bot_customer_requisites_action_v1",
         "security": [
           {
@@ -2592,6 +2710,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BotRuntimeLeaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/internal/bot/v1/calendar/schedule": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Internal Bot Schedule",
+        "description": "Read today and tomorrow in Europe/Minsk for the authenticated bot's Telegram\nmanager. Order appointments use the selected storefront. Maintenance reminders\nbelong to the customer's tenant and move to today when overdue. Both days are\nreturned even when empty. The call requires an active manager membership (403)\nand the current company/site version (409 on a switch).\n\nAccess: service Bearer BOT_API_TOKEN and the operation-specific Telegram actor\nchecks are required. See the [bot\nboundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).",
+        "operationId": "get_internal_bot_schedule_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotScheduleResponse"
                 }
               }
             }
@@ -8035,7 +8200,7 @@
           "manager"
         ],
         "summary": "Confirm Customer Requisites For Manager",
-        "description": "Confirm a saved recognition belonging to the current tenant, explicitly creating a\ncustomer or updating the selected one. Selected-field updates require baseline values\nand preserve unselected fields; a changed baseline or duplicate identity returns 409.\nMissing recognition/customer returns 404, invalid confirmation 400. Repeating an already\nconfirmed recognition returns its customer. See the [customer workspace\ncontract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
+        "description": "Confirm a Manager-created recognition belonging to the current tenant, explicitly creating a\ncustomer or updating the selected one. Selected-field updates require baseline values\nand preserve unselected fields; a changed baseline or duplicate identity returns 409.\nMissing recognition/customer returns 404, invalid confirmation 400. Repeating an already\nconfirmed recognition returns its customer. See the [customer workspace\ncontract](https://github.com/mvnby/air-api/blob/main/docs/customer-workspace.md).\n\nAccess requires an authenticated Manager session/JWT and live membership; see [Manager\naccess](https://github.com/mvnby/air-api/blob/main/docs/api/authentication.md#manager).",
         "operationId": "confirm_manager_customer_requisites",
         "security": [
           {
@@ -46718,6 +46883,18 @@
               "cancel"
             ],
             "title": "Action"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{16}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
           }
         },
         "type": "object",
@@ -46754,12 +46931,221 @@
         ],
         "title": "BotCustomerRequisitesActionResponse"
       },
+      "BotCustomerRequisitesEditFields": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "full_legal_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Legal Name"
+          },
+          "customer_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "individual_entrepreneur",
+                  "company"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Type"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          },
+          "legal_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Address"
+          },
+          "bank_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Name"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "signer_position": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Position"
+          },
+          "signer_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signer Name"
+          },
+          "acting_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acting Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BotCustomerRequisitesEditFields"
+      },
+      "BotCustomerRequisitesEditRequest": {
+        "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          },
+          "expected_revision": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16}$",
+            "title": "Expected Revision"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/BotCustomerRequisitesEditFields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_revision",
+          "fields"
+        ],
+        "title": "BotCustomerRequisitesEditRequest"
+      },
       "BotCustomerRequisitesRecognitionResponse": {
         "properties": {
           "id": {
             "type": "integer",
             "minimum": 1.0,
             "title": "Id"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16}$",
+            "title": "Revision"
           },
           "status": {
             "type": "string",
@@ -46773,6 +47159,17 @@
           "source": {
             "type": "string",
             "title": "Source"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
           },
           "extracted": {
             "additionalProperties": true,
@@ -46830,11 +47227,39 @@
         "type": "object",
         "required": [
           "id",
+          "revision",
           "status",
           "source",
           "created_at"
         ],
         "title": "BotCustomerRequisitesRecognitionResponse"
+      },
+      "BotCustomerRequisitesReviewRequest": {
+        "properties": {
+          "expected_context_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Context Version"
+          },
+          "telegram_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Telegram Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id"
+        ],
+        "title": "BotCustomerRequisitesReviewRequest"
       },
       "BotCustomerRequisitesTextRequest": {
         "properties": {
@@ -48423,6 +48848,194 @@
           "acquired"
         ],
         "title": "BotRuntimeLeaseResponse"
+      },
+      "BotScheduleEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date",
+            "description": "Display day in Europe/Minsk."
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time",
+            "description": "Local HH:MM for an appointment, null for a reminder."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "measurement",
+              "installation",
+              "work_stage",
+              "equipment_maintenance"
+            ],
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "customer_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "order_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Url"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date",
+            "description": "Original due date of a maintenance reminder, including when overdue."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "time",
+          "type",
+          "title",
+          "status",
+          "customer_name",
+          "customer_phone",
+          "address",
+          "order_id",
+          "order_url",
+          "due_date"
+        ],
+        "title": "BotScheduleEvent"
+      },
+      "BotScheduleRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version"
+        ],
+        "title": "BotScheduleRequest"
+      },
+      "BotScheduleResponse": {
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
+          },
+          "tomorrow": {
+            "type": "string",
+            "format": "date",
+            "title": "Tomorrow"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Europe/Minsk",
+            "title": "Timezone",
+            "default": "Europe/Minsk"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/BotScheduleEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "today",
+          "tomorrow",
+          "events"
+        ],
+        "title": "BotScheduleResponse"
       },
       "BotStaffCompanyChoice": {
         "properties": {

@@ -12,7 +12,9 @@ import type { BotCatalogSearchRequest } from '../models/BotCatalogSearchRequest'
 import type { BotCatalogSearchResponse } from '../models/BotCatalogSearchResponse';
 import type { BotCustomerRequisitesActionRequest } from '../models/BotCustomerRequisitesActionRequest';
 import type { BotCustomerRequisitesActionResponse } from '../models/BotCustomerRequisitesActionResponse';
+import type { BotCustomerRequisitesEditRequest } from '../models/BotCustomerRequisitesEditRequest';
 import type { BotCustomerRequisitesRecognitionResponse } from '../models/BotCustomerRequisitesRecognitionResponse';
+import type { BotCustomerRequisitesReviewRequest } from '../models/BotCustomerRequisitesReviewRequest';
 import type { BotCustomerRequisitesTextRequest } from '../models/BotCustomerRequisitesTextRequest';
 import type { BotQuickOrderCreateRequest } from '../models/BotQuickOrderCreateRequest';
 import type { BotQuickOrderCreateResponse } from '../models/BotQuickOrderCreateResponse';
@@ -24,6 +26,8 @@ import type { BotQuickOrderDraftSessionResponse } from '../models/BotQuickOrderD
 import type { BotQuickOrderDraftStartRequest } from '../models/BotQuickOrderDraftStartRequest';
 import type { BotQuickOrderParseRequest } from '../models/BotQuickOrderParseRequest';
 import type { BotQuickOrderParseResponse } from '../models/BotQuickOrderParseResponse';
+import type { BotScheduleRequest } from '../models/BotScheduleRequest';
+import type { BotScheduleResponse } from '../models/BotScheduleResponse';
 import type { BotStaffContextChoicesResponse } from '../models/BotStaffContextChoicesResponse';
 import type { BotStaffContextResponse } from '../models/BotStaffContextResponse';
 import type { BotStaffContextSelectRequest } from '../models/BotStaffContextSelectRequest';
@@ -600,7 +604,7 @@ export class InternalBotV1Service {
     /**
      * Recognize Internal Bot Customer Requisites Text
      * Recognize customer requisites from text for an active Manager Telegram actor in the
-     * system tenant. Returns a recognition for explicit follow-up action; OCR alone does not
+     * selected tenant. Returns a recognition for explicit follow-up action; OCR alone does not
      * confirm customer creation. Access denial returns 403 and invalid content 422.
      *
      * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
@@ -626,7 +630,7 @@ export class InternalBotV1Service {
     /**
      * Recognize Internal Bot Customer Requisites File
      * Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for
-     * an active Manager Telegram actor in the system tenant. Oversize returns 413,
+     * an active Manager Telegram actor in the selected tenant. Oversize returns 413,
      * invalid/unsupported content 422, denied access 403. Returns a recognition for a later
      * explicit action.
      *
@@ -651,11 +655,69 @@ export class InternalBotV1Service {
         });
     }
     /**
+     * Review Internal Bot Customer Requisites
+     * Read a Telegram requisites draft, field validation, current same-tenant INN match
+     * and opaque revision. Requires the service bearer and the originating active Manager
+     * in the selected company. Safe to repeat. Unauthorized actors get 403, missing drafts
+     * return 404 and a stale expected company context returns 409.
+     * @param recognitionId
+     * @param requestBody
+     * @returns BotCustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static reviewInternalBotCustomerRequisitesV1(
+        recognitionId: number,
+        requestBody: BotCustomerRequisitesReviewRequest,
+    ): CancelablePromise<BotCustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/customers/requisites/{recognition_id}/review',
+            path: {
+                'recognition_id': recognitionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Edit Internal Bot Customer Requisites
+     * Correct supplied fields on an open Telegram draft using its expected revision.
+     * Returns validation feedback and a fresh duplicate preview. Changes apply only to
+     * the draft. Requires the service bearer and originating Manager in the selected company.
+     * Access denial returns 403, missing drafts 404, completed or stale drafts 409 and
+     * malformed patches 422. After a conflict, read the draft again before retrying.
+     * @param recognitionId
+     * @param requestBody
+     * @returns BotCustomerRequisitesRecognitionResponse Successful Response
+     * @throws ApiError
+     */
+    public static editInternalBotCustomerRequisitesV1(
+        recognitionId: number,
+        requestBody: BotCustomerRequisitesEditRequest,
+    ): CancelablePromise<BotCustomerRequisitesRecognitionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/customers/requisites/{recognition_id}/edit',
+            path: {
+                'recognition_id': recognitionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Apply Internal Bot Customer Requisites Action
-     * Apply the selected action to an existing requisites recognition in the system tenant for
-     * its authorized Manager actor. Access denial returns 403, missing recognition 404,
-     * conflicting action/state 409 and invalid input 422. Returns recognition, customer and
-     * changed so clients can reconcile the action.
+     * Apply create, update, use or cancel to the originating Manager's draft in the selected
+     * tenant. Send the revision shown in the preview. Edited drafts require a revision.
+     * Repeating the accepted action and revision returns changed=false. Foreign actors get
+     * 403, missing drafts 404, stale revisions or incompatible actions 409, invalid fields
+     * 422. Only create and update write a customer.
      *
      * Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
      * checks are separate. See [bot
@@ -675,6 +737,34 @@ export class InternalBotV1Service {
             path: {
                 'recognition_id': recognitionId,
             },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Internal Bot Schedule
+     * Read today and tomorrow in Europe/Minsk for the authenticated bot's Telegram
+     * manager. Order appointments use the selected storefront. Maintenance reminders
+     * belong to the customer's tenant and move to today when overdue. Both days are
+     * returned even when empty. The call requires an active manager membership (403)
+     * and the current company/site version (409 on a switch).
+     *
+     * Access: service Bearer BOT_API_TOKEN and the operation-specific Telegram actor
+     * checks are required. See the [bot
+     * boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
+     * @param requestBody
+     * @returns BotScheduleResponse Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotScheduleV1(
+        requestBody: BotScheduleRequest,
+    ): CancelablePromise<BotScheduleResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/calendar/schedule',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

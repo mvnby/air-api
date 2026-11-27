@@ -1,9 +1,9 @@
 """Versioned contracts for the internal Telegram bot API."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 BOT_CUSTOMER_REQUISITES_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -363,10 +363,15 @@ class BotCustomerBriefResponse(BaseModel):
     email: str | None = None
 
 
+BotCustomerRequisitesRevision = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{16}$")]
+
+
 class BotCustomerRequisitesRecognitionResponse(BaseModel):
     id: int = Field(ge=1)
+    revision: BotCustomerRequisitesRevision
     status: Literal["recognized", "confirmed", "cancelled"]
     source: str
+    raw_text: str | None = None
     extracted: dict[str, Any] = Field(default_factory=dict)
     validation_flags: dict[str, Any] = Field(default_factory=dict)
     duplicate_customer: BotCustomerBriefResponse | None = None
@@ -390,9 +395,47 @@ class BotCustomerRequisitesTextRequest(BotBusinessRequest):
         return normalized
 
 
+class BotCustomerRequisitesReviewRequest(BotBusinessRequest):
+    model_config = ConfigDict(extra="forbid")
+
+    telegram_id: int = Field(ge=1)
+
+
+class BotCustomerRequisitesEditFields(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, max_length=500)
+    full_legal_name: str | None = Field(default=None, max_length=500)
+    customer_type: Literal["individual", "individual_entrepreneur", "company"] | None = None
+    inn: str | None = Field(default=None, max_length=32)
+    legal_address: str | None = Field(default=None, max_length=1000)
+    bank_name: str | None = Field(default=None, max_length=500)
+    bic: str | None = Field(default=None, max_length=32)
+    iban: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=120)
+    signer_position: str | None = Field(default=None, max_length=120)
+    signer_name: str | None = Field(default=None, max_length=255)
+    acting_basis: str | None = Field(default=None, max_length=160)
+
+    @model_validator(mode="after")
+    def validate_changes(self):
+        if not self.model_fields_set:
+            raise ValueError("Укажите поля для исправления")
+        if "customer_type" in self.model_fields_set and self.customer_type is None:
+            raise ValueError("Выберите тип клиента")
+        return self
+
+
+class BotCustomerRequisitesEditRequest(BotCustomerRequisitesReviewRequest):
+    expected_revision: BotCustomerRequisitesRevision
+    fields: BotCustomerRequisitesEditFields
+
+
 class BotCustomerRequisitesActionRequest(BotBusinessRequest):
     telegram_id: int = Field(ge=1)
     action: Literal["create", "update", "use", "cancel"]
+    expected_revision: BotCustomerRequisitesRevision | None = None
 
 
 class BotCustomerRequisitesActionResponse(BaseModel):

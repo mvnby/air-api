@@ -18,6 +18,7 @@ from services.customer_party import (
     valid_signing_modes_for_customer_type,
 )
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService as Recognition
+from services.customer_requisites_review import EDITABLE_FIELDS, TELEGRAM_SOURCES
 from services.customer_service import CustomerService
 from services.tenant_scope_service import tenant_scope_clause
 
@@ -27,11 +28,6 @@ class CustomerRequisitesConflictError(ValueError):
 
 
 class CustomerRequisitesConfirmationService:
-    EDITABLE_FIELDS = frozenset({
-        "name", "full_legal_name", "customer_type", "inn", "legal_address",
-        "bank_name", "bic", "iban", "email", "phone", "signer_position",
-        "signer_name", "acting_basis",
-    })
     CUSTOMER_FIELDS = {"customer_type": "type"}
 
     @classmethod
@@ -96,21 +92,26 @@ class CustomerRequisitesConfirmationService:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         draft = dict(recognition.extracted_json or {})
         if corrections:
-            unexpected = set(corrections) - cls.EDITABLE_FIELDS - {"phone_raw", "extra"}
+            unexpected = set(corrections) - EDITABLE_FIELDS - {"phone_raw", "extra"}
             if unexpected:
                 raise ValueError("Неизвестные поля реквизитов: " + ", ".join(sorted(unexpected)))
             draft.update(corrections)
             if "phone" in corrections:
                 draft["phone_raw"] = corrections["phone"]
-        normalized, flags = Recognition._normalize_extracted(draft, recognition.raw_text)
-        if corrections:
-            for field in corrections:
-                if field in cls.EDITABLE_FIELDS and corrections[field] in (None, ""):
-                    normalized[field] = None
-                    if field == "name":
-                        flags["field_errors"]["name"] = "Название клиента не может быть пустым"
-            if "phone" in corrections and corrections["phone"] and not normalized["phone"]:
-                flags["field_errors"]["phone"] = "Некорректный номер телефона"
+        normalized, flags = Recognition._normalize_extracted(
+            draft, recognition.raw_text, reviewed_customer_type=draft.get("customer_type"),
+        )
+        # The name fallback used for raw OCR must preserve blanks in a reviewed draft.
+        for field in ("name", "full_legal_name"):
+            if field in draft and not Recognition._clean_text(draft[field]):
+                normalized[field] = None
+        if not normalized["name"]:
+            flags["field_errors"]["name"] = "Название клиента не может быть пустым"
+        if draft.get("phone") and not normalized["phone"]:
+            normalized["phone"] = draft["phone"]
+            flags["field_errors"]["phone"] = "Некорректный номер телефона"
+            flags["warnings"].pop("phone", None)
+        flags["is_valid"] = not flags["field_errors"]
         return normalized, flags
 
     @classmethod
@@ -125,18 +126,19 @@ class CustomerRequisitesConfirmationService:
         selected_fields: Optional[list[str]],
         baseline: Optional[dict[str, Optional[str]]],
         tenant_scope: TenantScope,
+        source: Optional[str] = None,
+        reviewed_revision: Optional[str] = None,
     ) -> dict[str, Any]:
         normalized_action = str(action or "").strip().lower()
         if normalized_action not in {"create", "update"}:
             raise ValueError("action must be create or update")
-        recognition = (
-            await session.execute(
-                select(CustomerRequisitesRecognition).where(
-                    CustomerRequisitesRecognition.id == recognition_id,
-                    tenant_scope_clause(CustomerRequisitesRecognition, tenant_scope),
-                ).with_for_update()
-            )
-        ).scalars().first()
+        query = select(CustomerRequisitesRecognition).where(
+            CustomerRequisitesRecognition.id == recognition_id,
+            tenant_scope_clause(CustomerRequisitesRecognition, tenant_scope),
+        )
+        if source is not None:
+            query = query.where(CustomerRequisitesRecognition.source == source)
+        recognition = (await session.execute(query.with_for_update())).scalars().first()
         if recognition is None:
             raise LookupError("Recognition not found")
         if recognition.status == Recognition.STATUS_CONFIRMED:
@@ -150,7 +152,7 @@ class CustomerRequisitesConfirmationService:
             raise CustomerRequisitesConflictError("Распознавание больше нельзя подтвердить")
 
         fields = set(selected_fields or ())
-        if selected_fields is not None and (not fields or fields - cls.EDITABLE_FIELDS):
+        if selected_fields is not None and (not fields or fields - EDITABLE_FIELDS):
             raise ValueError("Выберите допустимые поля для сохранения")
         if normalized_action == "create" and selected_fields is not None and "name" not in fields:
             raise ValueError("Для нового клиента выберите название")
@@ -162,9 +164,12 @@ class CustomerRequisitesConfirmationService:
         if selected_fields is None:
             # Existing Telegram actions and old Manager clients keep their
             # historical default: apply recognized, nonempty values.
-            fields = {field for field in cls.EDITABLE_FIELDS if draft.get(field) not in {None, ""}}
+            fields = {field for field in EDITABLE_FIELDS if draft.get(field) not in {None, ""}}
         errors = flags.get("field_errors") or {}
-        blocking = errors if normalized_action == "create" and selected_fields is None else {
+        validate_all = selected_fields is None and (
+            normalized_action == "create" or recognition.source in TELEGRAM_SOURCES
+        )
+        blocking = errors if validate_all else {
             field: message for field, message in errors.items() if field in fields
         }
         if blocking:
@@ -176,7 +181,7 @@ class CustomerRequisitesConfirmationService:
             }
             payload = Recognition._customer_payload(create_draft, raw_text=recognition.raw_text)
             if selected_fields is not None:
-                for field in cls.EDITABLE_FIELDS - fields:
+                for field in EDITABLE_FIELDS - fields:
                     if field in {"customer_type", "name"}:
                         continue
                     payload[cls.CUSTOMER_FIELDS.get(field, field)] = "" if field == "phone" else None
@@ -239,6 +244,9 @@ class CustomerRequisitesConfirmationService:
         recognition.confirmed_action = normalized_action
         recognition.confirmed_customer_id = customer.id
         recognition.confirmed_at = datetime.now()
+        if reviewed_revision is not None:
+            recognition.review_revision = reviewed_revision
+            recognition.duplicate_customer_id = customer_id
         session.add(recognition)
         await session.commit()
         await session.refresh(recognition)

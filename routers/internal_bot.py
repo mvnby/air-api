@@ -9,10 +9,6 @@ from api_contracts.bot import (
     BotCatalogProductResponse,
     BotCatalogSearchRequest,
     BotCatalogSearchResponse,
-    BotCustomerRequisitesActionRequest,
-    BotCustomerRequisitesActionResponse,
-    BotCustomerRequisitesRecognitionResponse,
-    BotCustomerRequisitesTextRequest,
     BotQuickOrderCreateRequest,
     BotQuickOrderCreateResponse,
     BotQuickOrderDraft,
@@ -42,12 +38,6 @@ from models.tenancy import TenantScope
 from routers.internal_bot_common import read_bot_upload
 from services.bot_access_service import BotAccessService
 from services.bot_catalog_service import BotCatalogAccessDeniedError, BotCatalogService
-from services.bot_customer_requisites_api_service import (
-    BotCustomerRequisitesAccessDeniedError,
-    BotCustomerRequisitesApiService,
-    BotCustomerRequisitesConflictError,
-    BotCustomerRequisitesNotFoundError,
-)
 from services.bot_quick_order_api_service import (
     BotQuickOrderAccessDeniedError,
     BotQuickOrderApiService,
@@ -63,7 +53,7 @@ from services.bot_task_mutation_service import (
     BotTaskMutationService,
 )
 from services.bot_task_read_service import BotTaskAccessDeniedError, BotTaskReadService
-from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
+from routers.internal_bot_requisites import router as requisites_router
 
 
 router = APIRouter(
@@ -559,130 +549,4 @@ async def create_internal_bot_quick_order(
     )
 
 
-@router.post(
-    "/customers/requisites/recognize-text",
-    response_model=BotCustomerRequisitesRecognitionResponse,
-    operation_id="recognize_internal_bot_customer_requisites_text_v1",
-)
-async def recognize_internal_bot_customer_requisites_text(
-    payload: BotCustomerRequisitesTextRequest,
-    session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_bot_request_scope),
-) -> BotCustomerRequisitesRecognitionResponse:
-    """
-    Recognize customer requisites from text for an active Manager Telegram actor in the
-    system tenant. Returns a recognition for explicit follow-up action; OCR alone does not
-    confirm customer creation. Access denial returns 403 and invalid content 422.
-
-    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
-    checks are separate. See [bot
-    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
-    """
-    try:
-        recognition = await BotCustomerRequisitesApiService.recognize_text_for_manager(
-            session,
-            telegram_id=payload.telegram_id,
-            text_value=payload.text,
-            telegram_chat_id=payload.telegram_chat_id,
-            telegram_message_id=payload.telegram_message_id,
-            tenant_scope=tenant_scope,
-        )
-    except BotCustomerRequisitesAccessDeniedError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return BotCustomerRequisitesRecognitionResponse.model_validate(recognition)
-
-
-@router.post(
-    "/customers/requisites/recognize-file",
-    response_model=BotCustomerRequisitesRecognitionResponse,
-    operation_id="recognize_internal_bot_customer_requisites_file_v1",
-)
-async def recognize_internal_bot_customer_requisites_file(
-    expected_context_version: int | None = Form(default=None, ge=0),
-    telegram_id: int = Form(ge=1),
-    telegram_chat_id: int | None = Form(default=None),
-    telegram_message_id: int | None = Form(default=None),
-    file: UploadFile = File(...),
-    session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_bot_request_scope),
-) -> BotCustomerRequisitesRecognitionResponse:
-    """
-    Recognize customer requisites from JPG, PNG, WEBP, PDF, DOC or DOCX, at most 10 MB, for
-    an active Manager Telegram actor in the system tenant. Oversize returns 413,
-    invalid/unsupported content 422, denied access 403. Returns a recognition for a later
-    explicit action.
-
-    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
-    checks are separate. See [bot
-    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
-    """
-    max_bytes = CustomerRequisitesRecognitionService.MAX_FILE_SIZE_BYTES
-    content = await file.read(max_bytes + 1)
-    await file.close()
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="Файл слишком большой. Максимальный размер: 10 МБ",
-        )
-    try:
-        recognition = await BotCustomerRequisitesApiService.recognize_file_for_manager(
-            session,
-            telegram_id=telegram_id,
-            content=content,
-            filename=file.filename or "telegram-requisites",
-            mime_type=file.content_type or "application/octet-stream",
-            telegram_chat_id=telegram_chat_id,
-            telegram_message_id=telegram_message_id,
-            tenant_scope=tenant_scope,
-        )
-    except BotCustomerRequisitesAccessDeniedError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return BotCustomerRequisitesRecognitionResponse.model_validate(recognition)
-
-
-@router.post(
-    "/customers/requisites/{recognition_id}/action",
-    response_model=BotCustomerRequisitesActionResponse,
-    operation_id="apply_internal_bot_customer_requisites_action_v1",
-)
-async def apply_internal_bot_customer_requisites_action(
-    payload: BotCustomerRequisitesActionRequest,
-    recognition_id: int = Path(ge=1),
-    session: AsyncSession = Depends(get_session),
-    tenant_scope: TenantScope = Depends(get_bot_request_scope),
-) -> BotCustomerRequisitesActionResponse:
-    """
-    Apply the selected action to an existing requisites recognition in the system tenant for
-    its authorized Manager actor. Access denial returns 403, missing recognition 404,
-    conflicting action/state 409 and invalid input 422. Returns recognition, customer and
-    changed so clients can reconcile the action.
-
-    Access: service Bearer BOT_API_TOKEN is required. Operation-specific Telegram actor
-    checks are separate. See [bot
-    boundary](https://github.com/mvnby/air-api/blob/main/docs/bot-service-boundary.md#ownership).
-    """
-    try:
-        result = await BotCustomerRequisitesApiService.apply_action_for_manager(
-            session,
-            telegram_id=payload.telegram_id,
-            recognition_id=recognition_id,
-            action=payload.action,
-            tenant_scope=tenant_scope,
-        )
-    except BotCustomerRequisitesAccessDeniedError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except BotCustomerRequisitesNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except BotCustomerRequisitesConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return BotCustomerRequisitesActionResponse(
-        recognition=BotCustomerRequisitesRecognitionResponse.model_validate(result.recognition),
-        customer=result.customer,
-        changed=result.changed,
-    )
+router.include_router(requisites_router)

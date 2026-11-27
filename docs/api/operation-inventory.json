@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "45": "Staff Mini App: review and correct an owned requisites draft with a revision check, and read the selected Manager calendar for two Minsk days. Reviewed 2026-11-27",
     "44": "MVN order travel preview: live Manager and storefront scope, external geocoding by explicit request, two road legs from HeiGIT or Yandex, bounded provider usage and read-only results. Reviewed 2026-11-26",
     "43": "Installation material purchase prices: private company scope, exact pack and fractional consumption values, optimistic versions and bounded lists and calculations. Reviewed 2026-11-26",
     "42": "Public tender evidence: active company profile and entitlement checks, durable public-only receipt, verified scope for original downloads, bounded worker leases and exact-content reuse. Reviewed 2026-11-26",
@@ -379,9 +380,6 @@
       ["GET /api/internal/bot/v1/staff/context/{telegram_id}", "get_internal_bot_staff_context_v1", false, 1],
       ["PATCH /api/internal/bot/v1/quick-orders/drafts/{draft_id}", "patch_internal_bot_quick_order_draft_v1", false, 1],
       ["POST /api/internal/bot/v1/catalog/search", "search_internal_bot_catalog_v1", false, 1],
-      ["POST /api/internal/bot/v1/customers/requisites/recognize-file", "recognize_internal_bot_customer_requisites_file_v1", true, 1],
-      ["POST /api/internal/bot/v1/customers/requisites/recognize-text", "recognize_internal_bot_customer_requisites_text_v1", false, 1],
-      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/action", "apply_internal_bot_customer_requisites_action_v1", false, 1],
       ["POST /api/internal/bot/v1/quick-orders", "create_internal_bot_quick_order_v1", false, 20],
       ["POST /api/internal/bot/v1/quick-orders/customers/search", "search_internal_bot_quick_order_customers_v1", false, 1],
       ["POST /api/internal/bot/v1/quick-orders/drafts", "start_internal_bot_quick_order_draft_v1", false, 1],
@@ -418,12 +416,22 @@
       ["POST /api/internal/bot/v1/repair-context/comment-draft", "build_internal_bot_repair_comment_draft_v1", false, 1],
       ["POST /api/internal/bot/v1/repair-context/preset-draft", "build_internal_bot_repair_preset_draft_v1", false, 1]
     ],
+    "routers/internal_bot_requisites.py": [
+      ["POST /api/internal/bot/v1/customers/requisites/recognize-file", "recognize_internal_bot_customer_requisites_file_v1", true, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/recognize-text", "recognize_internal_bot_customer_requisites_text_v1", false, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/action", "apply_internal_bot_customer_requisites_action_v1", false, 1],
+      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/edit", "edit_internal_bot_customer_requisites_v1", false, 45],
+      ["POST /api/internal/bot/v1/customers/requisites/{recognition_id}/review", "review_internal_bot_customer_requisites_v1", false, 45]
+    ],
     "routers/internal_bot_runtime.py": [
       ["POST /api/internal/bot/v1/fsm/get", "get_internal_bot_fsm_state_v1", false, 1],
       ["POST /api/internal/bot/v1/fsm/update", "update_internal_bot_fsm_state_v1", false, 1],
       ["POST /api/internal/bot/v1/runtime-leases/acquire", "acquire_internal_bot_runtime_lease_v1", false, 1],
       ["POST /api/internal/bot/v1/runtime-leases/release", "release_internal_bot_runtime_lease_v1", false, 1],
       ["POST /api/internal/bot/v1/runtime-leases/renew", "renew_internal_bot_runtime_lease_v1", false, 1]
+    ],
+    "routers/internal_bot_schedule.py": [
+      ["POST /api/internal/bot/v1/calendar/schedule", "get_internal_bot_schedule_v1", false, 45]
     ],
     "routers/internal_bot_voice.py": [
       ["POST /api/internal/bot/v1/quick-orders/parse-voice", "parse_internal_bot_voice_quick_order_v1", false, 1]

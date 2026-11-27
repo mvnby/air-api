@@ -780,6 +780,7 @@ class OrderService:
         end_date: datetime,
         *,
         tenant_scope: TenantScope,
+        now: datetime | None = None,
     ) -> List["CalendarEventResponse"]:
         """
         Get calendar events for orders (assessments and installations).
@@ -831,6 +832,7 @@ class OrderService:
                     date=order.measurement_date,
                     status=order.status.value if hasattr(order.status, "value") else str(order.status),
                     customer_name=order.customer.name if order.customer else "Неизвестный",
+                    customer_phone=order.customer.phone if order.customer else None,
                     address=order.delivery_address,
                     title=f"Замер: {order.customer.name if order.customer else 'Клиент'}",
                     start=order.measurement_date,
@@ -846,6 +848,7 @@ class OrderService:
                     date=order.installation_date,
                     status=order.status.value if hasattr(order.status, "value") else str(order.status),
                     customer_name=order.customer.name if order.customer else "Неизвестный",
+                    customer_phone=order.customer.phone if order.customer else None,
                     address=order.delivery_address,
                     title=f"Монтаж: {order.customer.name if order.customer else 'Клиент'}",
                     start=order.installation_date,
@@ -873,6 +876,7 @@ class OrderService:
                         date=stage.start_time,
                         status=st_val,
                         customer_name=order.customer.name if order.customer else "Неизвестный",
+                        customer_phone=order.customer.phone if order.customer else None,
                         address=order.delivery_address,
                         title=title,
                         start=stage.start_time,
@@ -886,6 +890,7 @@ class OrderService:
             start_date=start_date,
             end_date=end_date,
             tenant_scope=tenant_scope,
+            now=now,
         )
         events.extend(CalendarEventResponse(**item) for item in equipment_events)
         return events

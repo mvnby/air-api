@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlmodel import select
 
 from core.config import settings
-from models import Customer, CustomerBranch, CustomerContract, CustomerType, GlobalConfig, Order, OrderStatus
+from models import Customer, CustomerBranch, CustomerContract, CustomerRequisitesRecognition, CustomerType, GlobalConfig, Order, OrderStatus
 from services.customer_requisites_recognition_service import CustomerRequisitesRecognitionService
 
 
@@ -15,6 +15,21 @@ async def _auth_headers(async_client):
     assert login_resp.status_code == 200
     token = login_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+async def test_manager_ocr_confirmation_accepts_only_manager_originated_drafts(async_client, db):
+    telegram_draft = CustomerRequisitesRecognition(
+        tenant_id=1, source="telegram_text", telegram_user_id=10001,
+        extracted_json={"name": "ООО Только Telegram"},
+    )
+    db.add(telegram_draft)
+    await db.commit()
+    response = await async_client.post(
+        f"/api/manager/customers/requisites/{telegram_draft.id}/confirm",
+        headers=await _auth_headers(async_client), json={"action": "create"},
+    )
+    assert response.status_code == 404
+    assert not (await db.execute(select(Customer))).scalars().all()
 
 
 @pytest.mark.asyncio
