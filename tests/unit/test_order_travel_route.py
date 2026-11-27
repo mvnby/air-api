@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from api_contracts.order_travel_route import ManagerOrderTravelRouteRequest
 from models.tenancy import TenantScope
 from routers import manager_order_travel_route as endpoint
+from services.address_suggest_service import AddressSuggestService
 from services.order_travel_route_service import OrderTravelRouteError, OrderTravelRouteService
 
 
@@ -55,7 +56,9 @@ async def test_only_locality_goes_to_heigit_and_one_matrix_returns_two_legs(monk
         })
 
     install_transport(monkeypatch, handler)
-    result = await OrderTravelRouteService.calculate("г.Лепель, пл.Свободы, 1, кв. 3, контакт Иван")
+    result = await OrderTravelRouteService.calculate(
+        "Учреждение, Лепель, Советская улица, д. 1, кв. 3, контакт Иван",
+    )
     assert len(requests) == 2
     assert result.provider == "openrouteservice"
     assert result.destination == "Лепель"
@@ -107,12 +110,34 @@ async def test_unrelated_or_nonlocal_geocoder_result_is_rejected(monkeypatch, la
 
 @pytest.mark.parametrize(("address", "settlement", "query"), [
     ("Ушачи", "Ушачи", "Ушачи"),
+    ("Ушачи, Витебская область", "Ушачи", "Ушачи, Витебская область"),
     ("г.п. Ушачи, ул. Советская, 2", "Ушачи", "Ушачи"),
     ("Лепель, площадь Свободы, 1", "Лепель", "Лепель"),
+    ("Учреждение, Лепель, пл. Свободы, д. 1", "Лепель", "Лепель"),
     ("ул. Мира, 1, аг. Копти, Витебский район", "Копти", "Копти, Витебский район"),
 ])
 def test_extract_settlement_for_routing(address, settlement, query):
     assert OrderTravelRouteService._settlement_query(address) == (settlement, query)
+
+
+@pytest.mark.parametrize(("title", "subtitle", "expected"), [
+    ("Банк, 6, 3-я Коллективная улица", "Витебск", ("Витебск", "Витебск")),
+    (
+        "Витебская улица, 14",
+        "агрогородок Новка, Новкинский сельсовет, Витебский район",
+        ("Новка", "Новка, Витебский район"),
+    ),
+    (
+        "Советская улица, 1",
+        "городской посёлок Ушачи, Ушачский район",
+        ("Ушачи", "Ушачи, Ушачский район"),
+    ),
+])
+def test_extract_settlement_from_the_same_address_manager_saves_from_suggestions(title, subtitle, expected):
+    [suggestion] = AddressSuggestService.normalize_results({
+        "results": [{"title": {"text": title}, "subtitle": {"text": subtitle}}],
+    })
+    assert OrderTravelRouteService._settlement_query(suggestion["value"]) == expected
 
 
 @pytest.mark.asyncio

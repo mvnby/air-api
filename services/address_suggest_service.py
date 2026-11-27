@@ -225,7 +225,7 @@ class AddressSuggestService:
             return {}
 
         house = cls._extract_house(title_parts)
-        street = cls._extract_street(title_parts)
+        street = cls.find_street_part(title_parts)
         city = cls._extract_city(subtitle_parts) or cls._extract_city(title_parts)
 
         object_name = cls._extract_object_name(
@@ -263,7 +263,7 @@ class AddressSuggestService:
         return None
 
     @staticmethod
-    def _extract_street(parts: list[str]) -> str | None:
+    def find_street_part(parts: list[str]) -> str | None:
         street_markers = (
             "улица",
             "ул.",
@@ -276,7 +276,9 @@ class AddressSuggestService:
             "шоссе",
             "бульвар",
             "площадь",
+            "пл.",
             "набережная",
+            "наб.",
         )
         for part in parts:
             lowered = part.lower()
