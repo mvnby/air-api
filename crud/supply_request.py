@@ -20,6 +20,7 @@ class SupplyRequestDAO:
         *,
         order_product_link_ids: Iterable[int],
         tenant_scope: TenantScope,
+        lock_orders: bool = False,
     ) -> list[OrderProductLink]:
         normalized_ids = tuple(
             dict.fromkeys(int(value) for value in order_product_link_ids)
@@ -27,6 +28,18 @@ class SupplyRequestDAO:
         if not normalized_ids:
             return []
 
+        if lock_orders:
+            await session.execute(
+                select(Order.id)
+                .where(
+                    storefront_scope_clause(Order, tenant_scope),
+                    Order.id.in_(
+                        select(OrderProductLink.order_id).where(OrderProductLink.id.in_(normalized_ids))
+                    ),
+                )
+                .order_by(Order.id)
+                .with_for_update(of=Order)
+            )
         statement = (
             select(OrderProductLink)
             .join(Order, Order.id == OrderProductLink.order_id)
@@ -37,5 +50,7 @@ class SupplyRequestDAO:
             .options(selectinload(OrderProductLink.product))
             .order_by(OrderProductLink.id.asc())
         )
+        if lock_orders:
+            statement = statement.execution_options(populate_existing=True)
         result = await session.execute(statement)
         return list(result.scalars().all())

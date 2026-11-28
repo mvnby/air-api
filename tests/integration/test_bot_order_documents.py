@@ -15,6 +15,7 @@ from models import (
     DocumentArtifact,
     DocumentLegalEntity,
     DocumentNumberReservation,
+    DocumentTemplate,
     Order,
     OrderDocument,
     OrderProductLink,
@@ -64,6 +65,35 @@ def _command(desk, issuer_id, doc_type, *, proposal_id):
         change=BotOrderPrepareDocument(kind="prepare_document", document_type=doc_type,
                                        legal_entity_id=issuer_id, proposal_id=proposal_id),
     )
+
+
+async def test_individual_can_prepare_retail_receipt_from_saved_goods(db, tmp_path, monkeypatch):
+    ws, order, issuer, _ = await _setup(db, tmp_path, monkeypatch)
+    buyer = await db.get(Customer, order.customer_id)
+    buyer.type, buyer.name, buyer.full_legal_name, buyer.inn = "individual", "Ирина Тестовая", "", None
+    order.status = "execution"
+    await db.commit()
+    assert not (await get_order_desk(db, ws, order.id)).document_issuers
+    issuer.requisites = {"offer_url": "https://example.test/terms", "offer_version": "2", "offer_published_on": "01.05.2026"}
+    await db.commit()
+    desk = await get_order_desk(db, ws, order.id)
+    options = desk.document_issuers
+    assert len(options) == 1 and options[0].supports_retail_receipt and options[0].types == []
+    templates = select(DocumentTemplate).where(DocumentTemplate.doc_type == "retail_receipt")
+    assert await db.scalar(templates) is None
+    request = _command(desk, issuer.id, "retail_receipt", proposal_id=desk.selected_proposal_id)
+    request.change.receipt_note = "Монтаж после отделки"
+    saved = await change_order(db, ws, order.id, request)
+    assert [doc.title for doc in saved.documents] == ["Товарный чек"]
+    assert [doc.id for doc in (await change_order(db, ws, order.id, request)).documents] == [saved.documents[0].id]
+    receipt = await db.get(OrderDocument, saved.documents[0].id)
+    assert receipt.proposal_id == desk.selected_proposal_id and receipt.official_number is None
+    assert receipt.render_snapshot["values"]["receipt.note"] == "Монтаж после отделки"
+    assert receipt.render_snapshot["values"]["offer.url"] == "https://example.test/terms"
+    installed = await db.scalar(templates)
+    installed.is_active = False
+    await db.commit()
+    assert not (await get_order_desk(db, ws, order.id)).document_issuers
 
 
 @pytest.mark.parametrize("document_type", ["offer", "invoice"])

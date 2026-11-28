@@ -27,6 +27,14 @@ also binds one saved proposal and an active issuer template. Drafts and private
 PDF previews use the document service. Telegram prepares the share chooser for
 client text and delivers a requested PDF only to the initiating manager.
 
+Any writable manager with access to the order can record its equipment status and
+received payments. Supplier offers and line-level reservation requests follow the
+same supply permissions as Manager. Payment history and balances use the canonical
+order currency and workflow rules. Official document issuance reserves a number for
+one confirmed draft and supports retrying that document after a rendering failure.
+Individual buyers can receive a retail receipt draft bound to a saved proposal and the seller's public offer.
+The private PDF endpoint returns the stored artifact for that document and order.
+
 ## Bot environment
 
 Required for active polling:

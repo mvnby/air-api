@@ -141,3 +141,32 @@ async def test_manager_edit_invalidates_order_revision(orders, db_engine):
     latest = (await orders.get(path, params=ACTOR)).json()
     denied = await orders.post(path + "/commands", json=command(latest, kind="assign_customer", customer_id=65))
     assert denied.status_code == 404, denied.text
+
+
+async def test_reserved_order_receives_one_payment_across_retries_and_rejects_stale_issue(orders):
+    path = f"{BASE}/10"
+    desk = (await orders.get(path, params=ACTOR)).json()
+    assert desk["reserve"]["can_set_order_status"] and not desk["reserve"]["supplier_access"]
+    mark = command(desk, kind="set_order_reserve_status", status="reserved")
+    reserve = await orders.post(path + "/commands", json=mark)
+    assert reserve.status_code == 200, reserve.text
+    reserved = reserve.json()
+    assert reserved["reserve"]["manager_status"] == "reserved"
+    assert reserved["revision"] != desk["revision"]
+
+    payment = command(reserved, kind="record_payment", amount="500.01", currency="BYN", type="prepayment",
+                      received_on=reserved["payments"]["received_on_max"], confirmed=True)
+    receipts = await asyncio.gather(*(orders.post(path + "/commands", json=payment) for _ in range(2)))
+    assert [r.status_code for r in receipts] == [200, 200], [r.text for r in receipts]
+    latest = receipts[0].json()
+    assert all(r.json() == latest for r in receipts)
+    assert len(latest["payments"]["entries"]) == 1
+    assert Decimal(latest["payments"]["balance_due"]) == Decimal("1360.99")
+    assert latest["reserve"]["manager_status"] == "reserved"
+    issue = command(reserved, kind="issue_document", document_id=999, expected_document_revision="f" * 64, confirmed=True)
+    assert (await orders.post(path + "/commands", json=issue)).status_code == 409
+    # A payment key cannot be reused to trigger another type of operation.
+    issue.update(expected_revision=latest["revision"], idempotency_key=payment["idempotency_key"])
+    assert (await orders.post(path + "/commands", json=issue)).status_code == 409
+    unauthorised = await orders.get(path + "/documents/999/pdf", params={**ACTOR, "telegram_id": 502})
+    assert unauthorised.status_code == 403

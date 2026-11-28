@@ -1,7 +1,9 @@
 """Transactional commands for order payments and bank-receipt reconciliation."""
 
+from datetime import datetime
 from typing import Any, Dict, List
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -37,13 +39,31 @@ class OrderPaymentCommandService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        received_at: datetime | None = None,
     ) -> List[Dict[str, Any]]:
         async with command_transaction(session):
+            latest_payment_id = None
+            if received_at is None:
+                # The Manager request has no order revision. Remember what was
+                # visible when it began, then check for a matching receipt that
+                # committed while waiting on the order lock.
+                latest_payment_id = await session.scalar(
+                    select(func.coalesce(func.max(Payment.id), 0))
+                    .select_from(Order)
+                    .outerjoin(Customer, Customer.id == Order.customer_id)
+                    .outerjoin(Payment, Payment.order_id == Order.id)
+                    .where(
+                        Order.id == order_id,
+                        TenantEntityAccessService.order_clause(tenant_scope),
+                        TenantEntityAccessService.order_customer_clause(tenant_scope),
+                    )
+                )
             order = await TenantEntityAccessService.get_order(
                 session,
                 order_id,
                 tenant_scope=tenant_scope,
                 for_update=True,
+                populate_existing=True,
             )
             if not order:
                 raise ValueError("Order not found")
@@ -63,15 +83,31 @@ class OrderPaymentCommandService:
                     "Foreign-currency payment requires matching order target currency"
                 )
 
-            session.add(
-                Payment(
-                    order_id=order_id,
-                    amount=payload.amount,
-                    currency=currency,
-                    type=payment_type,
-                    comment=payload.comment,
+            if latest_payment_id is not None:
+                matching_payment = await session.scalar(
+                    select(Payment.id)
+                    .where(
+                        Payment.order_id == order_id,
+                        Payment.id > latest_payment_id,
+                        Payment.amount == float(payload.amount),
+                        Payment.currency == currency,
+                        Payment.type == payment_type,
+                    )
+                    .limit(1)
                 )
+                if matching_payment is not None:
+                    raise ValueError("В заказе только что учтена такая же оплата. Обновите заказ и сверьте поступления.")
+
+            payment = Payment(
+                order_id=order_id,
+                amount=float(payload.amount),
+                currency=currency,
+                type=payment_type,
+                comment=payload.comment,
             )
+            if received_at is not None:
+                payment.date = received_at
+            session.add(payment)
             await session.flush()
             await OrderService._refresh_order_financials(session, order)
             session.add(order)

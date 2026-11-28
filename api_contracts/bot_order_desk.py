@@ -6,7 +6,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 from api_contracts.bot_order_followup import BotOrderFollowup, BotOrderFollowupChange
+from api_contracts.bot_order_issuance import BotIssueDocument, BotOrderIssuance
+from api_contracts.bot_order_payments import BotOrderPayments, BotRecordPayment
 from api_contracts.bot_order_proposal import BotOrderProposals, BotProposalChange
+from api_contracts.bot_order_reserve import BotOrderReserveState, BotReserveChange
 from api_contracts.bot_workspace import BotWorkspaceActor
 
 
@@ -27,6 +30,7 @@ class BotOrderIssuer(BaseModel):
     id: int
     name: str
     types: list[DocumentType]
+    supports_retail_receipt: bool = False
 
 
 class BotOrderDesk(BotOrderProposals):
@@ -40,19 +44,27 @@ class BotOrderDesk(BotOrderProposals):
     followup: BotOrderFollowup
     documents: list[BotOrderDocument]
     document_issuers: list[BotOrderIssuer]
+    reserve: BotOrderReserveState
+    payments: BotOrderPayments
+    issuance: list[BotOrderIssuance]
 
 
 class BotOrderPrepareDocument(BaseModel, extra="forbid"):
     kind: Literal["prepare_document"]
-    document_type: DocumentType
+    document_type: DocumentType | Literal["retail_receipt"]
     legal_entity_id: int = Field(gt=0, strict=True)
     proposal_id: Annotated[int, Field(gt=0, strict=True)] | None
+    receipt_note: Annotated[str, Field(max_length=1500)] | None = None
 
 
 class BotOrderCommand(BaseModel, extra="forbid"):
     expected_revision: BotOrderRevision
     idempotency_key: UUID
-    change: Annotated[BotOrderFollowupChange | BotProposalChange | BotOrderPrepareDocument, Field(discriminator="kind")]
+    change: Annotated[
+        BotOrderFollowupChange | BotProposalChange | BotOrderPrepareDocument
+        | BotReserveChange | BotRecordPayment | BotIssueDocument,
+        Field(discriminator="kind"),
+    ]
 
 
 class BotOrderCommandRequest(BotOrderCommand, BotWorkspaceActor):

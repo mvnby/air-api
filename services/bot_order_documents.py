@@ -12,11 +12,13 @@ from models import Customer, DocumentLegalEntity, DocumentTemplate, DocumentTemp
 from modules.documents.application import DocumentContextSelection, ManagedDocumentService
 from modules.documents.application.draft_preview import ManagedDocumentDraftPreviewService
 from modules.documents.application.errors import ManagedDocumentConflictError, ManagedDocumentNotFoundError
+from modules.documents.domain.placeholder_catalog import SUPPORTED_NATIVE_DOCUMENT_TYPES
 from modules.documents.infrastructure.artifact_storage import PrivateDocumentArtifactStorage
 from modules.documents.infrastructure.configured_pdf import configured_pdf_converter
 from modules.documents.infrastructure.renderers.pdf import PdfConversionError
 from modules.documents.infrastructure.template_source_storage import PrivateTemplateSourceStorage
 from services.order_proposal_command_service import OrderProposalCommandService
+from services.order_proposal_version import proposal_version
 from services.order_service import OrderService
 from services.private_attachment_storage_service import get_private_attachment_storage
 from services.tenant_entity_access_service import TenantEntityAccessService
@@ -25,7 +27,14 @@ from services.tenant_entity_access_service import TenantEntityAccessService
 TITLES = {"offer": "Коммерческое предложение", "invoice": "Счёт", "contract": "Договор", "act": "Акт",
           "tn2": "Товарная накладная", "ttn1": "Товарно-транспортная накладная",
           "consumer_contract": "Договор с физлицом", "retail_receipt": "Товарный чек",
-          "warranty_certificate": "Гарантийный талон", "contract_amendment": "Дополнительное соглашение"}
+          "warranty_certificate": "Гарантийный талон", "contract_amendment": "Дополнительное соглашение",
+          "b2c_supply_installation_act": "Заказ-акт на поставку и монтаж",
+          "b2c_customer_equipment_installation_act": "Заказ-акт на монтаж оборудования заказчика",
+          "b2c_maintenance_repair_act": "Заказ-акт на ТО и ремонт",
+          "b2c_route_laying_act": "Заказ-акт на прокладку трассы",
+          "technical_inspection_act": "Акт технического обследования", "defect_act": "Дефектный акт",
+          "maintenance_defect_act": "Дефектный акт по ТО", "repair_defect_act": "Дефектный акт ремонта",
+          "participant_statement": "Заявление участника"}
 STATES = {"draft": "Черновик", "issued": "Выпущен", "sent": "Отправлен", "signed": "Подписан",
           "void": "Аннулирован", "replaced": "Заменён", "received": "Получен"}
 BUSINESS_CUSTOMER_TYPES = ("company", "individual_entrepreneur")
@@ -47,9 +56,9 @@ class _BotDocumentArtifactStorage(PrivateDocumentArtifactStorage):
             raise HTTPException(503, "Не удалось прочитать черновик документа. Повторите позже.") from exc
 
 
-def _private_storage():
+def _private_storage(provider=None):
     try:
-        return get_private_attachment_storage()
+        return get_private_attachment_storage(provider) if provider else get_private_attachment_storage()
     except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(503, "Приватное хранилище документов недоступно. Повторите позже.") from exc
 
@@ -67,17 +76,22 @@ def _google_document_url(raw):
 
 
 def _previewable(row):
-    return row.doc_type in {"offer", "invoice"} and row.status == "draft" and bool(
-        row.template_version_id and row.render_snapshot
-    )
+    return (row.doc_type in SUPPORTED_NATIVE_DOCUMENT_TYPES and row.status == "draft"
+            and not row.origin and bool(row.template_version_id and row.render_snapshot))
 
 
 async def read_documents(session, scope, order_id):
     rows = await ManagedDocumentService.list_for_order(session, tenant_scope=scope, order_id=order_id)
     documents = []
     for row in rows:
-        label = TITLES.get(row.doc_type, "Документ")
-        number = row.official_number or row.number or row.internal_reference
+        label = ("Счёт-оферта" if row.doc_type == "invoice" and row.business_role == "offer"
+                 else TITLES.get(row.doc_type, "Документ"))
+        snapshot = row.render_snapshot
+        values = snapshot.get("values") if isinstance(snapshot, dict) else None
+        full_number = values.get("document.official_full_number") if isinstance(values, dict) else None
+        number = full_number or row.official_number
+        if not number and row.number != row.internal_reference:
+            number = row.number
         documents.append(BotOrderDocument(
             id=row.id, title=f"{label} · {number}" if number else label, proposal_id=row.proposal_id,
             status=STATES.get(row.status or row.external_status, "Сохранён"),
@@ -87,13 +101,35 @@ async def read_documents(session, scope, order_id):
     return documents
 
 
-async def draft_issuers(session, scope, detail, followup):
+async def _retail_issuers(session, scope):
+    configured = select(DocumentTemplate.id).where(
+        DocumentTemplate.tenant_id == scope.tenant_id, DocumentTemplate.legal_entity_id == DocumentLegalEntity.id,
+        DocumentTemplate.doc_type == "retail_receipt",
+    )
+    active = configured.join(DocumentTemplateVersion).where(
+        DocumentTemplate.is_active.is_(True), DocumentTemplateVersion.status == "active", DocumentTemplateVersion.renderer == "docx",
+    )
+    # Initial retail forms are installed on explicit preparation. Respect a disabled custom form.
+    issuers = await session.scalars(select(DocumentLegalEntity).where(
+        DocumentLegalEntity.tenant_id == scope.tenant_id, DocumentLegalEntity.status == "active",
+        or_(~configured.exists(), active.exists()),
+    ).order_by(DocumentLegalEntity.is_default.desc(), DocumentLegalEntity.display_name, DocumentLegalEntity.id))
+    return [BotOrderIssuer(id=item.id, name=item.display_name, types=[], supports_retail_receipt=True)
+            for item in issuers if all(str((item.requisites or {}).get(field) or "").strip()
+                                       for field in ("offer_url", "offer_version", "offer_published_on"))]
+
+
+async def draft_issuers(session, scope, detail, followup, proposals):
     customer = followup.customer
-    if (scope.demo_read_only or not followup.can_edit_details or not customer or customer.type not in BUSINESS_CUSTOMER_TYPES
-            or detail["workflow_type"] != "sales_installation" or detail["status"] != "negotiation"
+    if (scope.demo_read_only or not followup.can_edit_details or not customer
+            or detail["workflow_type"] != "sales_installation" or detail["status"] not in ("negotiation", "execution")
             or detail.get("is_on_hold")):
         return []
-    if not await _active_business_customer(session, scope, detail["id"]):
+    party_type = await _active_customer_type(session, scope, detail["id"])
+    if party_type == "individual":
+        has_goods = any(p["product_lines"] for p in proposals if not p["is_archived"])
+        return await _retail_issuers(session, scope) if has_goods else []
+    if party_type not in BUSINESS_CUSTOMER_TYPES or detail["status"] != "negotiation":
         return []
     # One lookup returns live offer/payment-request templates across this company's issuers.
     rows = (await session.execute(
@@ -117,17 +153,17 @@ async def draft_issuers(session, scope, detail, followup):
     return list(options.values())
 
 
-async def _active_business_customer(session, scope, order_id, *, lock=False):
+async def _active_customer_type(session, scope, order_id, *, lock=False):
     statement = (
-        select(Customer.id)
+        select(Customer.type)
         .join(Order, Order.customer_id == Customer.id)
         .where(Order.id == order_id, TenantEntityAccessService.order_clause(scope),
                TenantEntityAccessService.order_customer_clause(scope),
-               Customer.type.in_(BUSINESS_CUSTOMER_TYPES), Customer.is_archived.is_(False))
+               Customer.is_archived.is_(False))
     )
     if lock:
         statement = statement.with_for_update(of=Customer)
-    return await session.scalar(statement) is not None
+    return await session.scalar(statement)
 
 
 def saved_proposal(desk, proposal_id):
@@ -143,11 +179,18 @@ async def prepare_document(session, scope, desk, change):
     """Prepare one saved proposal under the caller's locked order transaction."""
     if scope.demo_read_only:
         raise HTTPException(403, "Сохранение черновика недоступно в демо.")
-    saved_proposal(desk, change.proposal_id)
-    if not any(i.id == change.legal_entity_id and change.document_type in i.types for i in desk.document_issuers):
+    proposal = saved_proposal(desk, change.proposal_id)
+    retail = change.document_type == "retail_receipt"
+    if retail and not proposal.product_lines:
+        raise HTTPException(422, "Выберите предложение с товарами для товарного чека.")
+    if change.receipt_note is not None and not retail:
+        raise HTTPException(422, "Примечание к товарному чеку доступно только для этого вида документа.")
+    issuer = next((item for item in desk.document_issuers if item.id == change.legal_entity_id), None)
+    if not issuer or not (issuer.supports_retail_receipt if retail else change.document_type in issuer.types):
         raise HTTPException(409, "Для этого заказа и юрлица нет доступного шаблона.")
-    if not await _active_business_customer(session, scope, desk.id, lock=True):
-        raise HTTPException(409, "Для черновика нужен действующий клиент — организация или ИП.")
+    party_type = await _active_customer_type(session, scope, desk.id, lock=True)
+    if party_type not in (("individual",) if retail else BUSINESS_CUSTOMER_TYPES):
+        raise HTTPException(409, "Для документа нужен действующий клиент с подходящим типом покупателя.")
     proposal_id = change.proposal_id
     if proposal_id is None:
         order = await OrderProposalCommandService._load_order_for_write(session, desk.id, tenant_scope=scope)
@@ -155,15 +198,25 @@ async def prepare_document(session, scope, desk, change):
         if proposal is None:
             raise HTTPException(409, "Не удалось закрепить основной вариант заказа. Обновите заказ.")
         proposal_id = proposal.id
-    return await ManagedDocumentService.create_draft(
+    document = await ManagedDocumentService.create_draft(
         session, tenant_scope=scope,
         selection=DocumentContextSelection(
             order_id=desk.id, proposal_id=proposal_id, document_type=change.document_type,
             legal_entity_id=change.legal_entity_id, issue_date=datetime.now(ZoneInfo("Europe/Minsk")).date(),
             business_role="payment_request" if change.document_type == "invoice" else None,
+            receipt_note=(change.receipt_note or "").strip() or None,
         ),
         template_storage=_BotDocumentTemplateStorage(_private_storage()), commit=False,
     )
+    snapshot = document.render_snapshot
+    document.render_snapshot = {
+        **snapshot,
+        "meta": {
+            **snapshot["meta"],
+            "connector_proposal_version": await proposal_version(session, desk.id, proposal_id),
+        },
+    }
+    return document
 
 
 async def draft_pdf(session, scope, order_id, document_id):
@@ -173,7 +226,7 @@ async def draft_pdf(session, scope, order_id, document_id):
     if document.order_id != order_id:
         raise HTTPException(404, "Документ не найден в заказе.")
     if not _previewable(document):
-        raise HTTPException(409, "Предпросмотр доступен для черновика КП или счёта.")
+        raise HTTPException(409, "Предпросмотр доступен для сохранённого нативного черновика.")
     private = _private_storage()
     try:
         content, _ = await ManagedDocumentDraftPreviewService.render_pdf(

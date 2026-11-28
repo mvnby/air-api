@@ -133,9 +133,12 @@ class PrivateDocumentArtifactStorage:
             size_bytes=len(content),
         )
 
-    async def read(self, artifact: StoredDocumentArtifact) -> bytes:
+    async def read(self, artifact: StoredDocumentArtifact, *, max_bytes: int | None = None) -> bytes:
         normalized = _validate_artifact(artifact, expected_provider=self.provider_name)
-        content = await self._storage.read(normalized.storage_key)
+        if max_bytes is None:
+            content = await self._storage.read(normalized.storage_key)
+        else:
+            content = await self._storage.read_bounded(normalized.storage_key, max_bytes)
         actual_checksum = sha256(content).hexdigest()
         if actual_checksum != normalized.checksum_sha256:
             raise ValueError("Document artifact SHA-256 verification failed")
