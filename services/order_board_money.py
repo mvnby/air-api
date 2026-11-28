@@ -11,11 +11,12 @@ from models import (
 )
 
 
-def board_money(visible_ids):
+def board_money(visible_ids, *, legacy_ungrouped_only: bool = False):
     """All intermediate relations are fenced by the caller's visible order IDs.
 
     Round the unit before multiplying, choose the selected active proposal (or
     first active), and fall back to all lines if no active proposal exists.
+    An editor that projects an unsaved default can request only ungrouped lines.
     Payment conversion uses the computed amount; clamp each debt before grouping.
     This projection never writes or repairs cached model fields.
     """
@@ -45,6 +46,9 @@ def board_money(visible_ids):
     )
 
     def lines(model, name):
+        without_active_proposal = chosen.c.id.is_(None)
+        if legacy_ungrouped_only:
+            without_active_proposal = and_(without_active_proposal, model.proposal_id.is_(None))
         return (
             select(
                 model.order_id,
@@ -57,7 +61,7 @@ def board_money(visible_ids):
             )
             .join(visible_ids, visible_ids.c.id == model.order_id)
             .outerjoin(chosen, chosen.c.order_id == model.order_id)
-            .where(or_(chosen.c.id.is_(None), model.proposal_id == chosen.c.id))
+            .where(or_(without_active_proposal, model.proposal_id == chosen.c.id))
             .group_by(model.order_id)
             .cte(name)
         )

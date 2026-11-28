@@ -9,6 +9,7 @@
     "reviewed_stage"
   ],
   "review_stages": {
+    "47": "Telegram order desk: scoped saved proposals and lines, contacts and planning, lifecycle commands, client quote text, native invoice/offer drafts and private PDF previews. Reviewed 2026-11-28",
     "46": "Scoped Telegram manager catalog, product features and media, basket order and personal offer; unified CRM inbox, orders, clients and own assignments. Reviewed 2026-11-28",
     "45": "Staff Mini App: review and correct an owned requisites draft with a revision check, and read the selected Manager calendar for two Minsk days. Reviewed 2026-11-27",
     "44": "MVN order travel preview: live Manager and storefront scope, external geocoding by explicit request, two road legs from HeiGIT or Yandex, bounded provider usage and read-only results. Reviewed 2026-11-26",
@@ -440,6 +441,12 @@
     "routers/internal_bot_shop_actions.py": [
       ["POST /api/internal/bot/v1/shop/offers", "publish_internal_bot_shop_offer_v1", false, 46],
       ["POST /api/internal/bot/v1/shop/orders", "create_internal_bot_shop_order_v1", false, 46]
+    ],
+    "routers/internal_bot_order_desk.py": [
+      ["GET /api/internal/bot/v1/order-desk/{order_id}", "get_internal_bot_order_desk_v1", false, 47],
+      ["GET /api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/preview", "preview_internal_bot_order_document_v1", false, 47],
+      ["GET /api/internal/bot/v1/order-desk/{order_id}/quote", "get_internal_bot_order_quote_v1", false, 47],
+      ["POST /api/internal/bot/v1/order-desk/{order_id}/commands", "apply_internal_bot_order_change_v1", false, 47]
     ],
     "routers/internal_bot_workspace.py": [
       ["GET /api/internal/bot/v1/workspace/{section}", "list_internal_bot_workspace_v1", false, 46],

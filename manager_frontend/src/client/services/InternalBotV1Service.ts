@@ -16,6 +16,9 @@ import type { BotCustomerRequisitesEditRequest } from '../models/BotCustomerRequ
 import type { BotCustomerRequisitesRecognitionResponse } from '../models/BotCustomerRequisitesRecognitionResponse';
 import type { BotCustomerRequisitesReviewRequest } from '../models/BotCustomerRequisitesReviewRequest';
 import type { BotCustomerRequisitesTextRequest } from '../models/BotCustomerRequisitesTextRequest';
+import type { BotOrderCommandRequest } from '../models/BotOrderCommandRequest';
+import type { BotOrderDesk } from '../models/BotOrderDesk';
+import type { BotOrderQuote } from '../models/BotOrderQuote';
 import type { BotQuickOrderCreateRequest } from '../models/BotQuickOrderCreateRequest';
 import type { BotQuickOrderCreateResponse } from '../models/BotQuickOrderCreateResponse';
 import type { BotQuickOrderCustomerSearchRequest } from '../models/BotQuickOrderCustomerSearchRequest';
@@ -1122,6 +1125,136 @@ export class InternalBotV1Service {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Desk
+     * Read a saved order, proposals at agreed prices, follow-up, permitted edits and scoped commercial documents.
+     * Requires the service bearer, a current Telegram manager and company/site version. Reads do not repair legacy
+     * rows. An inaccessible order returns 404, invalid access 403 and a stale selection 409.
+     * @param orderId
+     * @param telegramId
+     * @param expectedContextVersion
+     * @returns BotOrderDesk Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotOrderDeskV1(
+        orderId: number,
+        telegramId: number,
+        expectedContextVersion: number,
+    ): CancelablePromise<BotOrderDesk> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/order-desk/{order_id}',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Change
+     * Apply a manager's deliberate order, proposal, customer, schedule, workflow or commercial draft change.
+     * Requires a live writable membership and company context. A scoped idempotency key retries the same change;
+     * a stale order revision or reused key with a different command returns 409. A draft preserves one proposal's
+     * saved prices and never issues a document. Inaccessible records return 404 and invalid fields 422.
+     * @param orderId
+     * @param requestBody
+     * @returns BotOrderDesk Successful Response
+     * @throws ApiError
+     */
+    public static applyInternalBotOrderChangeV1(
+        orderId: number,
+        requestBody: BotOrderCommandRequest,
+    ): CancelablePromise<BotOrderDesk> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/internal/bot/v1/order-desk/{order_id}/commands',
+            path: {
+                'order_id': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Quote
+     * Build client-facing text for precisely one active saved variant, including work and agreed sale prices.
+     * Requires the service token, a scoped manager and current order/company revisions (409 if stale).
+     * Omit proposal_id for a legacy ungrouped order. Missing orders or alternatives return 404.
+     * @param orderId
+     * @param telegramId
+     * @param expectedContextVersion
+     * @param expectedRevision
+     * @param proposalId
+     * @returns BotOrderQuote Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotOrderQuoteV1(
+        orderId: number,
+        telegramId: number,
+        expectedContextVersion: number,
+        expectedRevision: string,
+        proposalId?: (number | null),
+    ): CancelablePromise<BotOrderQuote> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/order-desk/{order_id}/quote',
+            path: {
+                'order_id': orderId,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+                'expected_revision': expectedRevision,
+                'proposal_id': proposalId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview
+     * Render the saved native draft of a quote or invoice for the authenticated manager. Verifies order/document
+     * binding, tenant, storefront and company selection. Preview does not issue or send. Returns a private PDF,
+     * 403 for demo, 404 outside scope, 409 for a non-draft and 503 when rendering is unavailable.
+     * @param orderId
+     * @param documentId
+     * @param telegramId
+     * @param expectedContextVersion
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static previewInternalBotOrderDocumentV1(
+        orderId: number,
+        documentId: number,
+        telegramId: number,
+        expectedContextVersion: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/preview',
+            path: {
+                'order_id': orderId,
+                'document_id': documentId,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+            },
             errors: {
                 422: `Validation Error`,
             },
