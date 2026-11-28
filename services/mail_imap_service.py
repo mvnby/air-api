@@ -43,6 +43,8 @@ class MailImapService:
     EMAIL_LEAD_LAST_IMPORT_KEY = "mail_lead_last_import_at"
     LEGACY_DOC_MAX_BYTES = 5 * 1024 * 1024
     LEGACY_DOC_TIMEOUT_SECONDS = 8
+    PDF_TEXT_PAGE_LIMIT = 8
+    PDF_OCR_PAGE_LIMIT = 4
 
     @staticmethod
     def _decode_bytes(value: bytes, charset: str | None = None) -> str:
@@ -100,42 +102,56 @@ class MailImapService:
         return re.sub(r"\s+", " ", text).strip()
 
     @staticmethod
-    def _extract_pdf_text(content: bytes) -> str:
-        text = ""
+    def _readable_pdf_page_text(text: str) -> str:
+        # Some scans have a hidden text layer where whole words are placeholders.
+        placeholders = sum(len(match) for match in re.findall(r"\?{2,}|\ufffd", text))
+        letters_and_digits = sum(char.isalnum() for char in text)
+        return text.strip() if letters_and_digits > placeholders else ""
+
+    @classmethod
+    def _extract_pdf_text(cls, content: bytes) -> str:
         try:
             from pypdf import PdfReader
-        except Exception:
-            PdfReader = None
-        if PdfReader is not None:
-            try:
-                reader = PdfReader(BytesIO(content))
-                chunks = [(page.extract_text() or "") for page in reader.pages[:8]]
-                text = "\n".join(chunk for chunk in chunks if chunk).strip()
-            except Exception:
-                text = ""
-        if text:
-            return text
 
+            pages = PdfReader(BytesIO(content)).pages[:cls.PDF_TEXT_PAGE_LIMIT]
+        except Exception:
+            page_texts = [""] * cls.PDF_OCR_PAGE_LIMIT
+        else:
+            page_texts = []
+            for page in pages:
+                try:
+                    text = page.extract_text() or ""
+                except Exception:
+                    text = ""
+                page_texts.append(cls._readable_pdf_page_text(text))
+
+        unreadable = [index for index, text in enumerate(page_texts) if not text]
+        for index in unreadable[:cls.PDF_OCR_PAGE_LIMIT]:
+            page_texts[index] = cls._ocr_pdf_page(content, page_number=index + 1)
+        return "\n".join(filter(None, page_texts))
+
+    @classmethod
+    def _ocr_pdf_page(cls, content: bytes, *, page_number: int) -> str:
         try:
             from pdf2image import convert_from_bytes
             import pytesseract
+
+            images = convert_from_bytes(
+                content, first_page=page_number, last_page=page_number, dpi=200, timeout=15,
+            )
         except Exception:
             return ""
-        try:
-            images = convert_from_bytes(content, first_page=1, last_page=4, dpi=200)
-        except Exception:
+        if not images:
             return ""
 
-        chunks = []
-        for image in images:
-            try:
-                chunks.append(pytesseract.image_to_string(image, lang="rus+eng", timeout=20))
-            except Exception:
+        with images[0] as image:
+            for language in ("rus+eng", None):
                 try:
-                    chunks.append(pytesseract.image_to_string(image, timeout=20))
+                    text = pytesseract.image_to_string(image, lang=language, timeout=20)
+                    return cls._readable_pdf_page_text(text)
                 except Exception:
                     continue
-        return "\n".join(chunk for chunk in chunks if chunk).strip()
+        return ""
 
     @staticmethod
     def _extract_docx_text(content: bytes) -> str:
