@@ -14,6 +14,19 @@ object-storage, OCR, or backend application credentials.
   to its own repository, publish this contract as a small shared package or
   generate the client from `openapi.json`; do not copy backend services.
 
+## Existing orders
+
+The `/api/internal/bot/v1/order-desk/{order_id}` operations use the selected
+staff company and storefront. The desk returns saved proposal prices, quantities,
+planning fields and allowed actions. A command supplies the displayed order revision
+and an actor-scoped idempotency key. A concurrent edit produces a conflict before the
+command writes. Reading older orders leaves their proposal grouping intact.
+
+The client quote projects one proposal and its services. A native commercial draft
+also binds one saved proposal and an active issuer template. Drafts and private
+PDF previews use the document service. Telegram prepares the share chooser for
+client text and delivers a requested PDF only to the initiating manager.
+
 ## Bot environment
 
 Required for active polling:

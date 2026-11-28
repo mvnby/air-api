@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlalchemy import String, cast, func, or_, and_, delete, inspect
+from sqlalchemy import String, cast, func, or_, and_, delete, inspect, update
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import NO_VALUE, flag_modified
 
@@ -722,16 +722,13 @@ class OrderService:
         )
         session.add(proposal)
         await session.flush()
-        await session.execute(
-            OrderProductLink.__table__.update()
-            .where(OrderProductLink.order_id == order.id, OrderProductLink.proposal_id.is_(None))
-            .values(proposal_id=proposal.id)
-        )
-        await session.execute(
-            OrderServiceLink.__table__.update()
-            .where(OrderServiceLink.order_id == order.id, OrderServiceLink.proposal_id.is_(None))
-            .values(proposal_id=proposal.id)
-        )
+        for model in (OrderProductLink, OrderServiceLink):
+            await session.execute(
+                update(model)
+                .where(model.order_id == order.id, model.proposal_id.is_(None))
+                .values(proposal_id=proposal.id)
+                .execution_options(synchronize_session="fetch")
+            )
         await session.refresh(order, attribute_names=["proposals", "product_links", "service_links"])
         return proposal
 

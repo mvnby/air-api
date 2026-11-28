@@ -10,6 +10,17 @@ from services.order_product_description import normalize_client_description
 
 class OrderProductLineService:
     @staticmethod
+    async def supply_referenced_ids(session: AsyncSession, link_ids: set[int]) -> set[int]:
+        if not link_ids:
+            return set()
+        result = await session.execute(
+            select(SupplyRequestLine.order_product_link_id).where(
+                SupplyRequestLine.order_product_link_id.in_(link_ids)
+            )
+        )
+        return {int(link_id) for link_id in result.scalars().all() if link_id is not None}
+
+    @staticmethod
     async def reconcile(
         session: AsyncSession,
         *,
@@ -56,18 +67,7 @@ class OrderProductLineService:
 
         existing_ids = set(existing_by_id)
         removed_ids = existing_ids - claimed_ids
-        referenced_ids: set[int] = set()
-        if existing_ids:
-            reference_result = await session.execute(
-                select(SupplyRequestLine.order_product_link_id).where(
-                    SupplyRequestLine.order_product_link_id.in_(existing_ids)
-                )
-            )
-            referenced_ids = {
-                int(link_id)
-                for link_id in reference_result.scalars().all()
-                if link_id is not None
-            }
+        referenced_ids = await OrderProductLineService.supply_referenced_ids(session, existing_ids)
 
         if removed_ids & referenced_ids:
             raise ValueError(

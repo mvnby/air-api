@@ -92,6 +92,17 @@ async def incoming_item(session, ws, item_id, kind):
     raise ValueError("Укажите тип входящего обращения")
 
 
+async def scoped_order_money(session, scope, item_id, *, legacy_ungrouped_only: bool = False):
+    visible = (select(Order.id).outerjoin(Customer, Customer.id == Order.customer_id)
+               .where(Order.id == item_id, Access.order_clause(scope), Access.order_customer_clause(scope))
+               .cte("workspace_order"))
+    money = board_money(visible, legacy_ungrouped_only=legacy_ungrouped_only)
+    sums = (await session.execute(select(money.c.total_amount, money.c.balance_due))).mappings().one_or_none()
+    if sums is None:
+        raise LookupError("Заказ не найден")
+    return sums
+
+
 async def _order_detail(session, ws, item_id):
     order = await Access.get_order(session, item_id, tenant_scope=ws.scope, options=(
         selectinload(Order.customer), selectinload(Order.proposals),
@@ -99,13 +110,7 @@ async def _order_detail(session, ws, item_id):
     ))
     if order is None or order.status == "new_lead":
         raise LookupError("Заказ не найден")
-    visible = (select(Order.id).outerjoin(Customer, Customer.id == Order.customer_id)
-               .where(Order.id == item_id, Access.order_clause(ws.scope), Access.order_customer_clause(ws.scope))
-               .cte("workspace_order"))
-    money = board_money(visible)
-    sums = (await session.execute(select(money.c.total_amount, money.c.balance_due))).mappings().one_or_none()
-    if sums is None:
-        raise LookupError("Заказ не найден")
+    sums = await scoped_order_money(session, ws.scope, item_id)
     customer = order.customer
     meta = order.technical_meta or {}
     return {

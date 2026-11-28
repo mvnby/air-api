@@ -3544,6 +3544,312 @@
         }
       }
     },
+    "/api/internal/bot/v1/order-desk/{order_id}": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Desk",
+        "description": "Read a saved order, proposals at agreed prices, follow-up, permitted edits and scoped commercial documents.\nRequires the service bearer, a current Telegram manager and company/site version. Reads do not repair legacy\nrows. An inaccessible order returns 404, invalid access 403 and a stale selection 409.",
+        "operationId": "get_internal_bot_order_desk_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderDesk"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/order-desk/{order_id}/commands": {
+      "post": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Apply Change",
+        "description": "Apply a manager's deliberate order, proposal, customer, schedule, workflow or commercial draft change.\nRequires a live writable membership and company context. A scoped idempotency key retries the same change;\na stale order revision or reused key with a different command returns 409. A draft preserves one proposal's\nsaved prices and never issues a document. Inaccessible records return 404 and invalid fields 422.",
+        "operationId": "apply_internal_bot_order_change_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotOrderCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderDesk"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/order-desk/{order_id}/quote": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Quote",
+        "description": "Build client-facing text for precisely one active saved variant, including work and agreed sale prices.\nRequires the service token, a scoped manager and current order/company revisions (409 if stale).\nOmit proposal_id for a legacy ungrouped order. Missing orders or alternatives return 404.",
+        "operationId": "get_internal_bot_order_quote_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Expected Revision"
+            }
+          },
+          {
+            "name": "proposal_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotOrderQuote"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/preview": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Preview",
+        "description": "Render the saved native draft of a quote or invoice for the authenticated manager. Verifies order/document\nbinding, tenant, storefront and company selection. Preview does not issue or send. Returns a private PDF,\n403 for demo, 404 outside scope, 409 for a non-draft and 503 when rendering is unavailable.",
+        "operationId": "preview_internal_bot_order_document_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/internal/bot/v1/quick-orders/parse-voice": {
       "post": {
         "tags": [
@@ -48316,6 +48622,112 @@
         ],
         "title": "BotNameplateRecognitionResponse"
       },
+      "BotOrderAddEquipment": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderEquipmentLine"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "kind": {
+            "type": "string",
+            "const": "add_equipment",
+            "title": "Kind"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "kind",
+          "proposal_id"
+        ],
+        "title": "BotOrderAddEquipment"
+      },
+      "BotOrderAddInstallation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "add_installation",
+            "title": "Kind"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "option_id": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Option Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "proposal_id",
+          "option_id",
+          "quantity"
+        ],
+        "title": "BotOrderAddInstallation"
+      },
+      "BotOrderAssignCustomer": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "assign_customer",
+            "title": "Kind"
+          },
+          "customer_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Customer Id"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "customer_id"
+        ],
+        "title": "BotOrderAssignCustomer"
+      },
       "BotOrderAttachmentResponse": {
         "properties": {
           "order_id": {
@@ -48445,6 +48857,696 @@
         ],
         "title": "BotOrderBriefResponse"
       },
+      "BotOrderCommandRequest": {
+        "properties": {
+          "telegram_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram Id"
+          },
+          "expected_context_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Context Version"
+          },
+          "expected_revision": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          },
+          "change": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BotOrderSetDetails"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderAssignCustomer"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderCreateCustomer"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderSetSchedule"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderTransition"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderSelectProposal"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderUpdateLine"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderRemoveLine"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderAddEquipment"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderAddInstallation"
+              },
+              {
+                "$ref": "#/components/schemas/BotOrderPrepareDocument"
+              }
+            ],
+            "title": "Change",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "add_equipment": "#/components/schemas/BotOrderAddEquipment",
+                "add_installation": "#/components/schemas/BotOrderAddInstallation",
+                "assign_customer": "#/components/schemas/BotOrderAssignCustomer",
+                "create_customer": "#/components/schemas/BotOrderCreateCustomer",
+                "prepare_document": "#/components/schemas/BotOrderPrepareDocument",
+                "remove_proposal_line": "#/components/schemas/BotOrderRemoveLine",
+                "select_proposal": "#/components/schemas/BotOrderSelectProposal",
+                "set_details": "#/components/schemas/BotOrderSetDetails",
+                "set_schedule": "#/components/schemas/BotOrderSetSchedule",
+                "transition_order": "#/components/schemas/BotOrderTransition",
+                "update_proposal_line": "#/components/schemas/BotOrderUpdateLine"
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_id",
+          "expected_context_version",
+          "expected_revision",
+          "idempotency_key",
+          "change"
+        ],
+        "title": "BotOrderCommandRequest"
+      },
+      "BotOrderCreateCustomer": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "create_customer",
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "customer_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "individual_entrepreneur",
+              "company"
+            ],
+            "title": "Customer Type"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "inn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inn"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "customer_type"
+        ],
+        "title": "BotOrderCreateCustomer"
+      },
+      "BotOrderDesk": {
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderProposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "selected_proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Proposal Id"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          },
+          "currency": {
+            "type": "string",
+            "const": "BYN",
+            "title": "Currency"
+          },
+          "revision": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Revision"
+          },
+          "manager_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Manager Url"
+          },
+          "followup": {
+            "$ref": "#/components/schemas/BotOrderFollowup"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderDocument"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "document_issuers": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderIssuer"
+            },
+            "type": "array",
+            "title": "Document Issuers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposals",
+          "selected_proposal_id",
+          "id",
+          "title",
+          "status",
+          "status_label",
+          "currency",
+          "revision",
+          "manager_url",
+          "followup",
+          "documents",
+          "document_issuers"
+        ],
+        "title": "BotOrderDesk"
+      },
+      "BotOrderDocument": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "can_preview": {
+            "type": "boolean",
+            "title": "Can Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "proposal_id",
+          "url",
+          "can_preview"
+        ],
+        "title": "BotOrderDocument"
+      },
+      "BotOrderEquipmentLine": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Quantity"
+          },
+          "expected_unit_price_byn": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Unit Price Byn"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "quantity",
+          "expected_unit_price_byn"
+        ],
+        "title": "BotOrderEquipmentLine"
+      },
+      "BotOrderFollowup": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "new_lead",
+              "negotiation",
+              "execution",
+              "closed"
+            ],
+            "title": "Status"
+          },
+          "closing_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "won",
+                  "lost"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closing Result"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotOrderFollowupCustomer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "delivery_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Address"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "measurement_required": {
+            "type": "boolean",
+            "title": "Measurement Required",
+            "default": false
+          },
+          "measurement_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Date"
+          },
+          "installation_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Date"
+          },
+          "next_followup_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Followup Date"
+          },
+          "negotiation_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negotiation Status"
+          },
+          "execution_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Status"
+          },
+          "workflow_status_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Status Label"
+          },
+          "is_on_hold": {
+            "type": "boolean",
+            "title": "Is On Hold",
+            "default": false
+          },
+          "on_hold_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason Code"
+          },
+          "on_hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Hold Reason"
+          },
+          "can_edit_details": {
+            "type": "boolean",
+            "title": "Can Edit Details",
+            "default": false
+          },
+          "can_assign_customer": {
+            "type": "boolean",
+            "title": "Can Assign Customer",
+            "default": false
+          },
+          "can_create_customer": {
+            "type": "boolean",
+            "title": "Can Create Customer",
+            "default": false
+          },
+          "customer_assignment_requires_confirmation": {
+            "type": "boolean",
+            "title": "Customer Assignment Requires Confirmation",
+            "default": false
+          },
+          "schedule_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "measurement_date",
+                "installation_date",
+                "next_followup_date"
+              ]
+            },
+            "type": "array",
+            "title": "Schedule Fields"
+          },
+          "workflow_actions": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderWorkflowAction"
+            },
+            "type": "array",
+            "title": "Workflow Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "BotOrderFollowup"
+      },
+      "BotOrderFollowupCustomer": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "individual_entrepreneur",
+              "company"
+            ],
+            "title": "Type"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "BotOrderFollowupCustomer"
+      },
+      "BotOrderInstallationOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "unit_price"
+        ],
+        "title": "BotOrderInstallationOption"
+      },
+      "BotOrderIssuer": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "offer",
+                "invoice"
+              ]
+            },
+            "type": "array",
+            "title": "Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "types"
+        ],
+        "title": "BotOrderIssuer"
+      },
       "BotOrderListRequest": {
         "properties": {
           "expected_context_version": {
@@ -48501,6 +49603,739 @@
         },
         "type": "object",
         "title": "BotOrderListResponse"
+      },
+      "BotOrderPrepareDocument": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "prepare_document",
+            "title": "Kind"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "offer",
+              "invoice"
+            ],
+            "title": "Document Type"
+          },
+          "legal_entity_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Legal Entity Id"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "document_type",
+          "legal_entity_id",
+          "proposal_id"
+        ],
+        "title": "BotOrderPrepareDocument"
+      },
+      "BotOrderProposal": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "is_selected": {
+            "type": "boolean",
+            "title": "Is Selected"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived"
+          },
+          "total_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Amount"
+          },
+          "equipment_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Equipment Total"
+          },
+          "services_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Services Total"
+          },
+          "can_select": {
+            "type": "boolean",
+            "title": "Can Select"
+          },
+          "can_add_equipment": {
+            "type": "boolean",
+            "title": "Can Add Equipment"
+          },
+          "product_lines": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderProposalProduct"
+            },
+            "type": "array",
+            "title": "Product Lines"
+          },
+          "service_lines": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderProposalService"
+            },
+            "type": "array",
+            "title": "Service Lines"
+          },
+          "installation_options": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderInstallationOption"
+            },
+            "type": "array",
+            "title": "Installation Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "is_selected",
+          "is_archived",
+          "total_amount",
+          "equipment_total",
+          "services_total",
+          "can_select",
+          "can_add_equipment",
+          "product_lines",
+          "service_lines",
+          "installation_options"
+        ],
+        "title": "BotOrderProposal"
+      },
+      "BotOrderProposalDisplayLine": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price"
+          },
+          "line_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Line Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit_price",
+          "line_total"
+        ],
+        "title": "BotOrderProposalDisplayLine"
+      },
+      "BotOrderProposalProduct": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price"
+          },
+          "line_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Line Total"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "can_edit_quantity": {
+            "type": "boolean",
+            "title": "Can Edit Quantity"
+          },
+          "can_edit_price": {
+            "type": "boolean",
+            "title": "Can Edit Price"
+          },
+          "can_remove": {
+            "type": "boolean",
+            "title": "Can Remove",
+            "default": false
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "is_installation_included": {
+            "type": "boolean",
+            "title": "Is Installation Included"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit_price",
+          "line_total",
+          "id",
+          "can_edit_quantity",
+          "can_edit_price",
+          "product_id",
+          "is_installation_included"
+        ],
+        "title": "BotOrderProposalProduct"
+      },
+      "BotOrderProposalService": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price"
+          },
+          "line_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Line Total"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "can_edit_quantity": {
+            "type": "boolean",
+            "title": "Can Edit Quantity"
+          },
+          "can_edit_price": {
+            "type": "boolean",
+            "title": "Can Edit Price"
+          },
+          "can_remove": {
+            "type": "boolean",
+            "title": "Can Remove",
+            "default": false
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "display_lines": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderProposalDisplayLine"
+            },
+            "type": "array",
+            "title": "Display Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "quantity",
+          "unit_price",
+          "line_total",
+          "id",
+          "can_edit_quantity",
+          "can_edit_price",
+          "service_id",
+          "unit"
+        ],
+        "title": "BotOrderProposalService"
+      },
+      "BotOrderQuote": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "BotOrderQuote"
+      },
+      "BotOrderRemoveLine": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "remove_proposal_line",
+            "title": "Kind"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "line_kind": {
+            "type": "string",
+            "enum": [
+              "product",
+              "service"
+            ],
+            "title": "Line Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "proposal_id",
+          "line_kind",
+          "line_id",
+          "confirmed"
+        ],
+        "title": "BotOrderRemoveLine"
+      },
+      "BotOrderSelectProposal": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "select_proposal",
+            "title": "Kind"
+          },
+          "proposal_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Proposal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "proposal_id"
+        ],
+        "title": "BotOrderSelectProposal"
+      },
+      "BotOrderSetDetails": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "set_details",
+            "title": "Kind"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 250,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "delivery_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Address"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "BotOrderSetDetails"
+      },
+      "BotOrderSetSchedule": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "set_schedule",
+            "title": "Kind"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "measurement_date",
+              "installation_date",
+              "next_followup_date"
+            ],
+            "title": "Field"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "field",
+          "date"
+        ],
+        "title": "BotOrderSetSchedule"
+      },
+      "BotOrderTransition": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "transition_order",
+            "title": "Kind"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "negotiation:awaiting_offer",
+              "negotiation:awaiting_visit",
+              "negotiation:proposal_sent",
+              "negotiation:awaiting_signature",
+              "negotiation:awaiting_payment",
+              "negotiation:follow_up",
+              "execution:order_equipment",
+              "execution:awaiting_equipment",
+              "execution:needs_schedule",
+              "execution:scheduled",
+              "execution:work_done",
+              "execution:awaiting_documents",
+              "execution:awaiting_payment",
+              "closed_won",
+              "closed_lost",
+              "wait",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "next_stage",
+                  "site_readiness",
+                  "customer_decision",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "action"
+        ],
+        "title": "BotOrderTransition"
+      },
+      "BotOrderUpdateLine": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "update_proposal_line",
+            "title": "Kind"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "line_kind": {
+            "type": "string",
+            "enum": [
+              "product",
+              "service"
+            ],
+            "title": "Line Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 99.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 2147483647.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d{0,2}0*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "proposal_id",
+          "line_kind",
+          "line_id"
+        ],
+        "title": "BotOrderUpdateLine"
+      },
+      "BotOrderWorkflowAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "negotiation:awaiting_offer",
+              "negotiation:awaiting_visit",
+              "negotiation:proposal_sent",
+              "negotiation:awaiting_signature",
+              "negotiation:awaiting_payment",
+              "negotiation:follow_up",
+              "execution:order_equipment",
+              "execution:awaiting_equipment",
+              "execution:needs_schedule",
+              "execution:scheduled",
+              "execution:work_done",
+              "execution:awaiting_documents",
+              "execution:awaiting_payment",
+              "closed_won",
+              "closed_lost",
+              "wait",
+              "resume"
+            ],
+            "title": "Action"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": false
+          },
+          "requires_reason": {
+            "type": "boolean",
+            "title": "Requires Reason",
+            "default": false
+          },
+          "requires_reason_code": {
+            "type": "boolean",
+            "title": "Requires Reason Code",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "label"
+        ],
+        "title": "BotOrderWorkflowAction"
       },
       "BotProductMutationRequest": {
         "properties": {

@@ -21,7 +21,9 @@ from services.service_estimate_money import exact_money, writable_service_money
 from services.order_update.context import OrderUpdateContext
 
 
-async def apply_commercial_lines(context: OrderUpdateContext) -> None:
+async def apply_commercial_lines(
+    context: OrderUpdateContext, *, reconcile_unchanged_payments: bool = True,
+) -> None:
     if "products" not in context.fields_set and "services" not in context.fields_set:
         if context.currency_fields_changed:
             await context.session.flush()
@@ -29,7 +31,7 @@ async def apply_commercial_lines(context: OrderUpdateContext) -> None:
                 context.session,
                 context.order,
             )
-        else:
+        elif reconcile_unchanged_payments:
             OrderService._apply_payment_state(context.order)
         return
 

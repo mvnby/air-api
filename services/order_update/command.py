@@ -25,6 +25,8 @@ class OrderUpdateCommandService:
         payload: Any,
         *,
         tenant_scope: TenantScope,
+        repair_legacy_state: bool = True,
+        reconcile_unchanged_payments: bool = True,
     ) -> Optional[Dict[str, Any]]:
         async with command_transaction(session):
             fields_set = getattr(payload, "model_fields_set", None)
@@ -76,7 +78,7 @@ class OrderUpdateCommandService:
 
             await apply_order_fields(context)
             await apply_customer_fields(context)
-            await apply_commercial_lines(context)
+            await apply_commercial_lines(context, reconcile_unchanged_payments=reconcile_unchanged_payments)
             await finalize_order_update(context)
             from services.order_workflow_revision import bump_order_workflow_revision
             await bump_order_workflow_revision(session, order)
@@ -85,4 +87,5 @@ class OrderUpdateCommandService:
             session,
             order_id,
             tenant_scope=tenant_scope,
+            repair_legacy_state=repair_legacy_state,
         )

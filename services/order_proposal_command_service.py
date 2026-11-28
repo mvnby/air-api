@@ -314,19 +314,27 @@ class OrderProposalCommandService:
             )
             if not proposal:
                 raise ValueError("Proposal not found")
-            from services.maintenance_commercial_guard import guard_proposal
-            await guard_proposal(session, order_id, proposal_id, selecting=True)
-            for item in order.proposals:
-                item.is_selected = item.id == proposal.id
-                session.add(item)
-            proposal.status = normalize_proposal_status(proposal.status)
-            sync_selected_proposal_status(order, proposal)
-            await session.flush()
-            await OrderService._refresh_order_financials(session, order)
-            session.add(order)
+            await OrderProposalCommandService.apply_selection(session, order, proposal)
 
         return await OrderProposalCommandService._project_committed_order(
             session,
             order_id,
             tenant_scope=tenant_scope,
         )
+
+    @staticmethod
+    async def apply_selection(
+        session: AsyncSession, order: Order, proposal: OrderProposal,
+    ) -> None:
+        """Select an active proposal on an order already locked by the caller."""
+        from services.maintenance_commercial_guard import guard_proposal
+
+        await guard_proposal(session, order.id, proposal.id, selecting=True)
+        for item in order.proposals:
+            item.is_selected = item.id == proposal.id
+            session.add(item)
+        proposal.status = normalize_proposal_status(proposal.status)
+        sync_selected_proposal_status(order, proposal)
+        await session.flush()
+        await OrderService._refresh_order_financials(session, order)
+        session.add(order)

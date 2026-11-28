@@ -8,11 +8,7 @@ overrides patch them at this historic import path.
 
 from fastapi import APIRouter
 
-from core.config import settings
-from modules.documents.infrastructure.renderers import (
-    GotenbergPdfConverter,
-    UnavailablePdfConverter,
-)
+from modules.documents.infrastructure.configured_pdf import configured_pdf_converter as _pdf_converter
 from services.private_attachment_storage_service import get_private_attachment_storage
 
 from . import (
@@ -32,18 +28,6 @@ from . import (
     template_audits,
     waybill_composition,
 )
-
-
-def _pdf_converter():
-    url = str(settings.DOCUMENT_PDF_CONVERTER_URL or "").strip()
-    if not url:
-        return UnavailablePdfConverter(
-            "PDF-конвертер для нативных документов не настроен"
-        )
-    return GotenbergPdfConverter(
-        url,
-        timeout_seconds=float(settings.DOCUMENT_PDF_CONVERTER_TIMEOUT_SECONDS),
-    )
 
 
 router = APIRouter()
