@@ -6,5 +6,6 @@ export type BotOrderIssuer = {
     id: number;
     name: string;
     types: Array<'offer' | 'invoice'>;
+    supports_retail_receipt?: boolean;
 };
 

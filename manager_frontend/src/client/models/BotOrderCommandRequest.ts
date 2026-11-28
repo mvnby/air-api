@@ -2,6 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BotConfirmReserveRequest } from './BotConfirmReserveRequest';
+import type { BotCreateReserveRequest } from './BotCreateReserveRequest';
+import type { BotIssueDocument } from './BotIssueDocument';
+import type { BotMarkReserveRequestSent } from './BotMarkReserveRequestSent';
 import type { BotOrderAddEquipment } from './BotOrderAddEquipment';
 import type { BotOrderAddInstallation } from './BotOrderAddInstallation';
 import type { BotOrderAssignCustomer } from './BotOrderAssignCustomer';
@@ -13,11 +17,13 @@ import type { BotOrderSetDetails } from './BotOrderSetDetails';
 import type { BotOrderSetSchedule } from './BotOrderSetSchedule';
 import type { BotOrderTransition } from './BotOrderTransition';
 import type { BotOrderUpdateLine } from './BotOrderUpdateLine';
+import type { BotRecordPayment } from './BotRecordPayment';
+import type { BotSetOrderReserveStatus } from './BotSetOrderReserveStatus';
 export type BotOrderCommandRequest = {
     telegram_id: number;
     expected_context_version: number;
     expected_revision: string;
     idempotency_key: string;
-    change: (BotOrderSetDetails | BotOrderAssignCustomer | BotOrderCreateCustomer | BotOrderSetSchedule | BotOrderTransition | BotOrderSelectProposal | BotOrderUpdateLine | BotOrderRemoveLine | BotOrderAddEquipment | BotOrderAddInstallation | BotOrderPrepareDocument);
+    change: (BotOrderSetDetails | BotOrderAssignCustomer | BotOrderCreateCustomer | BotOrderSetSchedule | BotOrderTransition | BotOrderSelectProposal | BotOrderUpdateLine | BotOrderRemoveLine | BotOrderAddEquipment | BotOrderAddInstallation | BotOrderPrepareDocument | BotSetOrderReserveStatus | BotCreateReserveRequest | BotMarkReserveRequestSent | BotConfirmReserveRequest | BotRecordPayment | BotIssueDocument);
 };
 

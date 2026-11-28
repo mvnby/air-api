@@ -3550,7 +3550,7 @@
           "internal bot v1"
         ],
         "summary": "Get Desk",
-        "description": "Read a saved order, proposals at agreed prices, follow-up, permitted edits and scoped commercial documents.\nRequires the service bearer, a current Telegram manager and company/site version. Reads do not repair legacy\nrows. An inaccessible order returns 404, invalid access 403 and a stale selection 409.",
+        "description": "Read a saved order, proposals, follow-up, equipment reservations, payment history and document capabilities.\nRequires the service bearer, a current Telegram manager and company/site version. Reads do not repair legacy\nrows. An inaccessible order returns 404, invalid access 403 and a stale selection 409.",
         "operationId": "get_internal_bot_order_desk_v1",
         "security": [
           {
@@ -3620,7 +3620,7 @@
           "internal bot v1"
         ],
         "summary": "Apply Change",
-        "description": "Apply a manager's deliberate order, proposal, customer, schedule, workflow or commercial draft change.\nRequires a live writable membership and company context. A scoped idempotency key retries the same change;\na stale order revision or reused key with a different command returns 409. A draft preserves one proposal's\nsaved prices and never issues a document. Inaccessible records return 404 and invalid fields 422.",
+        "description": "Apply a scoped order change, including equipment reservations, manual payment records or document issuance.\nRequires a live writable membership and company context. A scoped idempotency key retries the same change;\na stale order revision or reused key with a different command returns 409. A draft preserves one proposal's\nsaved prices. Payment entry and document issuance require explicit confirmation. Inaccessible records return\n404, invalid fields 422 and temporary document generation failures 503.",
         "operationId": "apply_internal_bot_order_change_v1",
         "security": [
           {
@@ -3657,6 +3657,20 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BotOrderDesk"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary failure while applying or completing the order command.",
+            "headers": {
+              "X-Kitlane-Document-State": {
+                "description": "Set when final document generation failed after a durable number reservation.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "number-reserved"
+                  ]
                 }
               }
             }
@@ -3779,8 +3793,85 @@
           "internal bot v1"
         ],
         "summary": "Preview",
-        "description": "Render the saved native draft of a quote or invoice for the authenticated manager. Verifies order/document\nbinding, tenant, storefront and company selection. Preview does not issue or send. Returns a private PDF,\n403 for demo, 404 outside scope, 409 for a non-draft and 503 when rendering is unavailable.",
+        "description": "Render a saved native document draft for the authenticated manager. Verifies order/document\nbinding, tenant, storefront and company selection. Preview does not issue or send. Returns a private PDF,\n403 for demo, 404 outside scope, 409 for a non-draft and 503 when rendering is unavailable.",
         "operationId": "preview_internal_bot_order_document_v1",
+        "security": [
+          {
+            "BotServiceBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "exclusiveMinimum": 0,
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "telegram_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Telegram Id"
+            }
+          },
+          {
+            "name": "expected_context_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Expected Context Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/pdf": {
+      "get": {
+        "tags": [
+          "internal bot v1"
+        ],
+        "summary": "Get Issued Pdf",
+        "description": "Fetch the stored official PDF of this order for the authenticated manager. Requires a service bearer,\ncurrent manager membership, tenant, storefront and company version. Returns 404 for an inaccessible document,\n409 for an ineligible status, 413 for an oversized PDF and 503 for unavailable private storage. The response\nmust not be cached.",
+        "operationId": "get_internal_bot_issued_document_pdf_v1",
         "security": [
           {
             "BotServiceBearer": []
@@ -47808,6 +47899,89 @@
         "type": "object",
         "title": "BotCatalogSpecsResponse"
       },
+      "BotConfirmReserveRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "confirm_reserve_request",
+            "title": "Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "request_line_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Request Line Id"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          },
+          "reserved_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reserved Until"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "line_id",
+          "request_line_id",
+          "confirmed"
+        ],
+        "title": "BotConfirmReserveRequest"
+      },
+      "BotCreateReserveRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "create_reserve_request",
+            "title": "Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "offer_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Offer Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "line_id",
+          "offer_id",
+          "quantity"
+        ],
+        "title": "BotCreateReserveRequest"
+      },
       "BotCuratedProductsRequest": {
         "properties": {
           "expected_context_version": {
@@ -48559,6 +48733,71 @@
         ],
         "title": "BotFsmStateUpdateRequest"
       },
+      "BotIssueDocument": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "issue_document",
+            "title": "Kind"
+          },
+          "document_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Document Id"
+          },
+          "expected_document_revision": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Document Revision"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "document_id",
+          "expected_document_revision",
+          "confirmed"
+        ],
+        "title": "BotIssueDocument"
+      },
+      "BotMarkReserveRequestSent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "mark_reserve_request_sent",
+            "title": "Kind"
+          },
+          "line_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Line Id"
+          },
+          "request_line_id": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Request Line Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "line_id",
+          "request_line_id"
+        ],
+        "title": "BotMarkReserveRequestSent"
+      },
       "BotNameplateApplyResponse": {
         "properties": {
           "result": {
@@ -48915,6 +49154,24 @@
               },
               {
                 "$ref": "#/components/schemas/BotOrderPrepareDocument"
+              },
+              {
+                "$ref": "#/components/schemas/BotSetOrderReserveStatus"
+              },
+              {
+                "$ref": "#/components/schemas/BotCreateReserveRequest"
+              },
+              {
+                "$ref": "#/components/schemas/BotMarkReserveRequestSent"
+              },
+              {
+                "$ref": "#/components/schemas/BotConfirmReserveRequest"
+              },
+              {
+                "$ref": "#/components/schemas/BotRecordPayment"
+              },
+              {
+                "$ref": "#/components/schemas/BotIssueDocument"
               }
             ],
             "title": "Change",
@@ -48924,11 +49181,17 @@
                 "add_equipment": "#/components/schemas/BotOrderAddEquipment",
                 "add_installation": "#/components/schemas/BotOrderAddInstallation",
                 "assign_customer": "#/components/schemas/BotOrderAssignCustomer",
+                "confirm_reserve_request": "#/components/schemas/BotConfirmReserveRequest",
                 "create_customer": "#/components/schemas/BotOrderCreateCustomer",
+                "create_reserve_request": "#/components/schemas/BotCreateReserveRequest",
+                "issue_document": "#/components/schemas/BotIssueDocument",
+                "mark_reserve_request_sent": "#/components/schemas/BotMarkReserveRequestSent",
                 "prepare_document": "#/components/schemas/BotOrderPrepareDocument",
+                "record_payment": "#/components/schemas/BotRecordPayment",
                 "remove_proposal_line": "#/components/schemas/BotOrderRemoveLine",
                 "select_proposal": "#/components/schemas/BotOrderSelectProposal",
                 "set_details": "#/components/schemas/BotOrderSetDetails",
+                "set_order_reserve_status": "#/components/schemas/BotSetOrderReserveStatus",
                 "set_schedule": "#/components/schemas/BotOrderSetSchedule",
                 "transition_order": "#/components/schemas/BotOrderTransition",
                 "update_proposal_line": "#/components/schemas/BotOrderUpdateLine"
@@ -49089,6 +49352,19 @@
             },
             "type": "array",
             "title": "Document Issuers"
+          },
+          "reserve": {
+            "$ref": "#/components/schemas/BotOrderReserveState"
+          },
+          "payments": {
+            "$ref": "#/components/schemas/BotOrderPayments"
+          },
+          "issuance": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderIssuance"
+            },
+            "type": "array",
+            "title": "Issuance"
           }
         },
         "type": "object",
@@ -49104,7 +49380,10 @@
           "manager_url",
           "followup",
           "documents",
-          "document_issuers"
+          "document_issuers",
+          "reserve",
+          "payments",
+          "issuance"
         ],
         "title": "BotOrderDesk"
       },
@@ -49517,6 +49796,79 @@
         ],
         "title": "BotOrderInstallationOption"
       },
+      "BotOrderIssuance": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "reserved",
+              "blocked",
+              "issued"
+            ],
+            "title": "State"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type"
+          },
+          "legal_entity_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Entity Name"
+          },
+          "can_download_pdf": {
+            "type": "boolean",
+            "title": "Can Download Pdf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "state",
+          "revision",
+          "reason",
+          "document_type",
+          "legal_entity_name",
+          "can_download_pdf"
+        ],
+        "title": "BotOrderIssuance"
+      },
       "BotOrderIssuer": {
         "properties": {
           "id": {
@@ -49537,6 +49889,11 @@
             },
             "type": "array",
             "title": "Types"
+          },
+          "supports_retail_receipt": {
+            "type": "boolean",
+            "title": "Supports Retail Receipt",
+            "default": false
           }
         },
         "type": "object",
@@ -49604,6 +49961,208 @@
         "type": "object",
         "title": "BotOrderListResponse"
       },
+      "BotOrderPayment": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "prepayment",
+              "postpayment"
+            ],
+            "title": "Type"
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "bank_confirmed": {
+            "type": "boolean",
+            "title": "Bank Confirmed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "amount",
+          "currency",
+          "type",
+          "received_on",
+          "comment",
+          "bank_confirmed"
+        ],
+        "title": "BotOrderPayment"
+      },
+      "BotOrderPayments": {
+        "properties": {
+          "total_amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Amount"
+          },
+          "total_payments": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Payments"
+          },
+          "balance_due": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Balance Due"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/BotOrderPayment"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "currencies": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "BYN",
+                "USD",
+                "EUR"
+              ]
+            },
+            "type": "array",
+            "title": "Currencies"
+          },
+          "target_currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "USD",
+                  "EUR"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency"
+          },
+          "target_currency_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Amount"
+          },
+          "target_currency_payments": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Payments"
+          },
+          "target_currency_balance_due": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Currency Balance Due"
+          },
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Rate"
+          },
+          "received_on_max": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On Max"
+          },
+          "can_record": {
+            "type": "boolean",
+            "title": "Can Record",
+            "default": false
+          },
+          "record_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Unavailable Reason"
+          },
+          "workflow_notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Notice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_amount",
+          "total_payments",
+          "balance_due",
+          "received_on_max"
+        ],
+        "title": "BotOrderPayments"
+      },
       "BotOrderPrepareDocument": {
         "properties": {
           "kind": {
@@ -49612,10 +50171,18 @@
             "title": "Kind"
           },
           "document_type": {
-            "type": "string",
-            "enum": [
-              "offer",
-              "invoice"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "offer",
+                  "invoice"
+                ]
+              },
+              {
+                "type": "string",
+                "const": "retail_receipt"
+              }
             ],
             "title": "Document Type"
           },
@@ -49635,6 +50202,18 @@
               }
             ],
             "title": "Proposal Id"
+          },
+          "receipt_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Note"
           }
         },
         "additionalProperties": false,
@@ -50011,6 +50590,69 @@
           "confirmed"
         ],
         "title": "BotOrderRemoveLine"
+      },
+      "BotOrderReserveState": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "manager_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Status"
+          },
+          "can_set_order_status": {
+            "type": "boolean",
+            "title": "Can Set Order Status",
+            "default": false
+          },
+          "supplier_access": {
+            "type": "boolean",
+            "title": "Supplier Access",
+            "default": false
+          },
+          "supplier_access_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Access Reason"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/BotReserveLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "BotOrderReserveState"
       },
       "BotOrderSelectProposal": {
         "properties": {
@@ -51233,6 +51875,77 @@
         ],
         "title": "BotQuickOrderScenarioOption"
       },
+      "BotRecordPayment": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "record_payment",
+            "title": "Kind"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,13}|(?=[\\d.]{1,16}0*$)\\d{0,13}\\.\\d{0,2}0*$)"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BYN",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "prepayment",
+              "postpayment"
+            ],
+            "title": "Type"
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "amount",
+          "currency",
+          "type",
+          "received_on"
+        ],
+        "title": "BotRecordPayment"
+      },
       "BotRepairApplyRequest": {
         "properties": {
           "expected_context_version": {
@@ -51382,6 +52095,174 @@
           "draft"
         ],
         "title": "BotRepairDraftResponse"
+      },
+      "BotReserveCandidate": {
+        "properties": {
+          "offer_id": {
+            "type": "integer",
+            "title": "Offer Id"
+          },
+          "supplier_name": {
+            "type": "string",
+            "title": "Supplier Name"
+          },
+          "offer_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Title"
+          },
+          "offer_code": {
+            "type": "string",
+            "title": "Offer Code"
+          },
+          "max_quantity": {
+            "type": "integer",
+            "title": "Max Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "offer_id",
+          "supplier_name",
+          "offer_title",
+          "offer_code",
+          "max_quantity"
+        ],
+        "title": "BotReserveCandidate"
+      },
+      "BotReserveLine": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "remaining_quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Quantity"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/BotReserveCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/BotReserveRequest"
+            },
+            "type": "array",
+            "title": "Requests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "quantity",
+          "remaining_quantity",
+          "candidates",
+          "requests"
+        ],
+        "title": "BotReserveLine"
+      },
+      "BotReserveRequest": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "request_id": {
+            "type": "integer",
+            "title": "Request Id"
+          },
+          "supplier_name": {
+            "type": "string",
+            "title": "Supplier Name"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "reserve",
+              "order"
+            ],
+            "title": "Intent"
+          },
+          "reserved_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reserved Until"
+          },
+          "supplier_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Message"
+          },
+          "can_mark_sent": {
+            "type": "boolean",
+            "title": "Can Mark Sent"
+          },
+          "can_confirm": {
+            "type": "boolean",
+            "title": "Can Confirm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "request_id",
+          "supplier_name",
+          "quantity",
+          "status",
+          "intent",
+          "reserved_until",
+          "supplier_message",
+          "can_mark_sent",
+          "can_confirm"
+        ],
+        "title": "BotReserveRequest"
       },
       "BotRuntimeLeaseRequest": {
         "properties": {
@@ -51636,6 +52517,30 @@
           "events"
         ],
         "title": "BotScheduleResponse"
+      },
+      "BotSetOrderReserveStatus": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "set_order_reserve_status",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "reserved"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "status"
+        ],
+        "title": "BotSetOrderReserveStatus"
       },
       "BotShopBrandFacet": {
         "properties": {

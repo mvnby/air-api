@@ -10,7 +10,6 @@ from sqlmodel import select
 
 from models import (
     DocumentArtifact,
-    DocumentLegalEntity,
     Order,
     OrderDocument,
     OrderStatus,
@@ -19,14 +18,11 @@ from models.tenancy import TenantScope
 from modules.documents.domain import (
     DocumentLifecycleError,
     DocumentLifecycleState,
-    DocumentNumberScope,
     DocumentStatus,
     B2C_NATIVE_DOCUMENT_TYPES,
     new_internal_reference,
-    numbering_policy_key,
     transition_document,
 )
-from modules.documents.domain.numbering import google_number_history_type
 from modules.documents.infrastructure.artifact_storage import (
     DocumentArtifactStorage,
     StoredDocumentArtifact,
@@ -47,6 +43,7 @@ from .customer_readiness import (
     check_saved_document_readiness,
 )
 from .editable_draft import EditableDraftError
+from .draft_source_context import validate_draft_source_context
 from .installation_context import staged_template_is_supported
 from .editable_draft_issue import load_editable_draft_for_issue
 from .context_builder import DocumentContextBuilder, DocumentContextSelection
@@ -58,11 +55,8 @@ from .errors import (
 from .framework_contracts import (
     archive_framework_contract, prepare_framework_registration, register_issued_framework,
 )
-from .number_policies import DocumentNumberPolicyService
-from .issuance_artifacts import (
-    assign_official_identity,
-    render_and_store_issued_artifacts,
-)
+from .issuance_artifacts import render_and_store_issued_artifacts
+from .issuance_identity import reserve_official_identity
 from modules.documents.domain.placeholder_catalog import ORDER_TECHNICAL_ACT_TYPES
 from .open_contract_basis import validate_saved_basis_for_issue
 from .order_completion_coverage import COVERAGE_KEY, require_scope_in_template, validate_act_before_number_reservation
@@ -84,9 +78,9 @@ class IssuedDocumentResult:
 class ManagedDocumentService:
     """Application lifecycle for native immutable CRM documents.
 
-    File rendering is deliberately outside the number-reservation transaction.
-    A failed render therefore retains its reserved number on the draft and can
-    be retried idempotently without reusing or skipping another identity.
+    Manager reserves the number before rendering so a draft retains its number
+    after a failed render. Composed commands can manage the transactions for
+    these stages themselves, persisting an audit and receipt for each.
     """
 
     @classmethod
@@ -373,7 +367,10 @@ class ManagedDocumentService:
         confirmed_previous_act_number: int | None = None,
         confirmed_previous_act_by: str | None = None,
         expected_previous_act_id: int | None = None,
+        commit: bool = True,
+        reserve_only: bool = False,
     ) -> IssuedDocumentResult:
+        """Reserve a number and publish immutable files, or stop after reservation."""
         document = await cls._get_scoped_document(
             session,
             tenant_scope=tenant_scope,
@@ -397,6 +394,8 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "Документ нельзя выпустить в текущем статусе"
             )
+        if not commit and not reserve_only and not document.official_number:
+            raise ManagedDocumentConflictError("Сначала зарезервируйте официальный номер документа")
         if not document.internal_reference or not document.legal_entity_id:
             raise ManagedDocumentConflictError(
                 "Черновик не относится к управляемому документному контуру"
@@ -405,45 +404,7 @@ class ManagedDocumentService:
             raise ManagedDocumentConflictError(
                 "У черновика отсутствует снимок или версия шаблона"
             )
-        # MCP service-order drafts freeze commercial lines. Never issue one
-        # silently after Manager has changed its source proposal.
-        connector_version = (document.render_snapshot.get("meta") or {}).get(
-            "connector_proposal_version"
-        )
-        inherits_consumer_snapshot = (document.doc_type in B2C_NATIVE_DOCUMENT_TYPES
-            and document.replaces_document_id is not None)
-        if connector_version is not None and not inherits_consumer_snapshot:
-            from services.order_proposal_version import proposal_version
-
-            await session.execute(
-                select(Order.id).where(Order.id == document.order_id).with_for_update()
-            )
-            current_version = await proposal_version(
-                session, document.order_id, document.proposal_id
-            )
-            if connector_version != current_version:
-                raise ManagedDocumentConflictError(
-                    "Предложение изменилось после подготовки документа. Создайте новый черновик по актуальным строкам."
-                )
-        # Sales offers also freeze the worksite and recorded source context.
-        # Native document parameter edits have their own revision and remain valid.
-        sales_context_version = (document.render_snapshot.get("meta") or {}).get(
-            "sales_order_context_version"
-        )
-        if document.doc_type == "offer" and sales_context_version is not None:
-            from services.order_sales_context_version import sales_order_context_version
-
-            if connector_version is None:
-                await session.execute(
-                    select(Order.id).where(Order.id == document.order_id).with_for_update()
-                )
-            current_sales_context = await sales_order_context_version(
-                session, document.order_id, document.proposal_id
-            )
-            if sales_context_version != current_sales_context:
-                raise ManagedDocumentConflictError(
-                    "Контекст заказа изменился после подготовки предложения. Создайте новый черновик по актуальным условиям."
-                )
+        await validate_draft_source_context(session, document)
         # Keep specific amendment basis conflicts ahead of the generic readiness gate.
         from .contract_amendments import validate_for_issue
         await validate_for_issue(session, scope=tenant_scope, document=document)
@@ -508,22 +469,11 @@ class ManagedDocumentService:
                 raise ManagedDocumentConflictError(
                     "Отредактированный черновик повреждён или потерял служебные поля выпуска"
                 ) from exc
-        policy_key = numbering_policy_key(document.doc_type, document.business_role)
-        policy = await DocumentNumberPolicyService.get_effective(
-            session,
-            tenant_scope=tenant_scope,
-            legal_entity_id=document.legal_entity_id,
-            policy_key=policy_key,
-        )
         issued_on = document.official_date or document.date.date()
         prepared_files = await prepare_stock_files(
             document=document, template=template, version=version, issued_on=issued_on,
             editable_source=editable_source, required_placeholder_counts=required_placeholder_counts,
             template_storage=template_storage, pdf_converter=pdf_converter,
-        )
-        period_key = policy.period_key(
-            issued_on,
-            basis_key=cls._basis_numbering_key(document),
         )
         if (document.doc_type == "act" and document.base_customer_contract_id
                 and document.contract_act_number is None and document.official_number is None):
@@ -535,55 +485,27 @@ class ManagedDocumentService:
                 confirmed_previous_act_number=confirmed_previous_act_number,
                 expected_previous_act_id=expected_previous_act_id,
             )
-        reservation = await DocumentNumberingRepository.reserve(
-            session,
-            scope=DocumentNumberScope(
-                tenant_id=tenant_scope.tenant_id,
-                legal_entity_id=document.legal_entity_id,
-                document_type=policy.document_type,
-                series=policy.series,
-                period_key=period_key,
-            ),
-            idempotency_key=f"issue:{document.internal_reference}",
-            minimum_width=policy.minimum_width,
-            number_text_formatter=lambda value: policy.format_number_text(
-                period_key, value
-            ),
-            legacy_document_type=(
-                google_number_history_type(document.doc_type, policy.series)
-                if policy.period_mode == "calendar_year"
-                and await cls._is_default_issuer(
-                    session,
-                    tenant_id=tenant_scope.tenant_id,
-                    legal_entity_id=document.legal_entity_id,
-                )
-                else None
-            ),
+        had_reservation = document.official_number is not None
+        official_full_number = await reserve_official_identity(
+            session, document=document, tenant_scope=tenant_scope, issued_on=issued_on,
         )
-        await DocumentNumberingRepository.attach_to_document(
-            session,
-            tenant_id=tenant_scope.tenant_id,
-            reservation_id=reservation.reservation_id,
-            document_id=document_id,
-        )
-        snapshot, values = assign_official_identity(
-            document=document,
-            policy=policy,
-            reservation=reservation,
-            period_key=period_key,
-            issued_on=issued_on,
-        )
-        if readiness["checked"]:
+        snapshot, values = document.render_snapshot, document.render_snapshot["values"]
+        if readiness["checked"] and not had_reservation:
             snapshot.setdefault("meta", {})["customer_readiness"] = readiness
         session.add(document)
-        await cls._commit(session, "Не удалось зарезервировать номер документа")
+        if commit:
+            await cls._commit(session, "Не удалось зарезервировать номер документа")
+        else:
+            await session.flush()
+        if reserve_only:
+            return IssuedDocumentResult(document=document, artifacts=())
 
         try:
             stored_docx, stored_pdf = await render_and_store_issued_artifacts(
                 tenant_id=tenant_scope.tenant_id,
                 document_id=document_id,
                 document_type=document.doc_type,
-                official_full_number=reservation.number_text,
+                official_full_number=official_full_number,
                 contract_act_number=document.contract_act_number,
                 template=template,
                 version=version,
@@ -601,31 +523,32 @@ class ManagedDocumentService:
                 "Документ сохранил номер, но генерация DOCX/PDF не завершилась; повторите выпуск"
             ) from exc
 
-        document = await cls._get_scoped_document(
-            session,
-            tenant_scope=tenant_scope,
-            document_id=document_id,
-            for_update=True,
-        )
-        if document is None:
-            raise ManagedDocumentNotFoundError("Документ не найден")
-        if document.status != DocumentStatus.DRAFT.value:
-            if document.status in {
-                DocumentStatus.ISSUED.value,
-                DocumentStatus.SENT.value,
-                DocumentStatus.SIGNED.value,
-            }:
-                return IssuedDocumentResult(
-                    document=document,
-                    artifacts=tuple(
-                        await cls._artifacts(
-                            session, tenant_scope.tenant_id, document_id
-                        )
-                    ),
-                )
-            raise ManagedDocumentConflictError(
-                "Статус документа изменился во время генерации"
+        if commit:
+            document = await cls._get_scoped_document(
+                session,
+                tenant_scope=tenant_scope,
+                document_id=document_id,
+                for_update=True,
             )
+            if document is None:
+                raise ManagedDocumentNotFoundError("Документ не найден")
+            if document.status != DocumentStatus.DRAFT.value:
+                if document.status in {
+                    DocumentStatus.ISSUED.value,
+                    DocumentStatus.SENT.value,
+                    DocumentStatus.SIGNED.value,
+                }:
+                    return IssuedDocumentResult(
+                        document=document,
+                        artifacts=tuple(
+                            await cls._artifacts(
+                                session, tenant_scope.tenant_id, document_id
+                            )
+                        ),
+                    )
+                raise ManagedDocumentConflictError(
+                    "Статус документа изменился во время генерации"
+                )
 
         await validate_for_issue(session, scope=tenant_scope, document=document)
         if document.doc_type == "participant_statement":
@@ -680,8 +603,11 @@ class ManagedDocumentService:
             await archive_framework_contract(session, original)
             session.add(original)
         session.add(document)
-        await cls._commit(session, "Не удалось завершить выпуск документа")
-        await session.refresh(document)
+        if commit:
+            await cls._commit(session, "Не удалось завершить выпуск документа")
+            await session.refresh(document)
+        else:
+            await session.flush()
         return IssuedDocumentResult(
             document=document,
             artifacts=tuple(
@@ -759,11 +685,11 @@ class ManagedDocumentService:
         for_update: bool,
     ) -> OrderDocument | None:
         if for_update:
-            # Serialize effective changes and revisions in one order before locking
-            # document rows. Rendering releases this lock; finalization repeats it.
+            # Order commands lock the order before its documents. Use the same
+            # lock order for Manager edits and both stages of Manager issuance.
             await session.execute(select(Order.id).join(OrderDocument, OrderDocument.order_id == Order.id).where(
                 OrderDocument.id == document_id,
-                OrderDocument.doc_type.in_({"contract_amendment", "act"} | ORDER_TECHNICAL_ACT_TYPES),
+                OrderDocument.tenant_id == tenant_scope.tenant_id,
                 Order.tenant_id == tenant_scope.tenant_id, Order.storefront_id == tenant_scope.storefront_id,
             ).with_for_update(of=Order))
         statement = (
@@ -778,7 +704,7 @@ class ManagedDocumentService:
             .options(selectinload(OrderDocument.document_template))
         )
         if for_update:
-            statement = statement.with_for_update().execution_options(populate_existing=True)
+            statement = statement.with_for_update(of=OrderDocument).execution_options(populate_existing=True)
         document = (await session.execute(statement)).scalar_one_or_none()
         if document is not None and for_update and (
             document.doc_type in ({"maintenance_defect_act", "participant_statement", "repair_defect_act"} | ORDER_TECHNICAL_ACT_TYPES) or
@@ -787,34 +713,6 @@ class ManagedDocumentService:
         ):
             await ManagedDocumentService._get_mutable_scoped_order(session, tenant_scope=tenant_scope, order_id=document.order_id, require_mutable=True)
         return document
-
-    @staticmethod
-    def _basis_numbering_key(document: OrderDocument) -> str | None:
-        if document.base_document_id:
-            return f"document-{document.base_document_id}"
-        if document.base_customer_contract_id:
-            return f"contract-{document.base_customer_contract_id}"
-        return None
-
-    @staticmethod
-    async def _is_default_issuer(
-        session: AsyncSession,
-        *,
-        tenant_id: int,
-        legal_entity_id: int,
-    ) -> bool:
-        return (
-            (
-                await session.execute(
-                    select(DocumentLegalEntity.id).where(
-                        DocumentLegalEntity.id == legal_entity_id,
-                        DocumentLegalEntity.tenant_id == tenant_id,
-                        DocumentLegalEntity.is_default.is_(True),
-                    )
-                )
-            ).scalar_one_or_none()
-            is not None
-        )
 
     @staticmethod
     async def _artifacts(

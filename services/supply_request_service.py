@@ -25,6 +25,9 @@ from models.supplier import (
 from models.tenancy import TenantScope
 from services.fx_rate_service import FxRateService
 from services.product_supply_metrics_service import ProductSupplyMetricsService
+from services.supply_reservation_capacity import (
+    order_line_commitments, reservable_offer_quantity, reservation_now, supplier_offer_commitments,
+)
 
 
 VALID_PAYMENT_METHODS = {"cash", "bank", "mixed", "unknown"}
@@ -379,6 +382,15 @@ class SupplyRequestService:
 
     @staticmethod
     async def create_request(session: AsyncSession, payload: dict, *, created_by: str | None = None) -> dict:
+        request = await SupplyRequestService.stage_request(session, payload, created_by=created_by)
+        await session.commit()
+        return {"items": [await SupplyRequestService.get_request(session, request.id)]}
+
+    @staticmethod
+    async def stage_request(
+        session: AsyncSession, payload: dict, *, created_by: str | None = None,
+    ) -> SupplyRequest:
+        """Stage a request inside a larger application command."""
         supplier = await SupplierProfileService._require_supplier(session, int(payload["supplier_id"]))
         intent = _intent(payload.get("intent"))
         payment_method = _payment_method(payload.get("payment_method"), supplier.default_payment_method)
@@ -411,8 +423,7 @@ class SupplyRequestService:
         for raw_line in payload.get("lines") or []:
             line = await SupplyRequestService._build_manual_line(session, raw_line, request.id)
             session.add(line)
-        await session.commit()
-        return {"items": [await SupplyRequestService.get_request(session, request.id)]}
+        return request
 
     @staticmethod
     async def create_from_order_lines(
@@ -425,25 +436,32 @@ class SupplyRequestService:
         line_ids = [int(value) for value in payload.get("order_product_link_ids") or []]
         if not line_ids:
             raise ValueError("Order product lines are required")
+        intent = _intent(payload.get("intent"))
         links = await SupplyRequestDAO.get_order_product_links_for_storefront(
             session,
             order_product_link_ids=line_ids,
             tenant_scope=tenant_scope,
+            lock_orders=intent == "reserve",
         )
         if len(links) != len(set(line_ids)):
             raise ValueError("Some order product lines were not found")
 
-        grouped: dict[tuple[int, int | None, str, str], list[SupplyRequestLine]] = defaultdict(list)
-        request_meta: dict[tuple[int, int | None, str, str], dict[str, Any]] = {}
-        intent = _intent(payload.get("intent"))
+        offers_by_line = {}
         for link in links:
             if not link.product_id:
                 raise ValueError("Order product line is not linked to catalog product")
-            offer = await SupplyRequestService._select_default_offer(
+            offers_by_line[link.id] = await SupplyRequestService._select_default_offer(
                 session,
                 int(link.product_id),
                 supplier_id=payload.get("supplier_id"),
             )
+        if intent == "reserve":
+            await SupplyRequestService._check_order_reservation_capacity(session, links, offers_by_line)
+
+        grouped: dict[tuple[int, int | None, str, str], list[SupplyRequestLine]] = defaultdict(list)
+        request_meta: dict[tuple[int, int | None, str, str], dict[str, Any]] = {}
+        for link in links:
+            offer = offers_by_line[link.id]
             supplier_id = int(payload["supplier_id"]) if payload.get("supplier_id") else int(offer.supplier_id) if offer else None
             if not supplier_id:
                 raise ValueError(f"No supplier mapping for product line #{link.id}")
@@ -501,6 +519,40 @@ class SupplyRequestService:
             requests.append(request)
         await session.commit()
         return {"items": [await SupplyRequestService.get_request(session, int(request.id)) for request in requests if request.id]}
+
+    @staticmethod
+    async def _check_order_reservation_capacity(
+        session: AsyncSession,
+        links: list[OrderProductLink],
+        offers_by_line: dict[int, SupplierOffer | None],
+    ) -> None:
+        # Order rows are already locked by the scoped lookup. Acquire stock
+        # rows in a stable order so bulk Manager writes can race with Telegram.
+        offer_ids = {offer.id for offer in offers_by_line.values() if offer is not None}
+        offers = []
+        if offer_ids:
+            offers = list((await session.execute(
+                select(SupplierOffer).where(SupplierOffer.id.in_(offer_ids))
+                .order_by(SupplierOffer.id)
+                .with_for_update(of=SupplierOffer)
+                .execution_options(populate_existing=True)
+            )).scalars().all())
+            if len(offers) != len(offer_ids):
+                raise ValueError("Предложение поставщика больше недоступно. Обновите заказ.")
+        now = reservation_now()
+        order_committed = await order_line_commitments(session, [link.id for link in links], now)
+        offer_committed = await supplier_offer_commitments(session, offers, now)
+        for link in links:
+            qty = max(1, int(link.quantity or 1))
+            if qty + order_committed.get(link.id, 0) > link.quantity:
+                raise ValueError(f"В строке заказа №{link.id} изменилось количество без заявки. Обновите заказ.")
+            offer = offers_by_line[link.id]
+            if offer is None:
+                continue
+            committed = offer_committed.get(offer.id, 0)
+            if qty > reservable_offer_quantity(offer, committed):
+                raise ValueError(f"Для строки заказа №{link.id} изменился доступный остаток. Обновите заказ.")
+            offer_committed[offer.id] = committed + qty
 
     @staticmethod
     async def create_stock_requests(session: AsyncSession, payload: dict, *, created_by: str | None = None) -> dict:
@@ -612,6 +664,12 @@ class SupplyRequestService:
         line = await session.get(SupplyRequestLine, line_id)
         if not line:
             raise ValueError("Supply request line not found")
+        await SupplyRequestService.stage_line_update(session, line, payload)
+        await session.commit()
+        return await SupplyRequestService.get_request(session, line.request_id)
+
+    @staticmethod
+    async def stage_line_update(session: AsyncSession, line: SupplyRequestLine, payload: dict) -> None:
         data = dict(payload)
         if "status" in data and data["status"] is not None:
             line.status = _status(data["status"])
@@ -627,8 +685,6 @@ class SupplyRequestService:
         session.add(line)
         await session.flush()
         await SupplyRequestService._sync_request_status_from_lines(session, line.request_id)
-        await session.commit()
-        return await SupplyRequestService.get_request(session, line.request_id)
 
     @staticmethod
     async def generate_supplier_message(session: AsyncSession, request_id: int, *, mark_sent: bool = False) -> dict:
@@ -637,14 +693,20 @@ class SupplyRequestService:
             raise ValueError("Supply request not found")
         text = SupplyRequestService._supplier_message_text(request)
         if mark_sent:
-            request.supplier_message_snapshot = text
-            request.supplier_message_sent_at = datetime.now()
-            request.status = "awaiting_reply" if request.intent == "reserve" else "ordered"
-            await SupplyRequestService._set_active_lines_status(session, request.id, request.status)
-            request.updated_at = datetime.now()
-            session.add(request)
+            await SupplyRequestService.stage_supplier_message_sent(session, request, text)
             await session.commit()
         return {"text": text, "request_ids": [request_id]}
+
+    @staticmethod
+    async def stage_supplier_message_sent(
+        session: AsyncSession, request: SupplyRequest, text: str,
+    ) -> None:
+        request.supplier_message_snapshot = text
+        request.supplier_message_sent_at = datetime.now()
+        request.status = "awaiting_reply" if request.intent == "reserve" else "ordered"
+        await SupplyRequestService._set_active_lines_status(session, request.id, request.status)
+        request.updated_at = datetime.now()
+        session.add(request)
 
     @staticmethod
     async def generate_logistics_message(

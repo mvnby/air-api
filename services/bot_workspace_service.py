@@ -97,7 +97,9 @@ async def scoped_order_money(session, scope, item_id, *, legacy_ungrouped_only: 
                .where(Order.id == item_id, Access.order_clause(scope), Access.order_customer_clause(scope))
                .cte("workspace_order"))
     money = board_money(visible, legacy_ungrouped_only=legacy_ungrouped_only)
-    sums = (await session.execute(select(money.c.total_amount, money.c.balance_due))).mappings().one_or_none()
+    sums = (await session.execute(select(
+        money.c.total_amount, money.c.total_payments, money.c.balance_due, money.c.target_currency_payments,
+    ))).mappings().one_or_none()
     if sums is None:
         raise LookupError("Заказ не найден")
     return sums

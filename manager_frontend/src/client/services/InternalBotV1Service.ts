@@ -1132,7 +1132,7 @@ export class InternalBotV1Service {
     }
     /**
      * Get Desk
-     * Read a saved order, proposals at agreed prices, follow-up, permitted edits and scoped commercial documents.
+     * Read a saved order, proposals, follow-up, equipment reservations, payment history and document capabilities.
      * Requires the service bearer, a current Telegram manager and company/site version. Reads do not repair legacy
      * rows. An inaccessible order returns 404, invalid access 403 and a stale selection 409.
      * @param orderId
@@ -1163,10 +1163,11 @@ export class InternalBotV1Service {
     }
     /**
      * Apply Change
-     * Apply a manager's deliberate order, proposal, customer, schedule, workflow or commercial draft change.
+     * Apply a scoped order change, including equipment reservations, manual payment records or document issuance.
      * Requires a live writable membership and company context. A scoped idempotency key retries the same change;
      * a stale order revision or reused key with a different command returns 409. A draft preserves one proposal's
-     * saved prices and never issues a document. Inaccessible records return 404 and invalid fields 422.
+     * saved prices. Payment entry and document issuance require explicit confirmation. Inaccessible records return
+     * 404, invalid fields 422 and temporary document generation failures 503.
      * @param orderId
      * @param requestBody
      * @returns BotOrderDesk Successful Response
@@ -1186,6 +1187,7 @@ export class InternalBotV1Service {
             mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
+                503: `Temporary failure while applying or completing the order command.`,
             },
         });
     }
@@ -1228,7 +1230,7 @@ export class InternalBotV1Service {
     }
     /**
      * Preview
-     * Render the saved native draft of a quote or invoice for the authenticated manager. Verifies order/document
+     * Render a saved native document draft for the authenticated manager. Verifies order/document
      * binding, tenant, storefront and company selection. Preview does not issue or send. Returns a private PDF,
      * 403 for demo, 404 outside scope, 409 for a non-draft and 503 when rendering is unavailable.
      * @param orderId
@@ -1247,6 +1249,41 @@ export class InternalBotV1Service {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/preview',
+            path: {
+                'order_id': orderId,
+                'document_id': documentId,
+            },
+            query: {
+                'telegram_id': telegramId,
+                'expected_context_version': expectedContextVersion,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Issued Pdf
+     * Fetch the stored official PDF of this order for the authenticated manager. Requires a service bearer,
+     * current manager membership, tenant, storefront and company version. Returns 404 for an inaccessible document,
+     * 409 for an ineligible status, 413 for an oversized PDF and 503 for unavailable private storage. The response
+     * must not be cached.
+     * @param orderId
+     * @param documentId
+     * @param telegramId
+     * @param expectedContextVersion
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getInternalBotIssuedDocumentPdfV1(
+        orderId: number,
+        documentId: number,
+        telegramId: number,
+        expectedContextVersion: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/internal/bot/v1/order-desk/{order_id}/documents/{document_id}/pdf',
             path: {
                 'order_id': orderId,
                 'document_id': documentId,
